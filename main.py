@@ -11,8 +11,8 @@ app = FastAPI(
             version="0.1.0",
             )
 
-            BASE_DIR = Path(__file__).resolve().parent
-            STATIC_DIR = BASE_DIR / "static"
+BASE_DIR = Path(__file__).resolve().parent
+STATIC_DIR = BASE_DIR / "static"
 
             app.mount(
                 "/static",
@@ -35,4 +35,3 @@ app = FastAPI(
                                                                         "Panaderías Alonzo",
                                                                                 ],
                                                                                     }
-                                                                                    
