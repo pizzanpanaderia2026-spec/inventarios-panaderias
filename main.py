@@ -1,5 +1,8 @@
 
 from pathlib import Path
+import os
+
+from supabase import create_client, Client
 
 from fastapi import FastAPI
 from fastapi.responses import FileResponse
