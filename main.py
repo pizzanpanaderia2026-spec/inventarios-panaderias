@@ -35,4 +35,4 @@ app = FastAPI(
                                                                         "Panaderías Alonzo",
                                                                                 ],
                                                                                     }
-                                                                                    
+                                                                                
