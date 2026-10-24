@@ -6,6 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="theme-color" content="#713f12">
   <title>Inventarios de Panaderías</title>
+
   <style>
     * { box-sizing: border-box; }
 
@@ -27,7 +28,7 @@
     header p { margin: 0; }
 
     main {
-      width: min(100% - 24px, 1000px);
+      width: min(100% - 24px, 800px);
       margin: 24px auto;
     }
 
@@ -35,122 +36,100 @@
       background: white;
       border: 1px solid #e7ded2;
       border-radius: 14px;
-      padding: 18px;
+      padding: 20px;
       margin-bottom: 18px;
       box-shadow: 0 2px 8px #00000008;
     }
 
-    .panaderias {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-      gap: 14px;
+    .campo {
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+      margin-bottom: 15px;
     }
 
-    button, input {
-      font: inherit;
+    input {
+      width: 100%;
+      padding: 12px;
+      border: 1px solid #cfc5b8;
       border-radius: 8px;
+      font: inherit;
     }
 
     button {
+      font: inherit;
       border: 0;
-      padding: 11px 14px;
+      border-radius: 8px;
+      padding: 12px 16px;
       cursor: pointer;
       background: #713f12;
       color: white;
     }
 
-    button:hover { opacity: 0.9; }
-    button:disabled { opacity: 0.5; cursor: not-allowed; }
-
-    .boton-panaderia {
-      width: 100%;
-      min-height: 90px;
-      font-size: 19px;
-      font-weight: bold;
+    button:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
     }
+
+    .ancho { width: 100%; }
 
     .secundario {
       background: #eee7df;
       color: #292524;
     }
 
-    .peligro { background: #b42318; }
+    .panaderias {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+      gap: 14px;
+    }
 
-    .fila-titulo, .acciones, .barra {
+    .boton-panaderia {
+      min-height: 90px;
+      font-size: 18px;
+      font-weight: bold;
+    }
+
+    .barra {
       display: flex;
-      align-items: center;
       justify-content: space-between;
-      gap: 10px;
+      align-items: center;
+      gap: 12px;
       flex-wrap: wrap;
     }
 
-    .campo {
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-      flex: 1;
-      min-width: 130px;
-    }
-
-    input {
-      width: 100%;
-      padding: 11px;
-      border: 1px solid #cfc5b8;
-      background: white;
-      color: #292524;
-    }
-
-    .formulario {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-      gap: 12px;
-      align-items: end;
-    }
-
-    .resumen {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(145px, 1fr));
-      gap: 12px;
-    }
-
-    .dato {
-      background: #f5eee5;
-      padding: 15px;
-      border-radius: 10px;
-    }
-
-    .dato span { display: block; font-size: 13px; color: #57534e; }
-    .dato strong { display: block; font-size: 23px; margin-top: 8px; }
-
-    .tabla-contenedor { overflow-x: auto; }
-
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      margin-top: 10px;
-    }
-
-    th, td {
-      padding: 12px 8px;
-      text-align: left;
-      border-bottom: 1px solid #eee7df;
-    }
-
-    th { background: #f5eee5; }
-
-    .acciones-tabla { white-space: nowrap; }
-    .acciones-tabla button { margin: 2px; padding: 8px 10px; }
-
-    .nota { color: #78716c; font-size: 13px; line-height: 1.5; }
     .oculto { display: none !important; }
+
+    .mensaje {
+      padding: 12px;
+      border-radius: 8px;
+      margin-bottom: 15px;
+      overflow-wrap: anywhere;
+    }
+
+    .error {
+      background: #fee2e2;
+      color: #991b1b;
+    }
+
+    .exito {
+      background: #dcfce7;
+      color: #166534;
+    }
+
+    .nota {
+      color: #78716c;
+      font-size: 13px;
+      line-height: 1.5;
+    }
 
     @media (max-width: 500px) {
       header h1 { font-size: 21px; }
-      .panel { padding: 14px; }
-      th, td { padding: 10px 6px; font-size: 14px; }
+      .panel { padding: 15px; }
     }
   </style>
 </head>
+
 <body>
   <header>
     <h1>Inventarios de Panaderías</h1>
@@ -158,309 +137,389 @@
   </header>
 
   <main>
-    <section id="pantallaInicio">
+    <!-- PANTALLA DE INICIO DE SESIÓN -->
+    <section id="pantallaLogin">
       <div class="panel">
-        <h2>Selecciona una panadería</h2>
-        <p>Elige dónde deseas consultar o capturar el inventario.</p>
-        <div class="panaderias">
-          <button class="boton-panaderia" onclick="abrirPanaderia('Panadería Pizzan')">
-            Panadería Pizzan
+        <h2>Iniciar sesión</h2>
+        <p>Ingresa con el correo y la contraseña de tu cuenta autorizada.</p>
+
+        <div id="mensajeLogin" class="mensaje oculto" role="alert"></div>
+
+        <form id="formLogin">
+          <div class="campo">
+            <label for="correo">Correo electrónico</label>
+            <input
+              id="correo"
+              type="email"
+              autocomplete="username"
+              placeholder="tu@correo.com"
+              required
+            >
+          </div>
+
+          <div class="campo">
+            <label for="contrasena">Contraseña</label>
+            <input
+              id="contrasena"
+              type="password"
+              autocomplete="current-password"
+              placeholder="Tu contraseña"
+              required
+            >
+          </div>
+
+          <button id="botonLogin" class="ancho" type="submit">
+            Iniciar sesión
           </button>
-          <button class="boton-panaderia" onclick="abrirPanaderia('Panadería Alonso')">
-            Panadería Alonso
-          </button>
-        </div>
+        </form>
+
+        <p class="nota">
+          Solo pueden ingresar las cuentas registradas y autorizadas
+          por el administrador.
+        </p>
       </div>
     </section>
 
-    <section id="pantallaInventario" class="oculto">
+    <!-- SELECCIÓN DE PANADERÍA -->
+    <section id="pantallaPanaderias" class="oculto">
       <div class="panel">
         <div class="barra">
           <div>
-            <h2 id="nombrePanaderia">Panadería</h2>
-            <p>Inventario actual</p>
+            <h2>Selecciona una panadería</h2>
+            <p id="saludoUsuario"></p>
           </div>
-          <button class="secundario" onclick="volverInicio()">Volver</button>
-        </div>
-      </div>
 
-      <div class="panel">
-        <h3 id="tituloFormulario">Agregar producto al catálogo</h3>
-        <form id="formProducto" class="formulario">
-          <div class="campo">
-            <label for="nombreProducto">Nombre del pan</label>
-            <input id="nombreProducto" maxlength="100" required
-                   placeholder="Ej. Concha">
-          </div>
-          <div class="campo">
-            <label for="cantidadProducto">Cantidad de piezas</label>
-            <input id="cantidadProducto" type="number" min="0" step="1"
-                   value="0" required>
-          </div>
-          <div class="campo">
-            <label for="precioProducto">Precio por pieza ($)</label>
-            <input id="precioProducto" type="number" min="0" step="0.01"
-                   placeholder="Ej. 8.50" required>
-          </div>
-          <div class="acciones">
-            <button id="botonGuardar" type="submit">Agregar producto</button>
-            <button id="botonCancelar" type="button"
-                    class="secundario oculto" onclick="cancelarEdicion()">
-              Cancelar
-            </button>
-          </div>
-        </form>
-      </div>
-
-      <div class="panel">
-        <h3>Resumen del inventario</h3>
-        <div class="resumen">
-          <div class="dato">
-            <span>Tipos de pan</span>
-            <strong id="totalTipos">0</strong>
-          </div>
-          <div class="dato">
-            <span>Total de piezas</span>
-            <strong id="totalPiezas">0</strong>
-          </div>
-          <div class="dato">
-            <span>Valor del inventario</span>
-            <strong id="valorTotal">$0.00</strong>
-          </div>
+          <button id="botonCerrarSesion" class="secundario" type="button">
+            Cerrar sesión
+          </button>
         </div>
-      </div>
 
-      <div class="panel">
-        <h3>Productos del inventario</h3>
-        <div class="tabla-contenedor">
-          <table>
-            <thead>
-              <tr>
-                <th>Pan</th>
-                <th>Piezas</th>
-                <th>Precio</th>
-                <th>Importe</th>
-                <th>Acciones</th>
-              </tr>
-            </thead>
-            <tbody id="listaProductos"></tbody>
-          </table>
-        </div>
-        <p id="mensajeVacio">Todavía no hay productos. Agrega el primero arriba.</p>
-      </div>
+        <div id="mensajePanaderias" class="mensaje oculto" role="alert"></div>
 
+        <div id="listaPanaderias" class="panaderias"></div>
+      </div>
+    </section>
+
+    <!-- PANTALLA DE LA PANADERÍA SELECCIONADA -->
+    <section id="pantallaDetalle" class="oculto">
       <div class="panel">
-        <h3>Resumen por precio</h3>
-        <div class="tabla-contenedor">
-          <table>
-            <thead>
-              <tr>
-                <th>Precio por pieza</th>
-                <th>Total de piezas</th>
-                <th>Importe</th>
-              </tr>
-            </thead>
-            <tbody id="resumenPrecios"></tbody>
-          </table>
+        <div class="barra">
+          <h2 id="nombrePanaderia">Panadería</h2>
+          <button id="botonVolver" class="secundario" type="button">
+            Volver
+          </button>
         </div>
-        <p class="nota">
-          Los totales se calculan automáticamente con las cantidades y precios
-          capturados. Los datos todavía no se guardan de forma permanente.
+
+        <p id="detalleUsuario"></p>
+
+        <div class="mensaje exito">
+          Has iniciado sesión y seleccionado una panadería autorizada.
+        </div>
+
+        <p>
+          La conexión de esta pantalla con el catálogo y el inventario
+          permanente es el siguiente paso.
         </p>
+
+        <p class="nota">
+          Todavía no captures información de productos en esta pantalla.
+          Primero verificaremos el acceso y después conectaremos el
+          inventario con la base de datos.
+        </p>
+
+        <button id="botonCerrarSesionDetalle" class="secundario" type="button">
+          Cerrar sesión
+        </button>
       </div>
     </section>
   </main>
 
+  <!-- Cliente oficial de Supabase -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
   <script>
-    const inventarios = {
-      "Panadería Pizzan": [],
-      "Panadería Alonso": []
-    };
+    // CONFIGURACIÓN DE SUPABASE
+    const SUPABASE_URL = "https://fjthttvprmjrfmmsnxer.supabase.co";
+    const SUPABASE_PUBLIC_KEY = "sb_publishable_q0IMJftaJbakbEBjTvF7fQ_nfer1p7R";
 
-    let panaderiaActual = "";
-    let indiceEdicion = null;
+    // El navegador usa solamente la clave pública.
+    // La clave secreta del servidor nunca debe colocarse aquí.
+    const clienteSupabase = window.supabase.createClient(
+      SUPABASE_URL,
+      SUPABASE_PUBLIC_KEY
+    );
 
-    function abrirPanaderia(nombre) {
-      panaderiaActual = nombre;
-      document.getElementById("nombrePanaderia").textContent = nombre;
-      document.getElementById("pantallaInicio").classList.add("oculto");
-      document.getElementById("pantallaInventario").classList.remove("oculto");
-      cancelarEdicion();
-      dibujarInventario();
+    const pantallaLogin = document.getElementById("pantallaLogin");
+    const pantallaPanaderias = document.getElementById("pantallaPanaderias");
+    const pantallaDetalle = document.getElementById("pantallaDetalle");
+
+    let usuarioActual = null;
+    let perfilActual = null;
+    let panaderiasAutorizadas = [];
+
+    function mostrarPantalla(pantalla) {
+      pantallaLogin.classList.add("oculto");
+      pantallaPanaderias.classList.add("oculto");
+      pantallaDetalle.classList.add("oculto");
+      pantalla.classList.remove("oculto");
     }
 
-    function volverInicio() {
-      document.getElementById("pantallaInventario").classList.add("oculto");
-      document.getElementById("pantallaInicio").classList.remove("oculto");
-      cancelarEdicion();
+    function mostrarMensaje(elemento, texto, tipo = "error") {
+      elemento.textContent = texto;
+      elemento.className = "mensaje " + tipo;
     }
 
-    function dinero(valor) {
-      return valor.toLocaleString("es-MX", {
-        style: "currency",
-        currency: "MXN"
+    function ocultarMensaje(elemento) {
+      elemento.textContent = "";
+      elemento.className = "mensaje oculto";
+    }
+
+    async function consultarBackend(ruta, token) {
+      const respuesta = await fetch(ruta, {
+        method: "GET",
+        headers: {
+          "Authorization": "Bearer " + token,
+          "Accept": "application/json"
+        }
       });
-    }
 
-    document.getElementById("formProducto").addEventListener("submit", function(evento) {
-      evento.preventDefault();
+      const datos = await respuesta.json().catch(() => ({}));
 
-      const nombre = document.getElementById("nombreProducto").value.trim();
-      const cantidadTexto = document.getElementById("cantidadProducto").value;
-      const precioTexto = document.getElementById("precioProducto").value;
-      const cantidad = Number(cantidadTexto);
-      const precio = Number(precioTexto);
-
-      if (!nombre || cantidadTexto === "" || precioTexto === "" ||
-          !Number.isInteger(cantidad) || cantidad < 0 ||
-          !Number.isFinite(precio) || precio < 0) {
-        alert("Revisa el nombre, la cantidad y el precio.");
-        return;
+      if (!respuesta.ok) {
+        const error = new Error(
+          datos.detail || "No se pudo consultar la información."
+        );
+        error.status = respuesta.status;
+        throw error;
       }
 
-      const productos = inventarios[panaderiaActual];
-      const nombreDuplicado = productos.some((producto, indice) =>
-        producto.nombre.toLocaleLowerCase() === nombre.toLocaleLowerCase() &&
-        indice !== indiceEdicion
+      return datos;
+    }
+
+    async function cargarDatosUsuario(sesion) {
+      usuarioActual = sesion.user;
+
+      // El backend verifica el token y obtiene el perfil autorizado.
+      perfilActual = await consultarBackend(
+        "/api/mi-perfil",
+        sesion.access_token
       );
 
-      if (nombreDuplicado) {
-        alert("Ya existe un producto con ese nombre en esta panadería.");
+      // El backend devuelve únicamente las panaderías permitidas.
+      const datos = await consultarBackend(
+        "/api/panaderias",
+        sesion.access_token
+      );
+
+      panaderiasAutorizadas = Array.isArray(datos)
+        ? datos
+        : (datos.panaderias || []);
+
+      document.getElementById("saludoUsuario").textContent =
+        "Sesión iniciada" +
+        (perfilActual.nombre ? ": " + perfilActual.nombre : "");
+
+      dibujarPanaderias();
+      mostrarPantalla(pantallaPanaderias);
+    }
+
+    function dibujarPanaderias() {
+      const contenedor = document.getElementById("listaPanaderias");
+      const mensaje = document.getElementById("mensajePanaderias");
+
+      contenedor.replaceChildren();
+      ocultarMensaje(mensaje);
+
+      if (panaderiasAutorizadas.length === 0) {
+        mostrarMensaje(
+          mensaje,
+          "Tu cuenta no tiene panaderías asignadas. Contacta al administrador."
+        );
         return;
       }
 
-      const producto = { nombre, cantidad, precio };
+      panaderiasAutorizadas.forEach((panaderia) => {
+        const boton = document.createElement("button");
+        boton.type = "button";
+        boton.className = "boton-panaderia";
+        boton.textContent = panaderia.nombre;
 
-      if (indiceEdicion === null) {
-        productos.push(producto);
-      } else {
-        productos[indiceEdicion] = producto;
-      }
+        boton.disabled = panaderia.activa === false;
 
-      cancelarEdicion();
-      dibujarInventario();
-    });
-
-    function editarProducto(indice) {
-      const producto = inventarios[panaderiaActual][indice];
-      indiceEdicion = indice;
-
-      document.getElementById("nombreProducto").value = producto.nombre;
-      document.getElementById("cantidadProducto").value = producto.cantidad;
-      document.getElementById("precioProducto").value = producto.precio;
-      document.getElementById("tituloFormulario").textContent = "Editar producto";
-      document.getElementById("botonGuardar").textContent = "Guardar cambios";
-      document.getElementById("botonCancelar").classList.remove("oculto");
-      document.getElementById("nombreProducto").focus();
-    }
-
-    function cancelarEdicion() {
-      indiceEdicion = null;
-      document.getElementById("formProducto").reset();
-      document.getElementById("cantidadProducto").value = "0";
-      document.getElementById("tituloFormulario").textContent = "Agregar producto al catálogo";
-      document.getElementById("botonGuardar").textContent = "Agregar producto";
-      document.getElementById("botonCancelar").classList.add("oculto");
-    }
-
-    function eliminarProducto(indice) {
-      const producto = inventarios[panaderiaActual][indice];
-
-      if (!confirm(`¿Deseas eliminar "${producto.nombre}" de este inventario?`)) {
-        return;
-      }
-
-      inventarios[panaderiaActual].splice(indice, 1);
-      cancelarEdicion();
-      dibujarInventario();
-    }
-
-    function dibujarInventario() {
-      const productos = inventarios[panaderiaActual];
-      const lista = document.getElementById("listaProductos");
-      const resumen = document.getElementById("resumenPrecios");
-
-      lista.replaceChildren();
-      resumen.replaceChildren();
-
-      let totalPiezas = 0;
-      let valorTotal = 0;
-      const porPrecio = new Map();
-
-      productos.forEach((producto, indice) => {
-        const importe = producto.cantidad * producto.precio;
-        totalPiezas += producto.cantidad;
-        valorTotal += importe;
-
-        const clavePrecio = producto.precio.toFixed(2);
-        if (!porPrecio.has(clavePrecio)) {
-          porPrecio.set(clavePrecio, { precio: producto.precio, piezas: 0, importe: 0 });
+        if (panaderia.activa === false) {
+          boton.textContent += " (Inactiva)";
         }
 
-        const grupo = porPrecio.get(clavePrecio);
-        grupo.piezas += producto.cantidad;
-        grupo.importe += importe;
-
-        const fila = document.createElement("tr");
-
-        [producto.nombre, producto.cantidad, dinero(producto.precio), dinero(importe)]
-          .forEach(valor => {
-            const celda = document.createElement("td");
-            celda.textContent = valor;
-            fila.appendChild(celda);
-          });
-
-        const acciones = document.createElement("td");
-        acciones.className = "acciones-tabla";
-
-        const botonEditar = document.createElement("button");
-        botonEditar.textContent = "Editar";
-        botonEditar.className = "secundario";
-        botonEditar.onclick = () => editarProducto(indice);
-
-        const botonEliminar = document.createElement("button");
-        botonEliminar.textContent = "Eliminar";
-        botonEliminar.className = "peligro";
-        botonEliminar.onclick = () => eliminarProducto(indice);
-
-        acciones.append(botonEditar, botonEliminar);
-        fila.appendChild(acciones);
-        lista.appendChild(fila);
-      });
-
-      document.getElementById("totalTipos").textContent = productos.length;
-      document.getElementById("totalPiezas").textContent =
-        totalPiezas.toLocaleString("es-MX");
-      document.getElementById("valorTotal").textContent = dinero(valorTotal);
-      document.getElementById("mensajeVacio").classList.toggle("oculto", productos.length > 0);
-
-      [...porPrecio.values()]
-        .sort((a, b) => a.precio - b.precio)
-        .forEach(grupo => {
-          const fila = document.createElement("tr");
-
-          [dinero(grupo.precio), grupo.piezas.toLocaleString("es-MX"), dinero(grupo.importe)]
-            .forEach(valor => {
-              const celda = document.createElement("td");
-              celda.textContent = valor;
-              fila.appendChild(celda);
-            });
-
-          resumen.appendChild(fila);
+        boton.addEventListener("click", () => {
+          abrirPanaderia(panaderia);
         });
 
-      if (porPrecio.size > 0) {
-        const filaTotal = document.createElement("tr");
-        const etiqueta = document.createElement("th");
-        etiqueta.textContent = "TOTAL";
-        const piezas = document.createElement("th");
-        piezas.textContent = totalPiezas.toLocaleString("es-MX");
-        const importe = document.createElement("th");
-        importe.textContent = dinero(valorTotal);
-        filaTotal.append(etiqueta, piezas, importe);
-        resumen.appendChild(filaTotal);
+        contenedor.appendChild(boton);
+      });
+    }
+
+    function abrirPanaderia(panaderia) {
+      // Solo se permite seleccionar una panadería recibida
+      // por el backend para la cuenta autenticada.
+      const autorizada = panaderiasAutorizadas.find(
+        item => String(item.id) === String(panaderia.id)
+      );
+
+      if (!autorizada || autorizada.activa === false) {
+        mostrarMensaje(
+          document.getElementById("mensajePanaderias"),
+          "No tienes acceso a esa panadería."
+        );
+        return;
+      }
+
+      document.getElementById("nombrePanaderia").textContent =
+        autorizada.nombre;
+
+      document.getElementById("detalleUsuario").textContent =
+        "Cuenta: " + (usuarioActual.email || "Usuario autenticado");
+
+      mostrarPantalla(pantallaDetalle);
+    }
+
+    document.getElementById("formLogin").addEventListener(
+      "submit",
+      async function(evento) {
+        evento.preventDefault();
+
+        const boton = document.getElementById("botonLogin");
+        const mensaje = document.getElementById("mensajeLogin");
+        const correo = document.getElementById("correo").value.trim();
+        const contrasena = document.getElementById("contrasena").value;
+
+        ocultarMensaje(mensaje);
+        boton.disabled = true;
+        boton.textContent = "Verificando...";
+
+        try {
+          if (!window.supabase) {
+            throw new Error(
+              "No se pudo cargar el sistema de acceso. Comprueba tu conexión a internet."
+            );
+          }
+
+          const { data, error } =
+            await clienteSupabase.auth.signInWithPassword({
+              email: correo,
+              password: contrasena
+            });
+
+          if (error) {
+            throw new Error(
+              "No se pudo iniciar sesión. Revisa el correo y la contraseña."
+            );
+          }
+
+          if (!data.session) {
+            throw new Error("No se recibió una sesión válida.");
+          }
+
+          try {
+            await cargarDatosUsuario(data.session);
+          } catch (errorAcceso) {
+            await clienteSupabase.auth.signOut();
+            usuarioActual = null;
+            perfilActual = null;
+            panaderiasAutorizadas = [];
+            mostrarPantalla(pantallaLogin);
+
+            if (errorAcceso.status === 401 ||
+                errorAcceso.status === 403) {
+              throw new Error(
+                "Tu cuenta no tiene acceso autorizado. Contacta al administrador."
+              );
+            }
+
+            throw new Error(
+              "Iniciaste sesión, pero no se pudo verificar tu perfil o tus panaderías. Intenta nuevamente."
+            );
+          }
+        } catch (error) {
+          mostrarMensaje(
+            mensaje,
+            error.message || "Ocurrió un error. Intenta nuevamente."
+          );
+        } finally {
+          boton.disabled = false;
+          boton.textContent = "Iniciar sesión";
+        }
+      }
+    );
+
+    async function cerrarSesion() {
+      const boton1 = document.getElementById("botonCerrarSesion");
+      const boton2 = document.getElementById("botonCerrarSesionDetalle");
+
+      boton1.disabled = true;
+      boton2.disabled = true;
+
+      try {
+        const { error } = await clienteSupabase.auth.signOut();
+
+        if (error) {
+          throw new Error("No se pudo cerrar la sesión. Intenta de nuevo.");
+        }
+
+        usuarioActual = null;
+        perfilActual = null;
+        panaderiasAutorizadas = [];
+
+        document.getElementById("formLogin").reset();
+        document.getElementById("listaPanaderias").replaceChildren();
+        mostrarPantalla(pantallaLogin);
+      } catch (error) {
+        alert(error.message || "No se pudo cerrar la sesión.");
+      } finally {
+        boton1.disabled = false;
+        boton2.disabled = false;
       }
     }
+
+    document.getElementById("botonCerrarSesion")
+      .addEventListener("click", cerrarSesion);
+
+    document.getElementById("botonCerrarSesionDetalle")
+      .addEventListener("click", cerrarSesion);
+
+    document.getElementById("botonVolver")
+      .addEventListener("click", () => {
+        dibujarPanaderias();
+        mostrarPantalla(pantallaPanaderias);
+      });
+
+    // Al abrir la página, revisar si ya existe una sesión.
+    async function iniciarAplicacion() {
+      try {
+        const { data, error } = await clienteSupabase.auth.getSession();
+
+        if (error) {
+          throw error;
+        }
+
+        if (data.session) {
+          await cargarDatosUsuario(data.session);
+        } else {
+          mostrarPantalla(pantallaLogin);
+        }
+      } catch (error) {
+        usuarioActual = null;
+        perfilActual = null;
+        panaderiasAutorizadas = [];
+        mostrarPantalla(pantallaLogin);
+
+        mostrarMensaje(
+          document.getElementById("mensajeLogin"),
+          "No se pudo verificar tu sesión. Inicia sesión nuevamente."
+        );
+      }
+    }
+
+    iniciarAplicacion();
   </script>
 </body>
 </html>
