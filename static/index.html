@@ -216,6 +216,7 @@
           Has iniciado sesión y seleccionado una panadería autorizada.
         </div>
 
+        <section id="panelTablas" class="panel"><h3>Tablas e historial</h3><p class="nota">Consulta los registros guardados por fecha; el resumen agrupa las cantidades por precio.</p><div class="campo"><label for="histDesde">Desde</label><input id="histDesde" type="date"></div><div class="campo"><label for="histHasta">Hasta</label><input id="histHasta" type="date"></div><button id="botonConsultarTablas" type="button">Consultar tablas</button><div id="mensajeTablas" class="mensaje oculto" role="status"></div><h4>Tabla A · Detalle por producto</h4><div id="tablaDetalle"></div><h4>Tabla B · Resumen por precio</h4><div id="tablaResumen"></div></section>
         <section id="panelRegistro" class="panel"><h3>Registro diario</h3><div class="campo"><label for="fechaRegistro">Fecha</label><input id="fechaRegistro" type="date"></div><div class="barra"><strong id="estadoRegistro">Día abierto</strong></div><div id="mensajeRegistro" class="mensaje oculto" role="alert"></div><div id="filasRegistro"></div><button id="botonGuardarRegistro" type="button">Guardar registro</button> <button id="botonCerrarDia" type="button">Cerrar día</button> <button id="botonReabrirDia" class="secundario" type="button">Reabrir día</button></section>
         <h3>Catálogo de productos</h3>
         <p class="nota">Agrega productos y su precio actual para esta panadería.</p>
@@ -241,6 +242,7 @@
 
   <script src="/static/productos.js"></script>
   <script src="/static/registro.js"></script>
+  <script src="/static/tablas.js"></script>
   <script>
     // CONFIGURACIÓN DE SUPABASE
     const SUPABASE_URL = "https://fjthttvprmjrfmmsnxer.supabase.co";
@@ -388,6 +390,9 @@
       mostrarPantalla(pantallaDetalle);
       if (window.iniciarCatalogoProductos) {
         window.iniciarCatalogoProductos(sesionActual, autorizada);
+      }
+      if (window.iniciarTablasHistorial) {
+        window.iniciarTablasHistorial(sesionActual, autorizada);
       }
       if (window.iniciarRegistroDiario) {
         window.iniciarRegistroDiario(sesionActual, autorizada, []);
