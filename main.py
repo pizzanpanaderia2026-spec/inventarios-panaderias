@@ -935,7 +935,8 @@ def descargar_lista_precios(
             salida,
             media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             headers={"Content-Disposition": 'attachment; filename="lista_de_productos.xlsx"'},
-        )    except HTTPException:
+        )
+    except HTTPException:
         raise
     except Exception:
         raise HTTPException(status_code=503, detail="No se pudo generar la lista de productos.")
