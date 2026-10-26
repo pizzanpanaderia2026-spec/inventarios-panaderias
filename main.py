@@ -415,20 +415,25 @@ def obtener_o_crear_cierre(panaderia_id: int, fecha_registro: date, usuario_id: 
     )
     if encontrado.data:
         return encontrado.data[0]
-    try:
-        creado = supabase.table("cierres_diarios").insert({
-            "panaderia_id": panaderia_id,
-            "fecha": fecha_registro.isoformat(),
-            "estado": "abierto",
-        }).execute()
-        if creado.data:
-            return creado.data[0]
-    except Exception:
-        # Si otra solicitud creó el mismo día, la restricción única puede
-        # lanzar una excepción en vez de devolver una lista vacía.
-        pass
+    # ON CONFLICT DO NOTHING evita capturar excepciones ajenas a una
+    # colisión simultánea y respeta la restricción única panadería/fecha.
+    creado = (
+        supabase.table("cierres_diarios")
+        .upsert(
+            {
+                "panaderia_id": panaderia_id,
+                "fecha": fecha_registro.isoformat(),
+                "estado": "abierto",
+            },
+            on_conflict="panaderia_id,fecha",
+            ignore_duplicates=True,
+        )
+        .execute()
+    )
+    if creado.data:
+        return creado.data[0]
 
-    # Reconsulta tanto si el insert devolvió vacío como si hubo conflicto.
+    # Si otra solicitud ganó la carrera, recupera el cierre ya creado.
     reintento = (
         supabase.table("cierres_diarios").select("*")
         .eq("panaderia_id", panaderia_id)
