@@ -212,18 +212,6 @@
 
         <p id="detalleUsuario"></p>
 
-        <section class="panel" aria-labelledby="tituloContrasena">
-          <h3 id="tituloContrasena">Cambiar mi contraseña</h3>
-          <p class="nota">Confirma tu contraseña actual y escribe una nueva de al menos 10 caracteres.</p>
-          <div id="mensajeContrasena" class="mensaje oculto" role="status"></div>
-          <form id="formCambioContrasena">
-            <div class="campo"><label for="contrasenaActual">Contraseña actual</label><input id="contrasenaActual" type="password" autocomplete="current-password" required></div>
-            <div class="campo"><label for="contrasenaNueva">Nueva contraseña (mínimo 10 caracteres)</label><input id="contrasenaNueva" type="password" autocomplete="new-password" minlength="10" required></div>
-            <div class="campo"><label for="contrasenaNuevaConfirmar">Confirmar nueva contraseña</label><input id="contrasenaNuevaConfirmar" type="password" autocomplete="new-password" minlength="10" required></div>
-            <button id="botonCambiarContrasena" type="submit">Actualizar contraseña</button>
-          </form>
-        </section>
-
         <div class="mensaje exito">
           Has iniciado sesión y seleccionado una panadería autorizada.
         </div>
@@ -508,40 +496,6 @@
         }
       }
     );
-
-
-    document.getElementById("formCambioContrasena").addEventListener("submit", async function(evento) {
-      evento.preventDefault();
-      const actual = document.getElementById("contrasenaActual").value;
-      const nueva = document.getElementById("contrasenaNueva").value;
-      const confirmar = document.getElementById("contrasenaNuevaConfirmar").value;
-      const boton = document.getElementById("botonCambiarContrasena");
-      const mensaje = document.getElementById("mensajeContrasena");
-      ocultarMensaje(mensaje);
-      if (nueva.length < 10) { mostrarMensaje(mensaje, "La nueva contraseña debe tener al menos 10 caracteres."); return; }
-      if (nueva !== confirmar) { mostrarMensaje(mensaje, "Las nuevas contraseñas no coinciden."); return; }
-      boton.disabled = true;
-      boton.textContent = "Actualizando...";
-      try {
-        const { data: sesionData } = await clienteSupabase.auth.getSession();
-        const sesion = sesionData.session;
-        if (!sesion) throw new Error("Tu sesión venció. Inicia sesión nuevamente.");
-        const respuesta = await fetch("/api/mi-cuenta/contrasena", {
-          method: "POST",
-          headers: {"Content-Type": "application/json", "Authorization": "Bearer " + sesion.access_token},
-          body: JSON.stringify({contrasena_actual: actual, contrasena_nueva: nueva})
-        });
-        const resultado = await respuesta.json();
-        if (!respuesta.ok) throw new Error(resultado.detail || "No se pudo cambiar la contraseña.");
-        document.getElementById("formCambioContrasena").reset();
-        mostrarMensaje(mensaje, resultado.mensaje || "Contraseña actualizada.", "exito");
-      } catch (error) {
-        mostrarMensaje(mensaje, error.message || "No se pudo cambiar la contraseña.");
-      } finally {
-        boton.disabled = false;
-        boton.textContent = "Actualizar contraseña";
-      }
-    });
 
     async function cerrarSesion() {
       const boton1 = document.getElementById("botonCerrarSesion");
