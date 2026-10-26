@@ -501,11 +501,29 @@ def guardar_registro(
                 "cantidad": linea.cantidad,
                 "precio_unitario": str(producto["precio"]),
             })
-        actuales = supabase.table("inventario_detalles").select("id").eq("cierre_id", cierre["id"]).execute()
-        for detalle in actuales.data:
-            supabase.table("inventario_detalles").delete().eq("id", detalle["id"]).execute()
-        if nuevas:
-            supabase.table("inventario_detalles").insert(nuevas).execute()
+        lineas_rpc = [
+            {
+                "producto_id": linea["producto_id"],
+                "cantidad": linea["cantidad"],
+                "precio_unitario": linea["precio_unitario"],
+            }
+            for linea in nuevas
+        ]
+        # Una sola función SQL reemplaza las líneas dentro de una transacción.
+        supabase.rpc("reemplazar_lineas_cierre", {
+            "p_cierre_id": cierre["id"],
+            "p_lineas": lineas_rpc,
+        }).execute()
+        supabase.table("auditoria_inventario").insert({
+            "cierre_id": cierre["id"],
+            "panaderia_id": registro.panaderia_id,
+            "usuario_id": str(usuario.id),
+            "accion": "guardar_registro",
+            "detalles": {
+                "fecha": registro.fecha.isoformat(),
+                "cantidad_lineas": len(nuevas),
+            },
+        }).execute()
         return {"guardado": True, "cierre_id": cierre["id"], "cantidad_lineas": len(nuevas)}
     except HTTPException:
         raise
