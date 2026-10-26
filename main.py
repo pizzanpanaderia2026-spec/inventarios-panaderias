@@ -492,6 +492,18 @@ def guardar_registro(
             .eq("panaderia_id", registro.panaderia_id).execute()
         )
         por_id = {int(p["id"]): p for p in productos.data}
+        # Conserva el precio histórico ya guardado para cada producto.
+        # Solo los productos nuevos en este registro toman el precio actual.
+        anteriores = (
+            supabase.table("inventario_detalles")
+            .select("producto_id,precio_unitario")
+            .eq("cierre_id", cierre["id"])
+            .execute()
+        )
+        precios_anteriores = {
+            int(item["producto_id"]): item.get("precio_unitario")
+            for item in anteriores.data
+        }
         nuevas = []
         for linea in registro.lineas:
             producto = por_id.get(linea.producto_id)
@@ -501,7 +513,11 @@ def guardar_registro(
                 "cierre_id": cierre["id"],
                 "producto_id": linea.producto_id,
                 "cantidad": linea.cantidad,
-                "precio_unitario": str(producto["precio"]),
+                "precio_unitario": str(
+                    precios_anteriores.get(linea.producto_id)
+                    if precios_anteriores.get(linea.producto_id) is not None
+                    else producto["precio"]
+                ),
             })
         lineas_rpc = [
             {
