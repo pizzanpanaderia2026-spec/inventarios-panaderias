@@ -44,6 +44,9 @@
       const data = await api("/api/productos?panaderia_id=" + encodeURIComponent(panaderia.id));
       productos = data.productos || [];
       dibujar();
+      if (window.actualizarRegistroCatalogo) {
+        await window.actualizarRegistroCatalogo(productos);
+      }
     } catch (error) {
       lista.textContent = "";
       aviso(error.message);
