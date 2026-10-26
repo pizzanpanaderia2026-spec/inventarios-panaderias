@@ -216,16 +216,17 @@
           Has iniciado sesión y seleccionado una panadería autorizada.
         </div>
 
-        <p>
-          La conexión de esta pantalla con el catálogo y el inventario
-          permanente es el siguiente paso.
-        </p>
-
-        <p class="nota">
-          Todavía no captures información de productos en esta pantalla.
-          Primero verificaremos el acceso y después conectaremos el
-          inventario con la base de datos.
-        </p>
+        <h3>Catálogo de productos</h3>
+        <p class="nota">Agrega productos y su precio actual para esta panadería.</p>
+        <div id="mensajeProductos" class="mensaje oculto" role="alert"></div>
+        <form id="formProducto">
+          <div class="campo"><label for="nombreProducto">Nombre del producto</label><input id="nombreProducto" maxlength="120" required></div>
+          <div class="campo"><label for="precioProducto">Precio ($)</label><input id="precioProducto" type="number" min="0" step="0.01" required></div>
+          <button id="botonGuardarProducto" type="submit">Agregar producto</button>
+          <button id="botonCancelarEdicion" class="secundario oculto" type="button">Cancelar edición</button>
+        </form>
+        <div class="barra"><h3>Productos registrados</h3><button id="botonActualizarProductos" class="secundario" type="button">Actualizar</button></div>
+        <div id="listaProductos"></div>
 
         <button id="botonCerrarSesionDetalle" class="secundario" type="button">
           Cerrar sesión
@@ -237,6 +238,7 @@
   <!-- Cliente oficial de Supabase -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
+  <script src="/static/productos.js"></script>
   <script>
     // CONFIGURACIÓN DE SUPABASE
     const SUPABASE_URL = "https://fjthttvprmjrfmmsnxer.supabase.co";
@@ -256,6 +258,7 @@
     let usuarioActual = null;
     let perfilActual = null;
     let panaderiasAutorizadas = [];
+    let sesionActual = null;
 
     function mostrarPantalla(pantalla) {
       pantallaLogin.classList.add("oculto");
@@ -297,6 +300,7 @@
     }
 
     async function cargarDatosUsuario(sesion) {
+      sesionActual = sesion;
       usuarioActual = sesion.user;
 
       // El backend verifica el token y obtiene el perfil autorizado.
@@ -380,6 +384,9 @@
         "Cuenta: " + (usuarioActual.email || "Usuario autenticado");
 
       mostrarPantalla(pantallaDetalle);
+      if (window.iniciarCatalogoProductos) {
+        window.iniciarCatalogoProductos(sesionActual, autorizada);
+      }
     }
 
     document.getElementById("formLogin").addEventListener(
