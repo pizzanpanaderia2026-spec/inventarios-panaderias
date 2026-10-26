@@ -10,6 +10,18 @@ class HelpersTests(unittest.TestCase):
     def test_normaliza_espacios_en_nombre(self):
         self.assertEqual(main.normalizar_nombre_producto("  Concha   vainilla  "), "Concha vainilla")
 
+    def test_clave_ignora_mayusculas_acentos_y_espacios_repetidos(self):
+        self.assertEqual(
+            main.clave_nombre_producto("  Café   GRANDE "),
+            main.clave_nombre_producto("cafe grande"),
+        )
+
+    def test_clave_conserva_limite_entre_palabras(self):
+        self.assertNotEqual(
+            main.clave_nombre_producto("Bolillo grande"),
+            main.clave_nombre_producto("Bolillogrande"),
+        )
+
     def test_admin_principal_requiere_ambas_condiciones(self):
         self.assertTrue(main.es_admin_principal({"rol": "admin", "es_admin_principal": True}))
         self.assertFalse(main.es_admin_principal({"rol": "admin", "es_admin_principal": False}))
