@@ -759,6 +759,7 @@ def descargar_historial_excel(
 def descargar_lista_precios(
     authorization: str | None = Header(default=None),
 ):
+    """Descarga bajo demanda el historial de precios que sí quedó registrado."""
     usuario = obtener_usuario_autenticado(authorization)
     perfil = obtener_perfil(str(usuario.id))
     try:
@@ -766,7 +767,6 @@ def descargar_lista_precios(
             panaderias = (
                 supabase.table("panaderias")
                 .select("id,nombre")
-                .eq("activa", True)
                 .order("nombre")
                 .execute()
             ).data
@@ -784,43 +784,75 @@ def descargar_lista_precios(
                 supabase.table("panaderias")
                 .select("id,nombre")
                 .in_("id", ids)
-                .eq("activa", True)
                 .order("nombre")
                 .execute()
             ).data
 
         libro = Workbook()
         hoja = libro.active
-        hoja.title = "Lista de precios"
-        hoja.append(["Panadería", "Producto", "Precio actual"])
+        hoja.title = "Lista de productos"
+        hoja.append(["Panadería", "Producto", "Fecha del precio", "Precio"])
         for panaderia in panaderias:
             productos = (
                 supabase.table("productos")
-                .select("nombre,precio")
+                .select("id,nombre,precio,creado_en")
                 .eq("panaderia_id", panaderia["id"])
-                .eq("activo", True)
                 .order("nombre")
                 .execute()
             ).data
+            if not productos:
+                continue
+            ids_productos = [int(p["id"]) for p in productos]
+            detalles = (
+                supabase.table("inventario_detalles")
+                .select("producto_id,precio_unitario,cierre_id,registrado_en")
+                .in_("producto_id", ids_productos)
+                .order("registrado_en")
+                .execute()
+            ).data
+            cierres_ids = list({int(d["cierre_id"]) for d in detalles if d.get("cierre_id") is not None})
+            fechas_cierres = {}
+            if cierres_ids:
+                cierres = (
+                    supabase.table("cierres_diarios")
+                    .select("id,fecha")
+                    .in_("id", cierres_ids)
+                    .execute()
+                ).data
+                fechas_cierres = {int(c["id"]): c["fecha"] for c in cierres}
+
+            por_producto = {}
+            for detalle in detalles:
+                pid = int(detalle["producto_id"])
+                fecha = fechas_cierres.get(int(detalle["cierre_id"])) if detalle.get("cierre_id") is not None else None
+                fecha = fecha or (str(detalle.get("registrado_en", ""))[:10] or "")
+                por_producto.setdefault(pid, []).append((fecha, detalle["precio_unitario"]))
+
             for producto in productos:
-                hoja.append([
-                    panaderia["nombre"],
-                    producto["nombre"],
-                    float(Decimal(str(producto["precio"]))),
-                ])
+                historial = por_producto.get(int(producto["id"]), [])
+                if historial:
+                    # Una fila por precio observado en un registro; conserva los cambios históricos.
+                    for fecha, precio in historial:
+                        hoja.append([panaderia["nombre"], producto["nombre"], fecha, float(Decimal(str(precio)))])
+                else:
+                    # Producto existente en catálogo pero nunca incluido en un registro.
+                    fecha = str(producto.get("creado_en", ""))[:10]
+                    hoja.append([panaderia["nombre"], producto["nombre"], fecha, float(Decimal(str(producto["precio"])))])
         hoja.freeze_panes = "A2"
         hoja.auto_filter.ref = hoja.dimensions
-        for col, width in {"A": 24, "B": 36, "C": 18}.items():
+        for col, width in {"A": 24, "B": 36, "C": 20, "D": 16}.items():
             hoja.column_dimensions[col].width = width
+        for fila in range(2, hoja.max_row + 1):
+            hoja.cell(fila, 4).number_format = '"$"#,##0.00'
         salida = BytesIO()
         libro.save(salida)
         salida.seek(0)
         return StreamingResponse(
             salida,
             media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            headers={"Content-Disposition": 'attachment; filename="lista_precios_productos.xlsx"'},
+            headers={"Content-Disposition": 'attachment; filename="lista_de_productos.xlsx"'},
         )
     except HTTPException:
         raise
     except Exception:
-        raise HTTPException(status_code=503, detail="No se pudo generar la lista de precios.")
+        raise HTTPException(status_code=503, detail="No se pudo generar la lista de productos.")
