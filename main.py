@@ -492,11 +492,23 @@ def guardar_registro(
         if cierre["estado"] == "cerrado":
             cerrado_en = datetime.fromisoformat(cierre["cerrado_en"].replace("Z", "+00:00"))
             ahora = datetime.now(timezone.utc)
-            puede_reabrir = perfil["rol"] == "admin" and perfil["es_admin_principal"]
-            if not puede_reabrir and (ahora - cerrado_en).total_seconds() >= 48 * 3600:
-                raise HTTPException(status_code=403, detail="Pasaron 48 horas desde el cierre. Solo el administrador principal puede corregirlo.")
-            if not puede_reabrir:
-                raise HTTPException(status_code=409, detail="El día está cerrado. Usa la opción de reabrir antes de modificarlo.")
+            es_admin_principal = (
+                perfil["rol"] == "admin" and perfil["es_admin_principal"]
+            )
+            if (
+                (ahora - cerrado_en).total_seconds() >= 48 * 3600
+                and not es_admin_principal
+            ):
+                raise HTTPException(
+                    status_code=403,
+                    detail="Pasaron 48 horas desde el cierre. Solo el administrador principal puede reabrirlo para corregirlo.",
+                )
+            # Todo cierre debe reabrirse por el endpoint específico antes de editar.
+            # Así se exige motivo y auditoría en correcciones administrativas tardías.
+            raise HTTPException(
+                status_code=409,
+                detail="El día está cerrado. Usa la opción de reabrir antes de modificarlo.",
+            )
         productos = (
             supabase.table("productos")
             .select("id,panaderia_id,nombre,precio,activo")
