@@ -55,7 +55,7 @@ returns void
 language plpgsql
 security definer
 set search_path = ''
-as $
+as $$
 declare
   v_panaderia_id bigint;
   v_estado text;
