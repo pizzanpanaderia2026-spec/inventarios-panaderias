@@ -104,5 +104,5 @@ $$;
 
 revoke all on function public.cerrar_cierre_diario(bigint, uuid, timestamptz) from public, anon, authenticated;
 revoke all on function public.reabrir_cierre_diario(bigint, uuid, text, boolean, timestamptz) from public, anon, authenticated;
-grant execute on function public.cerrar_cierre_diario(bigint, uuid, date) to service_role;
+grant execute on function public.cerrar_cierre_diario(bigint, uuid, timestamptz) to service_role;
 grant execute on function public.reabrir_cierre_diario(bigint, uuid, text, boolean, timestamptz) to service_role;
