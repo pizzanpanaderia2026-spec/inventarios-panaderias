@@ -163,6 +163,79 @@ def mi_perfil(
     }
 
 
+
+class CambioContrasena(BaseModel):
+    contrasena_actual: str = Field(min_length=1, max_length=128)
+    contrasena_nueva: str = Field(min_length=10, max_length=128)
+
+
+class RestablecerContrasenaAdmin(BaseModel):
+    usuario_id: str = Field(min_length=1, max_length=100)
+    contrasena_temporal: str = Field(min_length=10, max_length=128)
+
+
+@app.post("/api/mi-cuenta/contrasena")
+def cambiar_mi_contrasena(
+    datos: CambioContrasena,
+    authorization: str | None = Header(default=None),
+):
+    usuario = obtener_usuario_autenticado(authorization)
+    correo = getattr(usuario, "email", None)
+    if not correo:
+        raise HTTPException(status_code=400, detail="La cuenta no tiene correo asociado.")
+    try:
+        verificacion = supabase.auth.sign_in_with_password({
+            "email": correo,
+            "password": datos.contrasena_actual,
+        })
+        if not getattr(verificacion, "user", None):
+            raise HTTPException(status_code=400, detail="La contraseña actual no es correcta.")
+        supabase.auth.admin.update_user_by_id(
+            str(usuario.id),
+            {"password": datos.contrasena_nueva},
+        )
+        return {"mensaje": "La contraseña se actualizó correctamente."}
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(
+            status_code=400,
+            detail="No se pudo cambiar la contraseña. Verifica la contraseña actual y vuelve a intentarlo.",
+        )
+
+
+@app.post("/api/admin/usuarios/restablecer-contrasena")
+def restablecer_contrasena_admin(
+    datos: RestablecerContrasenaAdmin,
+    authorization: str | None = Header(default=None),
+):
+    usuario = obtener_usuario_autenticado(authorization)
+    perfil = obtener_perfil(str(usuario.id))
+    if not (perfil["rol"] == "admin" and perfil["es_admin_principal"]):
+        raise HTTPException(status_code=403, detail="Solo el administrador principal puede restablecer contraseñas.")
+    if datos.usuario_id == str(usuario.id):
+        raise HTTPException(status_code=400, detail="Para tu propia cuenta, usa la opción de cambiar contraseña.")
+    try:
+        perfil_objetivo = (
+            supabase.table("perfiles")
+            .select("id")
+            .eq("id", datos.usuario_id)
+            .limit(1)
+            .execute()
+        )
+        if not perfil_objetivo.data:
+            raise HTTPException(status_code=404, detail="No se encontró el usuario autorizado.")
+        supabase.auth.admin.update_user_by_id(
+            datos.usuario_id,
+            {"password": datos.contrasena_temporal},
+        )
+        return {"mensaje": "Se asignó una contraseña temporal. Entrégala directamente al usuario y pídele cambiarla al iniciar sesión."}
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=400, detail="No se pudo restablecer la contraseña del usuario.")
+
+
 # Listar únicamente las panaderías autorizadas para el usuario
 @app.get("/api/panaderias")
 def listar_panaderias(
