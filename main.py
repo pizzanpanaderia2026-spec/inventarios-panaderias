@@ -543,16 +543,7 @@ def guardar_registro(
         supabase.rpc("reemplazar_lineas_cierre", {
             "p_cierre_id": cierre["id"],
             "p_lineas": lineas_rpc,
-        }).execute()
-        supabase.table("auditoria_inventario").insert({
-            "cierre_id": cierre["id"],
-            "panaderia_id": registro.panaderia_id,
-            "usuario_id": str(usuario.id),
-            "accion": "guardar_registro",
-            "detalles": {
-                "fecha": registro.fecha.isoformat(),
-                "cantidad_lineas": len(nuevas),
-            },
+            "p_usuario_id": str(usuario.id),
         }).execute()
         return {"guardado": True, "cierre_id": cierre["id"], "cantidad_lineas": len(nuevas)}
     except HTTPException:
