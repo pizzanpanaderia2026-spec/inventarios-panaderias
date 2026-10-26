@@ -387,7 +387,8 @@ def actualizar_producto(
 def eliminar_o_desactivar_producto(
     producto_id: int,
     authorization: str | None = Header(default=None),
-):    usuario = obtener_usuario_autenticado(authorization)
+):
+    usuario = obtener_usuario_autenticado(authorization)
     perfil = obtener_perfil(str(usuario.id))
     try:
         encontrado = (
