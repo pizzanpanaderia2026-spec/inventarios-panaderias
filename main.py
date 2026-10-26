@@ -184,7 +184,10 @@ def cambiar_mi_contrasena(
     if not correo:
         raise HTTPException(status_code=400, detail="La cuenta no tiene correo asociado.")
     try:
-        verificacion = supabase.auth.sign_in_with_password({
+        # Cliente separado para que la verificación no altere la sesión
+        # compartida del cliente administrativo del servidor.
+        cliente_verificacion = create_client(SUPABASE_URL, SUPABASE_KEY)
+        verificacion = cliente_verificacion.auth.sign_in_with_password({
             "email": correo,
             "password": datos.contrasena_actual,
         })
