@@ -759,6 +759,8 @@ def descargar_historial_excel(
     hoy = date.today()
     if desde > hasta:
         raise HTTPException(status_code=422, detail="La fecha inicial no puede ser posterior a la fecha final.")
+    if hasta > hoy:
+        raise HTTPException(status_code=422, detail="La fecha final no puede estar en el futuro.")
     if (hasta - desde).days > 29 or (hoy - desde).days > 29:
         raise HTTPException(status_code=422, detail="La descarga se limita a los últimos 30 días.")
     try:
