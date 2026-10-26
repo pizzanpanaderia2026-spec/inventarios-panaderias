@@ -10,6 +10,16 @@
  function cell(tr,text,tag="td"){const el=document.createElement(tag);el.textContent=text;tr.appendChild(el);}
  function tableDraw(target,heads,rows){target.replaceChildren();const t=document.createElement("table");t.style.width="100%";t.style.borderCollapse="collapse";const thead=document.createElement("thead"),hr=document.createElement("tr");heads.forEach(h=>cell(hr,h,"th"));thead.append(hr);t.append(thead);const tb=document.createElement("tbody");rows.forEach(row=>{const tr=document.createElement("tr");row.forEach(v=>cell(tr,String(v)));tb.append(tr);});t.append(tb);target.append(t);}
  function money(n){return "$"+Number(n).toFixed(2);}
+ document.getElementById("botonDescargarExcel").addEventListener("click",async()=>{
+  try{
+   if(!token||!bakery)throw new Error("Selecciona una panadería primero.");
+   const url="/api/historial/excel?panaderia_id="+bakery.id+"&desde="+desde.value+"&hasta="+hasta.value;
+   const r=await fetch(url,{headers:{Authorization:"Bearer "+token}});
+   if(!r.ok){const d=await r.json().catch(()=>({}));throw new Error(d.detail||"No se pudo descargar el Excel.");}
+   const blob=await r.blob();const objectUrl=URL.createObjectURL(blob);const a=document.createElement("a");a.href=objectUrl;a.download="historial_"+bakery.id+"_"+desde.value+"_"+hasta.value+".xlsx";document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(objectUrl);
+   msg.textContent="Excel descargado.";msg.className="mensaje exito";
+  }catch(e){msg.textContent=e.message;msg.className="mensaje error";}
+ });
  document.getElementById("botonConsultarTablas").addEventListener("click",async()=>{
   try{
    if(!token||!bakery)throw new Error("Selecciona una panadería primero.");
