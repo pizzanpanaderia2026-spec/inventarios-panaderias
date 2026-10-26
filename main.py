@@ -561,12 +561,24 @@ def cerrar_registro(
                 detail="Primero guarda al menos un producto en el registro del día.",
             )
 
-        actualizado = supabase.table("cierres_diarios").update({
-            "estado": "cerrado",
-            "cerrado_en": datetime.now(timezone.utc).isoformat(),
-            "cerrado_por": str(usuario.id),
-            "actualizado_en": datetime.now(timezone.utc).isoformat(),
-        }).eq("id", cierre["id"]).execute()
+        ahora = datetime.now(timezone.utc).isoformat()
+        actualizado = (
+            supabase.table("cierres_diarios").update({
+                "estado": "cerrado",
+                "cerrado_en": ahora,
+                "cerrado_por": str(usuario.id),
+                "actualizado_en": ahora,
+            })
+            .eq("id", cierre["id"])
+            .eq("estado", "abierto")
+            .execute()
+        )
+        if not actualizado.data:
+            # Otra petición pudo cerrar el mismo día al mismo tiempo.
+            actual = buscar_cierre(panaderia_id, fecha_registro)
+            if actual and actual.get("estado") == "cerrado":
+                return {"cerrado": True, "cerrado_en": actual.get("cerrado_en"), "mensaje": "Este día ya estaba cerrado."}
+            raise HTTPException(status_code=409, detail="El registro cambió mientras se cerraba. Actualiza la pantalla e inténtalo de nuevo.")
         supabase.table("auditoria_inventario").insert({
             "cierre_id": cierre["id"],
             "panaderia_id": panaderia_id,
