@@ -43,3 +43,38 @@ alter table public.auditoria_inventario enable row level security;
 
 -- No se agregan políticas de escritura aquí: las operaciones se harán por
 -- el backend, que deberá validar token, rol, acceso a panadería y ventana de 48 h.
+
+
+-- Reemplazo transaccional de las líneas de un cierre.
+-- La función solo se concede al rol de servicio del backend; no al navegador.
+create or replace function public.reemplazar_lineas_cierre(
+  p_cierre_id bigint,
+  p_lineas jsonb
+)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  if jsonb_typeof(p_lineas) <> 'array' then
+    raise exception 'Las líneas deben enviarse como una lista';
+  end if;
+
+  delete from public.inventario_detalles
+  where cierre_id = p_cierre_id;
+
+  insert into public.inventario_detalles
+    (cierre_id, producto_id, cantidad, precio_unitario)
+  select
+    p_cierre_id,
+    (x->>'producto_id')::bigint,
+    (x->>'cantidad')::integer,
+    (x->>'precio_unitario')::numeric(12,2)
+  from jsonb_array_elements(p_lineas) as x;
+end;
+$$;
+
+revoke all on function public.reemplazar_lineas_cierre(bigint, jsonb) from public;
+revoke all on function public.reemplazar_lineas_cierre(bigint, jsonb) from anon, authenticated;
+grant execute on function public.reemplazar_lineas_cierre(bigint, jsonb) to service_role;
