@@ -415,22 +415,28 @@ def obtener_o_crear_cierre(panaderia_id: int, fecha_registro: date, usuario_id: 
     )
     if encontrado.data:
         return encontrado.data[0]
-    creado = supabase.table("cierres_diarios").insert({
-        "panaderia_id": panaderia_id,
-        "fecha": fecha_registro.isoformat(),
-        "estado": "abierto",
-    }).execute()
-    if not creado.data:
-        # Puede haber una solicitud simultánea creando el mismo día.
-        reintento = (
-            supabase.table("cierres_diarios").select("*")
-            .eq("panaderia_id", panaderia_id)
-            .eq("fecha", fecha_registro.isoformat()).limit(1).execute()
-        )
-        if not reintento.data:
-            raise HTTPException(status_code=503, detail="No se pudo preparar el registro diario.")
-        return reintento.data[0]
-    return creado.data[0]
+    try:
+        creado = supabase.table("cierres_diarios").insert({
+            "panaderia_id": panaderia_id,
+            "fecha": fecha_registro.isoformat(),
+            "estado": "abierto",
+        }).execute()
+        if creado.data:
+            return creado.data[0]
+    except Exception:
+        # Si otra solicitud creó el mismo día, la restricción única puede
+        # lanzar una excepción en vez de devolver una lista vacía.
+        pass
+
+    # Reconsulta tanto si el insert devolvió vacío como si hubo conflicto.
+    reintento = (
+        supabase.table("cierres_diarios").select("*")
+        .eq("panaderia_id", panaderia_id)
+        .eq("fecha", fecha_registro.isoformat()).limit(1).execute()
+    )
+    if not reintento.data:
+        raise HTTPException(status_code=503, detail="No se pudo preparar el registro diario.")
+    return reintento.data[0]
 
 
 @app.get("/api/registro")
