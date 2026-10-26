@@ -615,6 +615,8 @@ def reabrir_registro(
         cierre = buscar_cierre(solicitud.panaderia_id, solicitud.fecha)
         if cierre["estado"] != "cerrado":
             return {"reabierto": True, "mensaje": "El día ya está abierto."}
+        if solicitud.fecha > date.today():
+            raise HTTPException(status_code=422, detail="No puedes reabrir una fecha futura.")
         cerrado_en = datetime.fromisoformat(cierre["cerrado_en"].replace("Z", "+00:00"))
         ahora = datetime.now(timezone.utc)
         dentro_de_48h = (ahora - cerrado_en).total_seconds() < 48 * 3600
@@ -663,6 +665,8 @@ def consultar_historial(
     hoy = date.today()
     if desde > hasta:
         raise HTTPException(status_code=422, detail="La fecha inicial no puede ser posterior a la fecha final.")
+    if hasta > hoy:
+        raise HTTPException(status_code=422, detail="La fecha final no puede estar en el futuro.")
     if (hasta - desde).days > 29 or (hoy - desde).days > 29:
         raise HTTPException(status_code=422, detail="El historial disponible en la aplicación se limita a los últimos 30 días.")
     try:
