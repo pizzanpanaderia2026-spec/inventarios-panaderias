@@ -548,6 +548,19 @@ def cerrar_registro(
         cierre = obtener_o_crear_cierre(panaderia_id, fecha_registro, str(usuario.id))
         if cierre["estado"] == "cerrado":
             return {"cerrado": True, "cerrado_en": cierre["cerrado_en"], "mensaje": "Este día ya estaba cerrado."}
+        lineas_guardadas = (
+            supabase.table("inventario_detalles")
+            .select("id")
+            .eq("cierre_id", cierre["id"])
+            .limit(1)
+            .execute()
+        )
+        if not lineas_guardadas.data:
+            raise HTTPException(
+                status_code=409,
+                detail="Primero guarda al menos un producto en el registro del día.",
+            )
+
         actualizado = supabase.table("cierres_diarios").update({
             "estado": "cerrado",
             "cerrado_en": datetime.now(timezone.utc).isoformat(),
