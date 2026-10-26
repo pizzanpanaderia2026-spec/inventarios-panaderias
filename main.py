@@ -488,7 +488,7 @@ def guardar_registro(
                 raise HTTPException(status_code=409, detail="El día está cerrado. Usa la opción de reabrir antes de modificarlo.")
         productos = (
             supabase.table("productos")
-            .select("id,panaderia_id,precio,activo")
+            .select("id,panaderia_id,nombre,precio,activo")
             .eq("panaderia_id", registro.panaderia_id).execute()
         )
         por_id = {int(p["id"]): p for p in productos.data}
