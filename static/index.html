@@ -219,6 +219,9 @@
         <section id="panelTablas" class="panel"><h3>Tablas e historial</h3><p class="nota">Consulta los registros guardados por fecha; el resumen agrupa las cantidades por precio.</p><div class="campo"><label for="histDesde">Desde</label><input id="histDesde" type="date"></div><div class="campo"><label for="histHasta">Hasta</label><input id="histHasta" type="date"></div><button id="botonConsultarTablas" type="button">Consultar tablas</button> <button id="botonDescargarExcel" class="secundario" type="button">Descargar Excel</button><div id="mensajeTablas" class="mensaje oculto" role="status"></div><h4>Tabla A · Detalle por producto</h4><div id="tablaDetalle"></div><h4>Tabla B · Resumen por precio</h4><div id="tablaResumen"></div></section>
         <section id="panelRegistro" class="panel"><h3>Registro diario</h3><div class="campo"><label for="fechaRegistro">Fecha</label><input id="fechaRegistro" type="date"></div><div class="barra"><strong id="estadoRegistro">Día abierto</strong></div><div id="mensajeRegistro" class="mensaje oculto" role="alert"></div><div id="filasRegistro"></div><button id="botonGuardarRegistro" type="button">Guardar registro</button> <button id="botonCerrarDia" type="button">Cerrar día</button> <button id="botonReabrirDia" class="secundario" type="button">Reabrir día</button></section>
         <h3>Catálogo de productos</h3>
+        <p>Descarga el listado vigente de productos y precios de las panaderías a las que tienes acceso.</p>
+        <button id="botonListaPrecios" class="secundario" type="button">Descargar lista de precios (Excel)</button>
+        <div id="mensajeListaPrecios" class="mensaje oculto" role="status"></div>
         <p class="nota">Agrega productos y su precio actual para esta panadería.</p>
         <div id="mensajeProductos" class="mensaje oculto" role="alert"></div>
         <form id="formProducto">
@@ -365,6 +368,28 @@
         contenedor.appendChild(boton);
       });
     }
+
+    document.getElementById("botonListaPrecios").addEventListener("click", async () => {
+      const boton = document.getElementById("botonListaPrecios");
+      const mensaje = document.getElementById("mensajeListaPrecios");
+      boton.disabled = true;
+      try {
+        const respuesta = await fetch("/api/productos/precios/excel", { headers: { "Authorization": "Bearer " + sesionActual.access_token } });
+        if (!respuesta.ok) {
+          const datos = await respuesta.json().catch(() => ({}));
+          throw new Error(datos.detail || "No se pudo descargar la lista de precios.");
+        }
+        const blob = await respuesta.blob();
+        const url = URL.createObjectURL(blob);
+        const enlace = document.createElement("a");
+        enlace.href = url;
+        enlace.download = "lista_precios_productos.xlsx";
+        document.body.appendChild(enlace); enlace.click(); enlace.remove(); URL.revokeObjectURL(url);
+        mostrarMensaje(mensaje, "Lista de precios descargada.", "exito");
+      } catch (error) {
+        mostrarMensaje(mensaje, error.message || "No se pudo descargar la lista.", "error");
+      } finally { boton.disabled = false; }
+    });
 
     function abrirPanaderia(panaderia) {
       // Solo se permite seleccionar una panadería recibida
