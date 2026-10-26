@@ -25,6 +25,21 @@ jobs:
         run: python -m compileall -q main.py tests
       - name: Ejecutar pruebas unitarias
         run: python -m unittest discover -s tests -v
+      - name: Preparar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Comprobar sintaxis de JavaScript
+        run: |
+          node --check static/productos.js
+          node --check static/registro.js
+          node --check static/tablas.js
+      - name: Verificar archivos de interfaz
+        run: |
+          test -s static/index.html
+          test -s static/productos.js
+          test -s static/registro.js
+          test -s static/tablas.js
       - name: Verificar migraciones SQL incluidas
         run: |
           for migration in supabase/migrations/20261026000{1,2,3,4,5,6,7}_*.sql; do

@@ -216,16 +216,20 @@
           Has iniciado sesión y seleccionado una panadería autorizada.
         </div>
 
-        <p>
-          La conexión de esta pantalla con el catálogo y el inventario
-          permanente es el siguiente paso.
-        </p>
-
-        <p class="nota">
-          Todavía no captures información de productos en esta pantalla.
-          Primero verificaremos el acceso y después conectaremos el
-          inventario con la base de datos.
-        </p>
+        <section id="panelTablas" class="panel"><h3>Tablas e historial</h3><p class="nota">Consulta los registros guardados por fecha; el resumen agrupa las cantidades por precio.</p><div class="campo"><label for="histDesde">Desde</label><input id="histDesde" type="date"></div><div class="campo"><label for="histHasta">Hasta</label><input id="histHasta" type="date"></div><button id="botonConsultarTablas" type="button">Consultar tablas</button> <button id="botonDescargarExcel" class="secundario" type="button">Descargar Excel</button><div id="mensajeTablas" class="mensaje oculto" role="status"></div><h4>Tabla A · Detalle por producto</h4><div id="tablaDetalle"></div><h4>Tabla B · Resumen por precio</h4><div id="tablaResumen"></div></section>
+        <section id="panelRegistro" class="panel"><h3>Registro diario</h3><div class="campo"><label for="fechaRegistro">Fecha</label><input id="fechaRegistro" type="date"></div><div class="barra"><strong id="estadoRegistro">Día abierto</strong></div><div id="mensajeRegistro" class="mensaje oculto" role="alert"></div><div id="filasRegistro"></div><button id="botonGuardarRegistro" type="button">Guardar registro</button> <button id="botonCerrarDia" type="button">Cerrar día</button> <button id="botonReabrirDia" class="secundario" type="button">Reabrir día</button></section>
+        <h3>Catálogo de productos</h3>
+        <p class="nota">Agrega productos y su precio actual para esta panadería.</p>
+        <div id="mensajeProductos" class="mensaje oculto" role="alert"></div>
+        <form id="formProducto">
+          <div class="campo"><label for="nombreProducto">Nombre del producto</label><input id="nombreProducto" maxlength="120" required></div>
+          <div class="campo"><label for="precioProducto">Precio ($)</label><input id="precioProducto" type="number" min="0" step="0.01" required></div>
+          <button id="botonGuardarProducto" type="submit">Agregar producto</button>
+          <button id="botonCancelarEdicion" class="secundario oculto" type="button">Cancelar edición</button>
+        </form>
+        <div class="barra"><h3>Productos registrados</h3><button id="botonActualizarProductos" class="secundario" type="button">Actualizar</button></div>
+        <div id="listaProductos"></div>
+        <div class="panel"><p>Descarga cuando lo necesites una hoja con los productos registrados y sus precios por fecha. No se guarda automáticamente.</p><button id="botonListaPrecios" class="secundario" type="button">Descargar lista de productos (Excel)</button><div id="mensajeListaPrecios" class="mensaje oculto" role="status"></div></div>
 
         <button id="botonCerrarSesionDetalle" class="secundario" type="button">
           Cerrar sesión
@@ -237,6 +241,9 @@
   <!-- Cliente oficial de Supabase -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
+  <script src="/static/productos.js"></script>
+  <script src="/static/registro.js"></script>
+  <script src="/static/tablas.js"></script>
   <script>
     // CONFIGURACIÓN DE SUPABASE
     const SUPABASE_URL = "https://fjthttvprmjrfmmsnxer.supabase.co";
@@ -256,6 +263,7 @@
     let usuarioActual = null;
     let perfilActual = null;
     let panaderiasAutorizadas = [];
+    let sesionActual = null;
 
     function mostrarPantalla(pantalla) {
       pantallaLogin.classList.add("oculto");
@@ -297,6 +305,7 @@
     }
 
     async function cargarDatosUsuario(sesion) {
+      sesionActual = sesion;
       usuarioActual = sesion.user;
 
       // El backend verifica el token y obtiene el perfil autorizado.
@@ -358,6 +367,34 @@
       });
     }
 
+    document.getElementById("botonListaPrecios").addEventListener("click", async () => {
+      const boton = document.getElementById("botonListaPrecios");
+      const mensaje = document.getElementById("mensajeListaPrecios");
+      boton.disabled = true;
+      try {
+        const respuesta = await fetch("/api/productos/precios/excel", { headers: { "Authorization": "Bearer " + sesionActual.access_token } });
+        if (!respuesta.ok) {
+          const datos = await respuesta.json().catch(() => ({}));
+          throw new Error(datos.detail || "No se pudo descargar la lista de productos.");
+        }
+        const blob = await respuesta.blob();
+        const url = URL.createObjectURL(blob);
+        const enlace = document.createElement("a");
+        enlace.href = url;
+        enlace.download = "lista_de_productos.xlsx";
+        document.body.appendChild(enlace);
+        enlace.click();
+        enlace.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+        mostrarMensaje(mensaje, "Descarga solicitada. La hoja contiene los precios guardados por fecha.", "exito");
+      } catch (error) {
+        mostrarMensaje(mensaje, error.message || "No se pudo descargar la lista.", "error");
+      } finally {
+        boton.disabled = false;
+      }
+    });
+
+
     function abrirPanaderia(panaderia) {
       // Solo se permite seleccionar una panadería recibida
       // por el backend para la cuenta autenticada.
@@ -380,6 +417,15 @@
         "Cuenta: " + (usuarioActual.email || "Usuario autenticado");
 
       mostrarPantalla(pantallaDetalle);
+      if (window.iniciarCatalogoProductos) {
+        window.iniciarCatalogoProductos(sesionActual, autorizada);
+      }
+      if (window.iniciarTablasHistorial) {
+        window.iniciarTablasHistorial(sesionActual, autorizada);
+      }
+      if (window.iniciarRegistroDiario) {
+        window.iniciarRegistroDiario(sesionActual, autorizada, []);
+      }
     }
 
     document.getElementById("formLogin").addEventListener(
