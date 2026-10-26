@@ -1,6 +1,7 @@
 
 from pathlib import Path
 import os
+import unicodedata
 
 from fastapi import FastAPI, Header, HTTPException
 from fastapi.responses import FileResponse, StreamingResponse
@@ -176,8 +177,7 @@ def listar_panaderias(
             resultado = (
                 supabase.table("panaderias")
                 .select("id,nombre,activa")
-                .order("id")
-                .execute()
+                .order("id")                .execute()
             )
             return {"panaderias": resultado.data}
 
@@ -252,7 +252,18 @@ def comprobar_acceso_panaderia(usuario_id: str, perfil: dict, panaderia_id: int)
 
 
 def normalizar_nombre_producto(nombre: str) -> str:
+    """Normaliza espacios sin cambiar la escritura que se muestra al usuario."""
     return " ".join(nombre.strip().split())
+
+
+def clave_nombre_producto(nombre: str) -> str:
+    """Clave de comparación: ignora mayúsculas y diacríticos, no los espacios entre palabras."""
+    normalizado = unicodedata.normalize("NFD", normalizar_nombre_producto(nombre))
+    sin_diacriticos = "".join(
+        caracter for caracter in normalizado
+        if unicodedata.category(caracter) != "Mn"
+    )
+    return sin_diacriticos.casefold()
 
 
 @app.get("/api/productos")
@@ -290,12 +301,28 @@ def crear_producto(
     try:
         existentes = (
             supabase.table("productos")
-            .select("id,nombre")
+            .select("id,nombre,activo,precio")
             .eq("panaderia_id", producto.panaderia_id)
             .execute()
         )
-        if any(p["nombre"].strip().casefold() == nombre.casefold() for p in existentes.data):
-            raise HTTPException(status_code=409, detail="Ya existe un producto con ese nombre en esta panadería.")
+        duplicado = next(
+            (p for p in existentes.data
+             if clave_nombre_producto(p["nombre"]) == clave_nombre_producto(nombre)),
+            None,
+        )
+        if duplicado:
+            if not duplicado.get("activo", True):
+                reactivado = (
+                    supabase.table("productos")
+                    .update({"activo": True})
+                    .eq("id", duplicado["id"])
+                    .eq("panaderia_id", producto.panaderia_id)
+                    .execute()
+                )
+                if not reactivado.data:
+                    raise HTTPException(status_code=409, detail="No se pudo reactivar el producto existente.")
+                return {"producto": reactivado.data[0], "accion": "reactivado"}
+            raise HTTPException(status_code=409, detail="El producto ya existe.")
         resultado = supabase.table("productos").insert({
             "panaderia_id": producto.panaderia_id,
             "nombre": nombre,
@@ -338,7 +365,11 @@ def actualizar_producto(
             .eq("panaderia_id", actual["panaderia_id"])
             .execute()
         )
-        if any(int(p["id"]) != producto_id and p["nombre"].strip().casefold() == nombre.casefold() for p in existentes.data):
+        if any(
+            int(p["id"]) != producto_id
+            and clave_nombre_producto(p["nombre"]) == clave_nombre_producto(nombre)
+            for p in existentes.data
+        ):
             raise HTTPException(status_code=409, detail="Ya existe otro producto con ese nombre en esta panadería.")
         actualizado = supabase.table("productos").update({
             "nombre": nombre,
@@ -356,8 +387,7 @@ def actualizar_producto(
 def eliminar_o_desactivar_producto(
     producto_id: int,
     authorization: str | None = Header(default=None),
-):
-    usuario = obtener_usuario_autenticado(authorization)
+):    usuario = obtener_usuario_autenticado(authorization)
     perfil = obtener_perfil(str(usuario.id))
     try:
         encontrado = (
@@ -536,8 +566,7 @@ def guardar_registro(
             producto = por_id.get(linea.producto_id)
             if not producto or not producto["activo"]:
                 raise HTTPException(status_code=422, detail="Uno de los productos no existe o está inactivo.")
-            nuevas.append({
-                "cierre_id": cierre["id"],
+            nuevas.append({                "cierre_id": cierre["id"],
                 "producto_id": linea.producto_id,
                 "cantidad": linea.cantidad,
                 "producto_nombre": (
@@ -716,8 +745,7 @@ def consultar_historial(
             for d in detalles.data:
                 precio = Decimal(str(d.get("precio_unitario") or "0"))
                 cantidad = int(d["cantidad"])
-                lineas.append({
-                    "producto_id": d["producto_id"],
+                lineas.append({                    "producto_id": d["producto_id"],
                     "producto": d.get("producto_nombre") or nombres.get(int(d["producto_id"]), "Producto histórico"),
                     "cantidad": cantidad,
                     "precio_unitario": str(precio),
@@ -896,8 +924,7 @@ def descargar_lista_precios(
             salida,
             media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             headers={"Content-Disposition": 'attachment; filename="lista_de_productos.xlsx"'},
-        )
-    except HTTPException:
+        )    except HTTPException:
         raise
     except Exception:
         raise HTTPException(status_code=503, detail="No se pudo generar la lista de productos.")
