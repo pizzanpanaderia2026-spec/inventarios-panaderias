@@ -638,13 +638,23 @@ def reabrir_registro(
         motivo = (solicitud.motivo or "").strip()
         if not dentro_de_48h and admin and len(motivo) < 5:
             raise HTTPException(status_code=422, detail="Para una corrección después de 48 horas, escribe un motivo de al menos 5 caracteres.")
-        actualizado = supabase.table("cierres_diarios").update({
-            "estado": "abierto",
-            "reabierto_en": ahora.isoformat(),
-            "reabierto_por": str(usuario.id),
-            "motivo_correccion": motivo or None,
-            "actualizado_en": ahora.isoformat(),
-        }).eq("id", cierre["id"]).execute()
+        actualizado = (
+            supabase.table("cierres_diarios").update({
+                "estado": "abierto",
+                "reabierto_en": ahora.isoformat(),
+                "reabierto_por": str(usuario.id),
+                "motivo_correccion": motivo or None,
+                "actualizado_en": ahora.isoformat(),
+            })
+            .eq("id", cierre["id"])
+            .eq("estado", "cerrado")
+            .execute()
+        )
+        if not actualizado.data:
+            actual = buscar_cierre(solicitud.panaderia_id, solicitud.fecha)
+            if actual and actual.get("estado") == "abierto":
+                return {"reabierto": True, "mensaje": "El día ya fue reabierto."}
+            raise HTTPException(status_code=409, detail="El registro cambió mientras se reabría. Actualiza la pantalla e inténtalo de nuevo.")
         supabase.table("auditoria_inventario").insert({
             "cierre_id": cierre["id"],
             "panaderia_id": solicitud.panaderia_id,
