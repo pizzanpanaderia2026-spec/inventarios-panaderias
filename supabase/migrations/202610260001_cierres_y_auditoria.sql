@@ -58,13 +58,14 @@ set search_path = ''
 as $
 declare
   v_panaderia_id bigint;
+  v_estado text;
 begin
   if jsonb_typeof(p_lineas) <> 'array' then
     raise exception 'Las líneas deben enviarse como una lista';
   end if;
 
   -- Comprueba que el cierre existe y bloquea su fila durante el reemplazo.
-  select c.panaderia_id into v_panaderia_id
+  select c.panaderia_id, c.estado into v_panaderia_id, v_estado
   from public.cierres_diarios c
   where c.id = p_cierre_id
   for update;
@@ -73,15 +74,21 @@ begin
     raise exception 'No existe el cierre indicado';
   end if;
 
+  -- Evita que una petición de guardado que llegó tarde modifique un día
+  -- después de que otra petición lo haya cerrado.
+  if v_estado <> 'abierto' then
+    raise exception 'El cierre está cerrado; debe reabrirse antes de editar';
+  end if;
+
   -- Defensa adicional: las líneas solo pueden usar productos de esa panadería.
   if exists (
     select 1
-    from jsonb_array_elements(p_lineas) as x
-    left join public.productos p on p.id = (x->>'producto_id')::bigint
+    from jsonb_array_elements(p_lineas) as lines(value)
+    left join public.productos p on p.id = (lines.value->>'producto_id')::bigint
     where p.id is null
        or p.panaderia_id <> v_panaderia_id
-       or (x->>'cantidad')::integer < 0
-       or (x->>'precio_unitario')::numeric(12,2) < 0
+       or (lines.value->>'cantidad')::integer < 0
+       or (lines.value->>'precio_unitario')::numeric(12,2) < 0
   ) then
     raise exception 'Una línea contiene un producto o valor no válido';
   end if;
@@ -93,10 +100,10 @@ begin
     (cierre_id, producto_id, cantidad, precio_unitario)
   select
     p_cierre_id,
-    (x->>'producto_id')::bigint,
-    (x->>'cantidad')::integer,
-    (x->>'precio_unitario')::numeric(12,2)
-  from jsonb_array_elements(p_lineas) as x;
+    (lines.value->>'producto_id')::bigint,
+    (lines.value->>'cantidad')::integer,
+    (lines.value->>'precio_unitario')::numeric(12,2)
+  from jsonb_array_elements(p_lineas) as lines(value);
 end;
 $$;
 
