@@ -61,6 +61,29 @@ begin
     raise exception 'Las líneas deben enviarse como una lista';
   end if;
 
+  -- Comprueba que el cierre existe y bloquea su fila durante el reemplazo.
+  select c.panaderia_id into v_panaderia_id
+  from public.cierres_diarios c
+  where c.id = p_cierre_id
+  for update;
+
+  if v_panaderia_id is null then
+    raise exception 'No existe el cierre indicado';
+  end if;
+
+  -- Defensa adicional: las líneas solo pueden usar productos de esa panadería.
+  if exists (
+    select 1
+    from jsonb_array_elements(p_lineas) as x
+    left join public.productos p on p.id = (x->>'producto_id')::bigint
+    where p.id is null
+       or p.panaderia_id <> v_panaderia_id
+       or (x->>'cantidad')::integer < 0
+       or (x->>'precio_unitario')::numeric(12,2) < 0
+  ) then
+    raise exception 'Una línea contiene un producto o valor no válido';
+  end if;
+
   delete from public.inventario_detalles
   where cierre_id = p_cierre_id;
 
