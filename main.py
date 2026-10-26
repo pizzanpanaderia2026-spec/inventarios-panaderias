@@ -385,3 +385,162 @@ def eliminar_o_desactivar_producto(
         raise
     except Exception:
         raise HTTPException(status_code=503, detail="No se pudo eliminar o desactivar el producto.")
+
+
+from datetime import date, datetime, timezone
+from pydantic import model_validator
+
+
+class LineaRegistro(BaseModel):
+    producto_id: int = Field(gt=0)
+    cantidad: int = Field(ge=0)
+
+
+class GuardarRegistro(BaseModel):
+    panaderia_id: int = Field(gt=0)
+    fecha: date
+    lineas: list[LineaRegistro] = Field(max_length=500)
+
+
+def obtener_o_crear_cierre(panaderia_id: int, fecha_registro: date, usuario_id: str):
+    encontrado = (
+        supabase.table("cierres_diarios")
+        .select("*")
+        .eq("panaderia_id", panaderia_id)
+        .eq("fecha", fecha_registro.isoformat())
+        .limit(1)
+        .execute()
+    )
+    if encontrado.data:
+        return encontrado.data[0]
+    creado = supabase.table("cierres_diarios").insert({
+        "panaderia_id": panaderia_id,
+        "fecha": fecha_registro.isoformat(),
+        "estado": "abierto",
+    }).execute()
+    if not creado.data:
+        # Puede haber una solicitud simultánea creando el mismo día.
+        reintento = (
+            supabase.table("cierres_diarios").select("*")
+            .eq("panaderia_id", panaderia_id)
+            .eq("fecha", fecha_registro.isoformat()).limit(1).execute()
+        )
+        if not reintento.data:
+            raise HTTPException(status_code=503, detail="No se pudo preparar el registro diario.")
+        return reintento.data[0]
+    return creado.data[0]
+
+
+@app.get("/api/registro")
+def consultar_registro(
+    panaderia_id: int,
+    fecha_registro: date,
+    authorization: str | None = Header(default=None),
+):
+    usuario = obtener_usuario_autenticado(authorization)
+    perfil = obtener_perfil(str(usuario.id))
+    comprobar_acceso_panaderia(str(usuario.id), perfil, panaderia_id)
+    try:
+        cierre = (
+            supabase.table("cierres_diarios").select("*")
+            .eq("panaderia_id", panaderia_id)
+            .eq("fecha", fecha_registro.isoformat()).limit(1).execute()
+        )
+        if not cierre.data:
+            return {"cierre": None, "lineas": []}
+        datos_cierre = cierre.data[0]
+        lineas = (
+            supabase.table("inventario_detalles")
+            .select("id,producto_id,cantidad,precio_unitario")
+            .eq("cierre_id", datos_cierre["id"]).execute()
+        )
+        return {"cierre": datos_cierre, "lineas": lineas.data}
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=503, detail="No se pudo consultar el registro diario.")
+
+
+@app.put("/api/registro")
+def guardar_registro(
+    registro: GuardarRegistro,
+    authorization: str | None = Header(default=None),
+):
+    usuario = obtener_usuario_autenticado(authorization)
+    perfil = obtener_perfil(str(usuario.id))
+    comprobar_acceso_panaderia(str(usuario.id), perfil, registro.panaderia_id)
+    if registro.fecha > date.today():
+        raise HTTPException(status_code=422, detail="No puedes registrar una fecha futura.")
+    ids = [linea.producto_id for linea in registro.lineas]
+    if len(ids) != len(set(ids)):
+        raise HTTPException(status_code=422, detail="No repitas el mismo producto en el registro.")
+    try:
+        cierre = obtener_o_crear_cierre(registro.panaderia_id, registro.fecha, str(usuario.id))
+        if cierre["estado"] == "cerrado":
+            cerrado_en = datetime.fromisoformat(cierre["cerrado_en"].replace("Z", "+00:00"))
+            ahora = datetime.now(timezone.utc)
+            puede_reabrir = perfil["rol"] == "admin" and perfil["es_admin_principal"]
+            if not puede_reabrir and (ahora - cerrado_en).total_seconds() >= 48 * 3600:
+                raise HTTPException(status_code=403, detail="Pasaron 48 horas desde el cierre. Solo el administrador principal puede corregirlo.")
+            if not puede_reabrir:
+                raise HTTPException(status_code=409, detail="El día está cerrado. Usa la opción de reabrir antes de modificarlo.")
+        productos = (
+            supabase.table("productos")
+            .select("id,panaderia_id,precio,activo")
+            .eq("panaderia_id", registro.panaderia_id).execute()
+        )
+        por_id = {int(p["id"]): p for p in productos.data}
+        nuevas = []
+        for linea in registro.lineas:
+            producto = por_id.get(linea.producto_id)
+            if not producto or not producto["activo"]:
+                raise HTTPException(status_code=422, detail="Uno de los productos no existe o está inactivo.")
+            nuevas.append({
+                "cierre_id": cierre["id"],
+                "producto_id": linea.producto_id,
+                "cantidad": linea.cantidad,
+                "precio_unitario": str(producto["precio"]),
+            })
+        actuales = supabase.table("inventario_detalles").select("id").eq("cierre_id", cierre["id"]).execute()
+        for detalle in actuales.data:
+            supabase.table("inventario_detalles").delete().eq("id", detalle["id"]).execute()
+        if nuevas:
+            supabase.table("inventario_detalles").insert(nuevas).execute()
+        return {"guardado": True, "cierre_id": cierre["id"], "cantidad_lineas": len(nuevas)}
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=503, detail="No se pudo guardar el registro. Verifica que la migración esté aplicada.")
+
+
+@app.post("/api/registro/cerrar")
+def cerrar_registro(
+    panaderia_id: int,
+    fecha_registro: date,
+    authorization: str | None = Header(default=None),
+):
+    usuario = obtener_usuario_autenticado(authorization)
+    perfil = obtener_perfil(str(usuario.id))
+    comprobar_acceso_panaderia(str(usuario.id), perfil, panaderia_id)
+    try:
+        cierre = obtener_o_crear_cierre(panaderia_id, fecha_registro, str(usuario.id))
+        if cierre["estado"] == "cerrado":
+            return {"cerrado": True, "cerrado_en": cierre["cerrado_en"], "mensaje": "Este día ya estaba cerrado."}
+        actualizado = supabase.table("cierres_diarios").update({
+            "estado": "cerrado",
+            "cerrado_en": datetime.now(timezone.utc).isoformat(),
+            "cerrado_por": str(usuario.id),
+            "actualizado_en": datetime.now(timezone.utc).isoformat(),
+        }).eq("id", cierre["id"]).execute()
+        supabase.table("auditoria_inventario").insert({
+            "cierre_id": cierre["id"],
+            "panaderia_id": panaderia_id,
+            "usuario_id": str(usuario.id),
+            "accion": "cierre_diario",
+            "detalles": {"fecha": fecha_registro.isoformat()},
+        }).execute()
+        return {"cerrado": True, "cierre": actualizado.data[0] if actualizado.data else None}
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=503, detail="No se pudo cerrar el día. Verifica que la migración esté aplicada.")
