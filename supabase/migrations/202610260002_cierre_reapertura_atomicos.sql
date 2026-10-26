@@ -2,7 +2,7 @@
 create or replace function public.cerrar_cierre_diario(
   p_cierre_id bigint,
   p_usuario_id uuid,
-  p_fecha date
+  p_fecha timestamptz
 )
 returns jsonb
 language plpgsql
@@ -33,7 +33,7 @@ begin
 
   update public.cierres_diarios
   set estado = 'cerrado',
-      cerrado_en = p_fecha::timestamptz,
+      cerrado_en = p_fecha,
       cerrado_por = p_usuario_id,
       actualizado_en = now()
   where id = p_cierre_id
@@ -102,7 +102,7 @@ begin
 end;
 $$;
 
-revoke all on function public.cerrar_cierre_diario(bigint, uuid, date) from public, anon, authenticated;
+revoke all on function public.cerrar_cierre_diario(bigint, uuid, timestamptz) from public, anon, authenticated;
 revoke all on function public.reabrir_cierre_diario(bigint, uuid, text, boolean, timestamptz) from public, anon, authenticated;
 grant execute on function public.cerrar_cierre_diario(bigint, uuid, date) to service_role;
 grant execute on function public.reabrir_cierre_diario(bigint, uuid, text, boolean, timestamptz) to service_role;
