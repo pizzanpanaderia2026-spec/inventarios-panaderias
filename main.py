@@ -3,7 +3,9 @@ from pathlib import Path
 import os
 
 from fastapi import FastAPI, Header, HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
+from io import BytesIO
+from openpyxl import Workbook
 from fastapi.staticfiles import StaticFiles
 from supabase import create_client
 
@@ -684,3 +686,70 @@ def consultar_historial(
         raise
     except Exception:
         raise HTTPException(status_code=503, detail="No se pudo consultar el historial. Verifica que la migración esté aplicada.")
+
+
+
+@app.get("/api/historial/excel")
+def descargar_historial_excel(
+    panaderia_id: int,
+    desde: date,
+    hasta: date,
+    authorization: str | None = Header(default=None),
+):
+    usuario = obtener_usuario_autenticado(authorization)
+    perfil = obtener_perfil(str(usuario.id))
+    comprobar_acceso_panaderia(str(usuario.id), perfil, panaderia_id)
+    hoy = date.today()
+    if desde > hasta:
+        raise HTTPException(status_code=422, detail="La fecha inicial no puede ser posterior a la fecha final.")
+    if (hasta - desde).days > 29 or (hoy - desde).days > 29:
+        raise HTTPException(status_code=422, detail="La descarga se limita a los últimos 30 días.")
+    try:
+        datos = consultar_historial(panaderia_id, desde, hasta, authorization)
+        historial = datos["historial"]
+        libro = Workbook()
+        detalle = libro.active
+        detalle.title = "Detalle"
+        detalle.append(["Fecha", "Producto", "Cantidad", "Precio unitario", "Total"])
+        resumen = {}
+        total_general = Decimal("0")
+        for dia in historial:
+            fecha_texto = str(dia["cierre"]["fecha"])
+            for linea in dia["lineas"]:
+                precio = Decimal(str(linea["precio_unitario"]))
+                cantidad = int(linea["cantidad"])
+                total = Decimal(str(linea["total"]))
+                detalle.append([fecha_texto, linea["producto"], cantidad, float(precio), float(total)])
+                clave = precio.quantize(Decimal("0.01"))
+                if clave not in resumen:
+                    resumen[clave] = {"cantidad": 0, "total": Decimal("0")}
+                resumen[clave]["cantidad"] += cantidad
+                resumen[clave]["total"] += total
+                total_general += total
+        detalle.freeze_panes = "A2"
+        detalle.auto_filter.ref = detalle.dimensions
+        for col, width in {"A": 14, "B": 30, "C": 14, "D": 18, "E": 18}.items():
+            detalle.column_dimensions[col].width = width
+        hoja_resumen = libro.create_sheet("Resumen")
+        hoja_resumen.append(["Precio", "Cantidad total", "Importe"])
+        cantidad_general = 0
+        for precio, valores in sorted(resumen.items()):
+            hoja_resumen.append([float(precio), valores["cantidad"], float(valores["total"])])
+            cantidad_general += valores["cantidad"]
+        hoja_resumen.append(["TOTAL GENERAL", cantidad_general, float(total_general)])
+        hoja_resumen.freeze_panes = "A2"
+        for col, width in {"A": 20, "B": 20, "C": 20}.items():
+            hoja_resumen.column_dimensions[col].width = width
+        salida = BytesIO()
+        libro.save(salida)
+        salida.seek(0)
+        nombre = f"historial_panaderia_{panaderia_id}_{desde.isoformat()}_{hasta.isoformat()}.xlsx"
+        return StreamingResponse(
+            salida,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": f'attachment; filename="{nombre}"'},
+        )
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=503, detail="No se pudo generar el Excel.")
