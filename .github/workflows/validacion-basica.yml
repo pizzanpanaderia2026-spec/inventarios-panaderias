@@ -43,4 +43,4 @@ jobs:
       - name: Verificar delimitador de la función SQL
         run: |
           grep -Fqx 'as $$' <(sed -n '1,120p' supabase/migrations/202610260001_cierres_y_auditoria.sql)
-          grep -Fqx '$;' supabase/migrations/202610260001_cierres_y_auditoria.sql
+          grep -Fqx '$$;' supabase/migrations/202610260001_cierres_y_auditoria.sql
