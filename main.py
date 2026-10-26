@@ -581,31 +581,13 @@ def cerrar_registro(
             )
 
         ahora = datetime.now(timezone.utc).isoformat()
-        actualizado = (
-            supabase.table("cierres_diarios").update({
-                "estado": "cerrado",
-                "cerrado_en": ahora,
-                "cerrado_por": str(usuario.id),
-                "actualizado_en": ahora,
-            })
-            .eq("id", cierre["id"])
-            .eq("estado", "abierto")
-            .execute()
-        )
-        if not actualizado.data:
-            # Otra petición pudo cerrar el mismo día al mismo tiempo.
-            actual = buscar_cierre(panaderia_id, fecha_registro)
-            if actual and actual.get("estado") == "cerrado":
-                return {"cerrado": True, "cerrado_en": actual.get("cerrado_en"), "mensaje": "Este día ya estaba cerrado."}
-            raise HTTPException(status_code=409, detail="El registro cambió mientras se cerraba. Actualiza la pantalla e inténtalo de nuevo.")
-        supabase.table("auditoria_inventario").insert({
-            "cierre_id": cierre["id"],
-            "panaderia_id": panaderia_id,
-            "usuario_id": str(usuario.id),
-            "accion": "cierre_diario",
-            "detalles": {"fecha": fecha_registro.isoformat()},
+        resultado = supabase.rpc("cerrar_cierre_diario", {
+            "p_cierre_id": cierre["id"],
+            "p_usuario_id": str(usuario.id),
+            "p_fecha": ahora,
         }).execute()
-        return {"cerrado": True, "cierre": actualizado.data[0] if actualizado.data else None}
+        cierre_actualizado = resultado.data
+        return {"cerrado": True, "cierre": cierre_actualizado}
     except HTTPException:
         raise
     except Exception:
@@ -657,36 +639,14 @@ def reabrir_registro(
         motivo = (solicitud.motivo or "").strip()
         if not dentro_de_48h and admin and len(motivo) < 5:
             raise HTTPException(status_code=422, detail="Para una corrección después de 48 horas, escribe un motivo de al menos 5 caracteres.")
-        actualizado = (
-            supabase.table("cierres_diarios").update({
-                "estado": "abierto",
-                "reabierto_en": ahora.isoformat(),
-                "reabierto_por": str(usuario.id),
-                "motivo_correccion": motivo or None,
-                "actualizado_en": ahora.isoformat(),
-            })
-            .eq("id", cierre["id"])
-            .eq("estado", "cerrado")
-            .execute()
-        )
-        if not actualizado.data:
-            actual = buscar_cierre(solicitud.panaderia_id, solicitud.fecha)
-            if actual and actual.get("estado") == "abierto":
-                return {"reabierto": True, "mensaje": "El día ya fue reabierto."}
-            raise HTTPException(status_code=409, detail="El registro cambió mientras se reabría. Actualiza la pantalla e inténtalo de nuevo.")
-        supabase.table("auditoria_inventario").insert({
-            "cierre_id": cierre["id"],
-            "panaderia_id": solicitud.panaderia_id,
-            "usuario_id": str(usuario.id),
-            "accion": "reapertura",
-            "motivo": motivo or None,
-            "detalles": {
-                "fecha": solicitud.fecha.isoformat(),
-                "dentro_de_48h": dentro_de_48h,
-                "rol": perfil.get("rol"),
-            },
+        resultado = supabase.rpc("reabrir_cierre_diario", {
+            "p_cierre_id": cierre["id"],
+            "p_usuario_id": str(usuario.id),
+            "p_motivo": motivo or "",
+            "p_dentro_de_48h": dentro_de_48h,
+            "p_fecha": ahora.isoformat(),
         }).execute()
-        return {"reabierto": True, "cierre": actualizado.data[0] if actualizado.data else None}
+        return {"reabierto": True, "cierre": resultado.data}
     except HTTPException:
         raise
     except Exception:
