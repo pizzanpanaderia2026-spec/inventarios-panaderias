@@ -321,6 +321,16 @@ def crear_producto(
                 )
                 if not reactivado.data:
                     raise HTTPException(status_code=409, detail="No se pudo reactivar el producto existente.")
+                # Registra la reactivación para mantener trazabilidad.
+                supabase.table("auditoria_inventario").insert({
+                    "panaderia_id": producto.panaderia_id,
+                    "usuario_id": str(usuario.id),
+                    "accion": "reactivar_producto",
+                    "detalles": {
+                        "producto_id": duplicado["id"],
+                        "nombre": reactivado.data[0]["nombre"],
+                    },
+                }).execute()
                 return {"producto": reactivado.data[0], "accion": "reactivado"}
             raise HTTPException(status_code=409, detail="El producto ya existe.")
         resultado = supabase.table("productos").insert({
