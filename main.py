@@ -544,3 +544,125 @@ def cerrar_registro(
         raise
     except Exception:
         raise HTTPException(status_code=503, detail="No se pudo cerrar el día. Verifica que la migración esté aplicada.")
+
+
+
+class SolicitudReapertura(BaseModel):
+    panaderia_id: int = Field(gt=0)
+    fecha: date
+    motivo: str | None = Field(default=None, max_length=500)
+
+
+def es_admin_principal(perfil: dict) -> bool:
+    return perfil.get("rol") == "admin" and perfil.get("es_admin_principal") is True
+
+
+def buscar_cierre(panaderia_id: int, fecha_registro: date):
+    resultado = (
+        supabase.table("cierres_diarios").select("*")
+        .eq("panaderia_id", panaderia_id)
+        .eq("fecha", fecha_registro.isoformat()).limit(1).execute()
+    )
+    if not resultado.data:
+        raise HTTPException(status_code=404, detail="No hay un cierre registrado para esa fecha.")
+    return resultado.data[0]
+
+
+@app.post("/api/registro/reabrir")
+def reabrir_registro(
+    solicitud: SolicitudReapertura,
+    authorization: str | None = Header(default=None),
+):
+    usuario = obtener_usuario_autenticado(authorization)
+    perfil = obtener_perfil(str(usuario.id))
+    comprobar_acceso_panaderia(str(usuario.id), perfil, solicitud.panaderia_id)
+    try:
+        cierre = buscar_cierre(solicitud.panaderia_id, solicitud.fecha)
+        if cierre["estado"] != "cerrado":
+            return {"reabierto": True, "mensaje": "El día ya está abierto."}
+        cerrado_en = datetime.fromisoformat(cierre["cerrado_en"].replace("Z", "+00:00"))
+        ahora = datetime.now(timezone.utc)
+        dentro_de_48h = (ahora - cerrado_en).total_seconds() < 48 * 3600
+        admin = es_admin_principal(perfil)
+        if not dentro_de_48h and not admin:
+            raise HTTPException(status_code=403, detail="Pasaron 48 horas. Solo el administrador principal puede reabrir este registro.")
+        motivo = (solicitud.motivo or "").strip()
+        if not dentro_de_48h and admin and len(motivo) < 5:
+            raise HTTPException(status_code=422, detail="Para una corrección después de 48 horas, escribe un motivo de al menos 5 caracteres.")
+        actualizado = supabase.table("cierres_diarios").update({
+            "estado": "abierto",
+            "reabierto_en": ahora.isoformat(),
+            "reabierto_por": str(usuario.id),
+            "motivo_correccion": motivo or None,
+            "actualizado_en": ahora.isoformat(),
+        }).eq("id", cierre["id"]).execute()
+        supabase.table("auditoria_inventario").insert({
+            "cierre_id": cierre["id"],
+            "panaderia_id": solicitud.panaderia_id,
+            "usuario_id": str(usuario.id),
+            "accion": "reapertura",
+            "motivo": motivo or None,
+            "detalles": {
+                "fecha": solicitud.fecha.isoformat(),
+                "dentro_de_48h": dentro_de_48h,
+                "rol": perfil.get("rol"),
+            },
+        }).execute()
+        return {"reabierto": True, "cierre": actualizado.data[0] if actualizado.data else None}
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=503, detail="No se pudo reabrir el registro. Verifica que la migración esté aplicada.")
+
+
+@app.get("/api/historial")
+def consultar_historial(
+    panaderia_id: int,
+    desde: date,
+    hasta: date,
+    authorization: str | None = Header(default=None),
+):
+    usuario = obtener_usuario_autenticado(authorization)
+    perfil = obtener_perfil(str(usuario.id))
+    comprobar_acceso_panaderia(str(usuario.id), perfil, panaderia_id)
+    hoy = date.today()
+    if desde > hasta:
+        raise HTTPException(status_code=422, detail="La fecha inicial no puede ser posterior a la fecha final.")
+    if (hasta - desde).days > 29 or (hoy - desde).days > 29:
+        raise HTTPException(status_code=422, detail="El historial disponible en la aplicación se limita a los últimos 30 días.")
+    try:
+        cierres = (
+            supabase.table("cierres_diarios").select("id,fecha,estado,cerrado_en")
+            .eq("panaderia_id", panaderia_id)
+            .gte("fecha", desde.isoformat()).lte("fecha", hasta.isoformat())
+            .order("fecha", desc=True).execute()
+        )
+        salida = []
+        for cierre in cierres.data:
+            detalles = (
+                supabase.table("inventario_detalles")
+                .select("producto_id,cantidad,precio_unitario")
+                .eq("cierre_id", cierre["id"]).execute()
+            )
+            productos_ids = [int(d["producto_id"]) for d in detalles.data]
+            nombres = {}
+            if productos_ids:
+                productos = supabase.table("productos").select("id,nombre").in_("id", productos_ids).execute()
+                nombres = {int(p["id"]): p["nombre"] for p in productos.data}
+            lineas = []
+            for d in detalles.data:
+                precio = Decimal(str(d.get("precio_unitario") or "0"))
+                cantidad = int(d["cantidad"])
+                lineas.append({
+                    "producto_id": d["producto_id"],
+                    "producto": nombres.get(int(d["producto_id"]), "Producto histórico"),
+                    "cantidad": cantidad,
+                    "precio_unitario": str(precio),
+                    "total": str(precio * cantidad),
+                })
+            salida.append({"cierre": cierre, "lineas": lineas})
+        return {"historial": salida}
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=503, detail="No se pudo consultar el historial. Verifica que la migración esté aplicada.")
