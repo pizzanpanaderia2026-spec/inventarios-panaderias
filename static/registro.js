@@ -30,6 +30,7 @@
       const cerrado=cierre && cierre.estado==="cerrado";
       document.getElementById("botonGuardarRegistro").disabled=!!cerrado;
       document.getElementById("botonCerrarDia").disabled=!!cerrado;
+      document.getElementById("botonReabrirDia").disabled=!cerrado;
       document.getElementById("estadoRegistro").textContent=cerrado?"Día cerrado":"Día abierto";
     } catch(e) { aviso(e.message); filas.replaceChildren(); }
   }
@@ -63,3 +64,10 @@
   });
   window.actualizarRegistroCatalogo = async function(productos){catalogo=productos||[];await cargar();};
 })();
+  document.getElementById("botonReabrirDia").addEventListener("click",async()=>{
+    const motivo=prompt("Motivo de la reapertura (obligatorio para correcciones después de 48 horas):") || "";
+    try {
+      await api("/api/registro/reabrir",{method:"POST",body:JSON.stringify({panaderia_id:Number(bakery.id),fecha:fecha.value,motivo})});
+      aviso("Registro reabierto. Los cambios quedarán sujetos a auditoría.","exito");await cargar();
+    } catch(e){aviso(e.message);}
+  });
