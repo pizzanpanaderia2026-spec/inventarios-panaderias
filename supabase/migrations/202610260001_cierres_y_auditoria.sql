@@ -55,7 +55,9 @@ returns void
 language plpgsql
 security definer
 set search_path = ''
-as $$
+as $
+declare
+  v_panaderia_id bigint;
 begin
   if jsonb_typeof(p_lineas) <> 'array' then
     raise exception 'Las líneas deben enviarse como una lista';
