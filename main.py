@@ -496,12 +496,16 @@ def guardar_registro(
         # Solo los productos nuevos en este registro toman el precio actual.
         anteriores = (
             supabase.table("inventario_detalles")
-            .select("producto_id,precio_unitario")
+            .select("producto_id,precio_unitario,producto_nombre")
             .eq("cierre_id", cierre["id"])
             .execute()
         )
         precios_anteriores = {
             int(item["producto_id"]): item.get("precio_unitario")
+            for item in anteriores.data
+        }
+        nombres_anteriores = {
+            int(item["producto_id"]): item.get("producto_nombre")
             for item in anteriores.data
         }
         nuevas = []
@@ -513,6 +517,13 @@ def guardar_registro(
                 "cierre_id": cierre["id"],
                 "producto_id": linea.producto_id,
                 "cantidad": linea.cantidad,
+                "producto_nombre": (
+                    nombres_anteriores.get(linea.producto_id)
+                    or next(
+                        (p["nombre"] for p in productos.data if int(p["id"]) == linea.producto_id),
+                        "Producto",
+                    )
+                ),
                 "precio_unitario": str(
                     precios_anteriores.get(linea.producto_id)
                     if precios_anteriores.get(linea.producto_id) is not None
@@ -524,6 +535,7 @@ def guardar_registro(
                 "producto_id": linea["producto_id"],
                 "cantidad": linea["cantidad"],
                 "precio_unitario": linea["precio_unitario"],
+                "producto_nombre": linea["producto_nombre"],
             }
             for linea in nuevas
         ]
@@ -718,7 +730,7 @@ def consultar_historial(
         for cierre in cierres.data:
             detalles = (
                 supabase.table("inventario_detalles")
-                .select("producto_id,cantidad,precio_unitario")
+                .select("producto_id,cantidad,precio_unitario,producto_nombre")
                 .eq("cierre_id", cierre["id"]).execute()
             )
             productos_ids = [int(d["producto_id"]) for d in detalles.data]
@@ -732,7 +744,7 @@ def consultar_historial(
                 cantidad = int(d["cantidad"])
                 lineas.append({
                     "producto_id": d["producto_id"],
-                    "producto": nombres.get(int(d["producto_id"]), "Producto histórico"),
+                    "producto": d.get("producto_nombre") or nombres.get(int(d["producto_id"]), "Producto histórico"),
                     "cantidad": cantidad,
                     "precio_unitario": str(precio),
                     "total": str(precio * cantidad),
