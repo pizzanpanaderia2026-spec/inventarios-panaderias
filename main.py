@@ -753,3 +753,74 @@ def descargar_historial_excel(
         raise
     except Exception:
         raise HTTPException(status_code=503, detail="No se pudo generar el Excel.")
+
+
+@app.get("/api/productos/precios/excel")
+def descargar_lista_precios(
+    authorization: str | None = Header(default=None),
+):
+    usuario = obtener_usuario_autenticado(authorization)
+    perfil = obtener_perfil(str(usuario.id))
+    try:
+        if es_admin_principal(perfil):
+            panaderias = (
+                supabase.table("panaderias")
+                .select("id,nombre")
+                .eq("activa", True)
+                .order("nombre")
+                .execute()
+            ).data
+        else:
+            accesos = (
+                supabase.table("accesos_panaderias")
+                .select("panaderia_id")
+                .eq("usuario_id", str(usuario.id))
+                .execute()
+            ).data
+            ids = [int(x["panaderia_id"]) for x in accesos]
+            if not ids:
+                raise HTTPException(status_code=403, detail="Tu cuenta no tiene panaderías asignadas.")
+            panaderias = (
+                supabase.table("panaderias")
+                .select("id,nombre")
+                .in_("id", ids)
+                .eq("activa", True)
+                .order("nombre")
+                .execute()
+            ).data
+
+        libro = Workbook()
+        hoja = libro.active
+        hoja.title = "Lista de precios"
+        hoja.append(["Panadería", "Producto", "Precio actual"])
+        for panaderia in panaderias:
+            productos = (
+                supabase.table("productos")
+                .select("nombre,precio")
+                .eq("panaderia_id", panaderia["id"])
+                .eq("activo", True)
+                .order("nombre")
+                .execute()
+            ).data
+            for producto in productos:
+                hoja.append([
+                    panaderia["nombre"],
+                    producto["nombre"],
+                    float(Decimal(str(producto["precio"]))),
+                ])
+        hoja.freeze_panes = "A2"
+        hoja.auto_filter.ref = hoja.dimensions
+        for col, width in {"A": 24, "B": 36, "C": 18}.items():
+            hoja.column_dimensions[col].width = width
+        salida = BytesIO()
+        libro.save(salida)
+        salida.seek(0)
+        return StreamingResponse(
+            salida,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": 'attachment; filename="lista_precios_productos.xlsx"'},
+        )
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=503, detail="No se pudo generar la lista de precios.")
