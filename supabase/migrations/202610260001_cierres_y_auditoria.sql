@@ -50,7 +50,8 @@ alter table public.auditoria_inventario enable row level security;
 -- La función solo se concede al rol de servicio del backend; no al navegador.
 create or replace function public.reemplazar_lineas_cierre(
   p_cierre_id bigint,
-  p_lineas jsonb
+  p_lineas jsonb,
+  p_usuario_id uuid
 )
 returns void
 language plpgsql
@@ -107,9 +108,19 @@ begin
     coalesce(nullif(btrim(lines.value->>'producto_nombre'), ''), p.nombre)
   from jsonb_array_elements(p_lineas) as lines(value)
   join public.productos p on p.id = (lines.value->>'producto_id')::bigint;
-end;
-$$;
 
-revoke all on function public.reemplazar_lineas_cierre(bigint, jsonb) from public;
-revoke all on function public.reemplazar_lineas_cierre(bigint, jsonb) from anon, authenticated;
-grant execute on function public.reemplazar_lineas_cierre(bigint, jsonb) to service_role;
+  insert into public.auditoria_inventario
+    (cierre_id, panaderia_id, usuario_id, accion, detalles)
+  values (
+    p_cierre_id,
+    v_panaderia_id,
+    p_usuario_id,
+    'guardar_registro',
+    jsonb_build_object('cantidad_lineas', jsonb_array_length(p_lineas))
+  );
+end;
+$;
+
+revoke all on function public.reemplazar_lineas_cierre(bigint, jsonb, uuid) from public;
+revoke all on function public.reemplazar_lineas_cierre(bigint, jsonb, uuid) from anon, authenticated;
+grant execute on function public.reemplazar_lineas_cierre(bigint, jsonb, uuid) to service_role;
