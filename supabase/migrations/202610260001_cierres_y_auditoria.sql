@@ -119,7 +119,7 @@ begin
     jsonb_build_object('cantidad_lineas', jsonb_array_length(p_lineas))
   );
 end;
-$;
+$$;
 
 revoke all on function public.reemplazar_lineas_cierre(bigint, jsonb, uuid) from public;
 revoke all on function public.reemplazar_lineas_cierre(bigint, jsonb, uuid) from anon, authenticated;
