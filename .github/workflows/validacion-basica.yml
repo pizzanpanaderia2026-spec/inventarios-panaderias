@@ -26,7 +26,9 @@ jobs:
       - name: Instalar dependencias Python
         run: python -m pip install --upgrade pip && pip install -r requirements.txt
       - name: Comprobar sintaxis de Python
-        run: python -m compileall -q main.py
+        run: python -m compileall -q main.py tests
+      - name: Ejecutar pruebas unitarias
+        run: python -m unittest discover -s tests -v
       - name: Comprobar sintaxis de JavaScript
         run: |
           node --check static/productos.js
@@ -39,8 +41,10 @@ jobs:
           test -s static/registro.js
           test -s static/tablas.js
           test -s supabase/migrations/202610260001_cierres_y_auditoria.sql
-          test -s supabase/migrations/202610260002_cierre_reapertura_atomicos.sql\n          test -s supabase/migrations/202610260003_restringir_funcion_rls_auto_enable.sql
-      - name: Verificar delimitador de la función SQL
+          test -s supabase/migrations/202610260002_cierre_reapertura_atomicos.sql
+          test -s supabase/migrations/202610260003_restringir_funcion_rls_auto_enable.sql
+      - name: Verificar delimitadores y permisos de SQL
         run: |
           grep -Fq 'as $' supabase/migrations/202610260001_cierres_y_auditoria.sql
-          grep -Fq '$;' supabase/migrations/202610260001_cierres_y_auditoria.sql\n          grep -Fq 'revoke execute on function public.rls_auto_enable() from public, anon, authenticated;' supabase/migrations/202610260003_restringir_funcion_rls_auto_enable.sql
+          grep -Fq '$;' supabase/migrations/202610260001_cierres_y_auditoria.sql
+          grep -Fq 'revoke execute on function public.rls_auto_enable() from public, anon, authenticated;' supabase/migrations/202610260003_restringir_funcion_rls_auto_enable.sql
