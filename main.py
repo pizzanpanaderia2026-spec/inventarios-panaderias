@@ -940,3 +940,78 @@ def descargar_lista_precios(
         raise
     except Exception:
         raise HTTPException(status_code=503, detail="No se pudo generar la lista de productos.")
+
+# Resumen agregado de inventario por periodo (máximo 30 días).
+@app.get("/api/inventario/resumen/excel")
+def descargar_resumen_periodo(
+    panaderia_id: int,
+    desde: date,
+    hasta: date,
+    authorization: str | None = Header(default=None),
+):
+    usuario = obtener_usuario_autenticado(authorization)
+    perfil = obtener_perfil(str(usuario.id))
+    comprobar_acceso_panaderia(str(usuario.id), perfil, panaderia_id)
+    hoy = date.today()
+    if desde > hasta:
+        raise HTTPException(status_code=422, detail="La fecha inicial debe ser anterior a la fecha final.")
+    if (hasta - desde).days > 29:
+        raise HTTPException(status_code=422, detail="El periodo máximo es de 30 días.")
+    if hasta > hoy or desde < hoy - __import__("datetime").timedelta(days=29):
+        raise HTTPException(status_code=422, detail="Solo puedes consultar los últimos 30 días.")
+    try:
+        cierres = supabase.table("cierres_diarios").select("id,fecha,estado").eq("panaderia_id", panaderia_id).gte("fecha", desde.isoformat()).lte("fecha", hasta.isoformat()).order("fecha").execute().data
+        cierre_ids = [int(c["id"]) for c in cierres]
+        lineas = []
+        if cierre_ids:
+            lineas = supabase.table("inventario_detalles").select("cierre_id,producto_id,cantidad,precio_unitario,producto_nombre").in_("cierre_id", cierre_ids).execute().data
+        fechas = {int(c["id"]): str(c["fecha"]) for c in cierres}
+        acumulado = {}
+        diario = {}
+        for linea in lineas:
+            fecha = fechas.get(int(linea["cierre_id"]), "")
+            nombre = linea.get("producto_nombre") or f"Producto {linea['producto_id']}"
+            cantidad = int(linea.get("cantidad") or 0)
+            precio = Decimal(str(linea.get("precio_unitario") or 0))
+            key = (nombre, precio)
+            acumulado[key] = acumulado.get(key, 0) + cantidad
+            diario.setdefault(fecha, {})
+            diario[fecha][key] = diario[fecha].get(key, 0) + cantidad
+
+        libro = Workbook()
+        resumen = libro.active
+        resumen.title = "Resumen del periodo"
+        resumen.append(["Producto", "Precio unitario", "Cantidad total", "Importe total"])
+        for (nombre, precio), cantidad in sorted(acumulado.items(), key=lambda x: (x[0][0].casefold(), x[0][1])):
+            resumen.append([nombre, float(precio), cantidad, float(precio * cantidad)])
+        resumen.freeze_panes = "A2"
+        resumen.auto_filter.ref = resumen.dimensions
+        for col, width in {"A": 36, "B": 18, "C": 18, "D": 18}.items():
+            resumen.column_dimensions[col].width = width
+        for row in range(2, resumen.max_row + 1):
+            resumen.cell(row, 2).number_format = '"$"#,##0.00'
+            resumen.cell(row, 4).number_format = '"$"#,##0.00'
+
+        detalle = libro.create_sheet("Detalle diario")
+        detalle.append(["Fecha", "Producto", "Precio unitario", "Cantidad", "Importe"])
+        for fecha in sorted(diario):
+            for (nombre, precio), cantidad in sorted(diario[fecha].items(), key=lambda x: (x[0][0].casefold(), x[0][1])):
+                detalle.append([fecha, nombre, float(precio), cantidad, float(precio * cantidad)])
+        detalle.freeze_panes = "A2"
+        detalle.auto_filter.ref = detalle.dimensions
+        for col, width in {"A": 16, "B": 36, "C": 18, "D": 14, "E": 18}.items():
+            detalle.column_dimensions[col].width = width
+        for row in range(2, detalle.max_row + 1):
+            detalle.cell(row, 3).number_format = '"$"#,##0.00'
+            detalle.cell(row, 5).number_format = '"$"#,##0.00'
+
+        salida = BytesIO()
+        libro.save(salida)
+        salida.seek(0)
+        nombre_archivo = f"resumen_inventario_{panaderia_id}_{desde.isoformat()}_{hasta.isoformat()}.xlsx"
+        return StreamingResponse(salida, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": f'attachment; filename="{nombre_archivo}"'})
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=503, detail="No se pudo generar el resumen del periodo.")
