@@ -140,11 +140,14 @@
     #panelTablas th,#panelHistorial th{background:#f3e8d8}
     @media(max-width:520px){.calendario-dia{padding:8px 0;font-size:13px}.historial-calendario{padding:8px}}
 
-    .boton-panaderia {
-      min-height: 90px;
-      font-size: 18px;
-      font-weight: bold;
-    }
+    .tarjeta-panaderia { position: relative; border: 1px solid #e7ded2; border-radius: 12px; padding: 12px; background: #fff; }
+    .foto-tarjeta-panaderia { width: 100%; height: 130px; border-radius: 9px; border: 1px solid #e7ded2; background: #f5eee5; display: grid; place-items: center; overflow: hidden; color: #8b8177; margin-bottom: 10px; }
+    .foto-tarjeta-panaderia img { width: 100%; height: 100%; object-fit: cover; }
+    .boton-panaderia { width: 100%; min-height: 54px; font-size: 17px; font-weight: bold; }
+    .boton-editar-foto { position: absolute; top: 18px; right: 18px; width: 38px; height: 38px; padding: 0; border-radius: 50%; display: grid; place-items: center; background: #fff; color: #713f12; border: 1px solid #e7ded2; box-shadow: 0 1px 5px #0002; font-size: 20px; }
+    .boton-editar-foto:hover { background: #f3e8d8; }
+    .foto-detalle { width: 84px; height: 84px; flex: 0 0 84px; border-radius: 10px; border: 1px solid #e7ded2; background: #f5eee5; display: grid; place-items: center; overflow: hidden; color: #78716c; font-size: 12px; }
+    .foto-detalle img { width: 100%; height: 100%; object-fit: cover; }
 
     .barra {
       display: flex;
@@ -266,7 +269,7 @@
             <h2 id="nombrePanaderia">Panadería</h2>
             <p id="detalleUsuario"></p>
           </div>
-          <div class="foto-panaderia" aria-label="Espacio reservado para la foto de la panadería">Foto</div>
+          <div id="fotoPanaderiaDetalle" class="foto-detalle" aria-label="Foto de la panadería">Foto</div>
         </div>
         <div class="barra">
           <span></span>
@@ -429,35 +432,58 @@
     function dibujarPanaderias() {
       const contenedor = document.getElementById("listaPanaderias");
       const mensaje = document.getElementById("mensajePanaderias");
-
       contenedor.replaceChildren();
       ocultarMensaje(mensaje);
 
       if (panaderiasAutorizadas.length === 0) {
-        mostrarMensaje(
-          mensaje,
-          "Tu cuenta no tiene panaderías asignadas. Contacta al administrador."
-        );
+        mostrarMensaje(mensaje, "Tu cuenta no tiene panaderías asignadas. Contacta al administrador.");
         return;
       }
 
       panaderiasAutorizadas.forEach((panaderia) => {
+        const tarjeta = document.createElement("div");
+        tarjeta.className = "tarjeta-panaderia";
+        const foto = document.createElement("div");
+        foto.className = "foto-tarjeta-panaderia";
+        if (panaderia.foto_url) {
+          const img = document.createElement("img");
+          img.src = panaderia.foto_url;
+          img.alt = "Foto de " + panaderia.nombre;
+          foto.appendChild(img);
+        } else {
+          foto.textContent = "Foto de la panadería";
+        }
+        tarjeta.appendChild(foto);
+
+        if (esAdministrador()) {
+          const editar = document.createElement("button");
+          editar.type = "button";
+          editar.className = "boton-editar-foto";
+          editar.title = "Editar foto de " + panaderia.nombre;
+          editar.setAttribute("aria-label", "Editar foto de " + panaderia.nombre);
+          editar.textContent = "✎";
+          editar.addEventListener("click", (evento) => {
+            evento.stopPropagation();
+            const aviso = document.createElement("p");
+            aviso.className = "nota";
+            aviso.textContent = "La carga y el guardado de fotos se conectarán en el siguiente paso.";
+            const previo = tarjeta.querySelector(".aviso-foto");
+            if (previo) previo.remove();
+            aviso.className += " aviso-foto";
+            tarjeta.appendChild(aviso);
+          });
+          tarjeta.appendChild(editar);
+        }
+
         const boton = document.createElement("button");
         boton.type = "button";
         boton.className = "boton-panaderia";
         boton.textContent = panaderia.nombre;
-
         boton.disabled = panaderia.activa === false;
-
-        if (panaderia.activa === false) {
-          boton.textContent += " (Inactiva)";
-        }
-
-        boton.addEventListener("click", () => {
-          abrirPanaderia(panaderia);
-        });
-
-        contenedor.appendChild(boton);
+        if (panaderia.activa === false) boton.textContent += " (Inactiva)";
+        boton.addEventListener("click", () => abrirPanaderia(panaderia));
+        tarjeta.appendChild(boton);
+        contenedor.appendChild(tarjeta);
       });
     }
 
@@ -535,6 +561,16 @@
 
       document.getElementById("nombrePanaderia").textContent =
         autorizada.nombre;
+      const fotoDetalle = document.getElementById("fotoPanaderiaDetalle");
+      fotoDetalle.replaceChildren();
+      if (autorizada.foto_url) {
+        const imagen = document.createElement("img");
+        imagen.src = autorizada.foto_url;
+        imagen.alt = "Foto de " + autorizada.nombre;
+        fotoDetalle.appendChild(imagen);
+      } else {
+        fotoDetalle.textContent = "Foto";
+      }
       document.getElementById("botonAdministracion").classList.toggle("oculto", !esAdministrador());
       mostrarSeccion("panelRegistro");
 
