@@ -1015,3 +1015,181 @@ def descargar_resumen_periodo(
         raise
     except Exception:
         raise HTTPException(status_code=503, detail="No se pudo generar el resumen del periodo.")
+
+
+# Administración de cuentas: solo la administradora principal puede acceder.
+from pydantic import BaseModel, Field
+
+
+def exigir_admin_principal(authorization: str | None):
+    usuario = obtener_usuario_autenticado(authorization)
+    perfil = obtener_perfil(str(usuario.id))
+    if not es_admin_principal(perfil):
+        raise HTTPException(status_code=403, detail="Solo la administradora principal puede gestionar cuentas.")
+    return usuario, perfil
+
+
+def email_interno_encargado(username: str) -> str:
+    limpio = "".join(c.lower() for c in username if c.isalnum() or c in "._-")
+    if not limpio or limpio != username.lower():
+        raise HTTPException(status_code=422, detail="El usuario solo puede contener letras, números, punto, guion y guion bajo.")
+    return f"{limpio}@usuarios.pizzan.invalid"
+
+
+class CuentaEncargadoNueva(BaseModel):
+    nombre: str = Field(min_length=1, max_length=120)
+    username: str = Field(min_length=3, max_length=60)
+    password: str = Field(min_length=8, max_length=128)
+    locales: list[int] = Field(min_length=1, max_length=100)
+
+
+class CuentaEncargadoCambio(BaseModel):
+    nombre: str = Field(min_length=1, max_length=120)
+    username: str = Field(min_length=3, max_length=60)
+    password: str | None = Field(default=None, min_length=8, max_length=128)
+    locales: list[int] = Field(min_length=1, max_length=100)
+
+
+class NombreAdminCambio(BaseModel):
+    nombre: str = Field(min_length=1, max_length=120)
+
+
+@app.get("/api/admin/usuarios")
+def admin_listar_usuarios(authorization: str | None = Header(default=None)):
+    admin, perfil_admin = exigir_admin_principal(authorization)
+    try:
+        perfiles = supabase.table("perfiles").select("id,nombre,rol,es_admin_principal").execute().data
+        accesos = supabase.table("accesos_panaderias").select("usuario_id,panaderia_id").execute().data
+        locales = supabase.table("panaderias").select("id,nombre,activa").order("nombre").execute().data
+        por_local = {int(x["id"]): x for x in locales}
+        acceso_por_usuario = {}
+        for a in accesos:
+            acceso_por_usuario.setdefault(str(a["usuario_id"]), []).append(int(a["panaderia_id"]))
+        auth_users = {}
+        pagina = 1
+        while pagina <= 20:
+            lote = supabase.auth.admin.list_users(page=pagina, per_page=100)
+            lista = getattr(lote, "users", None) or getattr(getattr(lote, "data", None), "users", None) or []
+            for u in lista:
+                auth_users[str(u.id)] = u
+            if len(lista) < 100:
+                break
+            pagina += 1
+        salida = []
+        for p in perfiles:
+            uid = str(p["id"])
+            au = auth_users.get(uid)
+            if not au:
+                continue
+            meta = getattr(au, "user_metadata", {}) or {}
+            correo = getattr(au, "email", None) or ""
+            if meta.get("pizzan_cuenta_tecnica") is True:
+                continue
+            es_admin = bool(p.get("es_admin_principal"))
+            salida.append({
+                "id": uid, "nombre": p["nombre"], "rol": p["rol"],
+                "es_admin_principal": es_admin,
+                "usuario": correo if es_admin else str(meta.get("pizzan_username") or correo.split("@")[0]),
+                "locales": ([{"id": int(x["id"]), "nombre": x["nombre"]} for x in locales] if es_admin else [
+                    {"id": lid, "nombre": por_local[lid]["nombre"]} for lid in acceso_por_usuario.get(uid, []) if lid in por_local
+                ])
+            })
+        return {"usuarios": salida, "total_usuarios": len(salida), "total_locales": len(locales)}
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=503, detail="No se pudieron consultar las cuentas.")
+
+
+@app.post("/api/admin/usuarios", status_code=201)
+def admin_crear_usuario(datos: CuentaEncargadoNueva, authorization: str | None = Header(default=None)):
+    exigir_admin_principal(authorization)
+    nombre = " ".join(datos.nombre.split())
+    username = datos.username.strip().lower()
+    if not nombre:
+        raise HTTPException(status_code=422, detail="Escribe un nombre.")
+    if len(set(datos.locales)) != len(datos.locales):
+        raise HTTPException(status_code=422, detail="No repitas locales.")
+    try:
+        existentes = supabase.table("panaderias").select("id").in_("id", datos.locales).execute().data
+        if len({int(x["id"]) for x in existentes}) != len(set(datos.locales)):
+            raise HTTPException(status_code=422, detail="Uno de los locales seleccionados no existe.")
+        email = email_interno_encargado(username)
+        creado = supabase.auth.admin.create_user({"email": email, "password": datos.password, "email_confirm": True, "user_metadata": {"pizzan_username": username}})
+        auth_user = getattr(creado, "user", None) or getattr(getattr(creado, "data", None), "user", None)
+        if not auth_user:
+            raise HTTPException(status_code=503, detail="No se pudo crear la cuenta de acceso.")
+        uid = str(auth_user.id)
+        try:
+            supabase.table("perfiles").insert({"id": uid, "nombre": nombre, "rol": "encargado", "es_admin_principal": False}).execute()
+            supabase.table("accesos_panaderias").insert([{"usuario_id": uid, "panaderia_id": x} for x in datos.locales]).execute()
+        except Exception:
+            try:
+                supabase.auth.admin.delete_user(uid)
+            except Exception:
+                pass
+            raise
+        return {"creado": True, "id": uid}
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=503, detail="No se pudo crear el usuario. Comprueba que el nombre de usuario no esté ocupado.")
+
+
+@app.patch("/api/admin/usuarios/{usuario_id}")
+def admin_actualizar_usuario(usuario_id: str, datos: CuentaEncargadoCambio, authorization: str | None = Header(default=None)):
+    exigir_admin_principal(authorization)
+    nombre = " ".join(datos.nombre.split())
+    username = datos.username.strip().lower()
+    if not nombre:
+        raise HTTPException(status_code=422, detail="Escribe un nombre.")
+    try:
+        perfil_result = supabase.table("perfiles").select("id,rol,es_admin_principal").eq("id", usuario_id).limit(1).execute().data
+        if not perfil_result or perfil_result[0].get("es_admin_principal") or perfil_result[0].get("rol") != "encargado":
+            raise HTTPException(status_code=403, detail="Esta cuenta no se puede editar desde aquí.")
+        if len(set(datos.locales)) != len(datos.locales):
+            raise HTTPException(status_code=422, detail="No repitas locales.")
+        existentes = supabase.table("panaderias").select("id").in_("id", datos.locales).execute().data
+        if len({int(x["id"]) for x in existentes}) != len(set(datos.locales)):
+            raise HTTPException(status_code=422, detail="Uno de los locales seleccionados no existe.")
+        email = email_interno_encargado(username)
+        cambio_auth = {"email": email, "user_metadata": {"pizzan_username": username}}
+        if datos.password:
+            cambio_auth["password"] = datos.password
+        supabase.auth.admin.update_user_by_id(usuario_id, cambio_auth)
+        supabase.table("perfiles").update({"nombre": nombre}).eq("id", usuario_id).execute()
+        supabase.table("accesos_panaderias").delete().eq("usuario_id", usuario_id).execute()
+        supabase.table("accesos_panaderias").insert([{"usuario_id": usuario_id, "panaderia_id": x} for x in datos.locales]).execute()
+        return {"actualizado": True}
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=503, detail="No se pudieron guardar los cambios del usuario.")
+
+
+@app.delete("/api/admin/usuarios/{usuario_id}")
+def admin_eliminar_usuario(usuario_id: str, authorization: str | None = Header(default=None)):
+    exigir_admin_principal(authorization)
+    try:
+        p = supabase.table("perfiles").select("id,rol,es_admin_principal").eq("id", usuario_id).limit(1).execute().data
+        if not p or p[0].get("es_admin_principal") or p[0].get("rol") != "encargado":
+            raise HTTPException(status_code=403, detail="Esta cuenta no se puede eliminar desde aquí.")
+        supabase.auth.admin.delete_user(usuario_id)
+        return {"eliminado": True}
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=503, detail="No se pudo eliminar la cuenta.")
+
+
+@app.patch("/api/admin/perfil")
+def admin_cambiar_nombre(datos: NombreAdminCambio, authorization: str | None = Header(default=None)):
+    usuario, perfil = exigir_admin_principal(authorization)
+    nombre = " ".join(datos.nombre.split())
+    if not nombre:
+        raise HTTPException(status_code=422, detail="Escribe un nombre.")
+    try:
+        supabase.table("perfiles").update({"nombre": nombre}).eq("id", str(usuario.id)).execute()
+        return {"actualizado": True, "nombre": nombre}
+    except Exception:
+        raise HTTPException(status_code=503, detail="No se pudo actualizar el nombre.")
