@@ -126,6 +126,19 @@
     /* Solo una sección puede mostrarse a la vez. */
     .panel-seccion { display: none !important; margin-top: 14px; }
     .panel-seccion.seccion-activa { display: block !important; }
+    .calendario-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:5px;margin:12px 0}
+    .calendario-dia{min-width:0;padding:9px 2px;border:1px solid #e7ddd1;border-radius:8px;background:#f5eee6;color:#422d20;cursor:pointer}
+    .calendario-dia.antiguo{background:#f1f0ee;color:#aaa6a0;border-color:#e8e6e3}
+    .calendario-dia.seleccionado{background:#6b4c37;color:#fff;border-color:#6b4c37}
+    .historial-calendario{border:1px solid #e7ddd1;border-radius:12px;padding:12px}
+    .leyenda-reciente,.leyenda-antigua{display:inline-block;width:10px;height:10px;border-radius:3px;margin:0 4px 0 8px;background:#f5eee6}
+    .leyenda-antigua{background:#f1f0ee}
+    .historial-resultado{margin-top:16px}
+    .tabla-scroll{width:100%;overflow-x:auto}
+    #panelTablas table,#panelHistorial table{width:100%;border-collapse:collapse;margin:8px 0 16px}
+    #panelTablas th,#panelTablas td,#panelHistorial th,#panelHistorial td{padding:9px 7px;border:1px solid #e7ddd1;text-align:left}
+    #panelTablas th,#panelHistorial th{background:#f3e8d8}
+    @media(max-width:520px){.calendario-dia{padding:8px 0;font-size:13px}.historial-calendario{padding:8px}}
 
     .boton-panaderia {
       min-height: 90px;
@@ -272,7 +285,13 @@
           <button id="botonAdministracion" class="boton-seccion oculto" type="button" data-seccion="panelAdministracion">Administración</button>
         </nav>
 
-        <section id="panelTablas" class="panel panel-seccion oculto"><h3>Tablas</h3><p class="nota">Consulta los registros guardados por fecha; el resumen agrupa las cantidades por precio.</p><div class="campo"><label for="histDesde">Desde</label><input id="histDesde" type="date"></div><div class="campo"><label for="histHasta">Hasta</label><input id="histHasta" type="date"></div><button id="botonConsultarTablas" type="button">Consultar tablas</button> <button id="botonDescargarExcel" class="secundario" type="button">Descargar Excel</button><div id="mensajeTablas" class="mensaje oculto" role="status"></div><h4>Tabla A · Detalle por producto</h4><div id="tablaDetalle"></div><h4>Tabla B · Resumen por precio</h4><div id="tablaResumen"></div></section>
+        <section id="panelTablas" class="panel panel-seccion oculto">
+          <h3>Tablas del día anterior</h3><p class="nota" id="fechaTablas">Resultado del último día cerrado.</p>
+          <h4>Tabla A · Detalle por producto</h4><div id="tablaDetalle"></div>
+          <h4>Tabla B · Resumen por precio</h4><div id="tablaResumen"></div>
+          <button id="botonDescargarExcel" type="button">Descargar tablas del día</button>
+          <div id="mensajeTablas" class="mensaje oculto" role="status"></div>
+        </section>
         <section id="panelRegistro" class="panel panel-seccion oculto"><h3>Registro diario</h3><div class="campo"><label for="fechaRegistro">Fecha</label><input id="fechaRegistro" type="date"></div><div class="barra"><strong id="estadoRegistro">Día abierto</strong></div><div id="mensajeRegistro" class="mensaje oculto" role="alert"></div><div id="filasRegistro"></div><button id="botonGuardarRegistro" type="button">Guardar registro</button> <button id="botonCerrarDia" type="button">Cerrar día</button> <button id="botonReabrirDia" class="secundario" type="button">Reabrir día</button></section>
         <section id="panelProductos" class="panel panel-seccion oculto">
         <h3>Agregar productos</h3>
@@ -291,9 +310,15 @@
 
         <section id="panelHistorial" class="panel panel-seccion oculto">
           <h3>Historial de inventarios</h3>
-          <p>Consulta inventarios anteriores desde la sección Tablas. El calendario y las descargas del historial se conectarán en el siguiente paso.</p>
+          <p class="nota">Selecciona una fecha. Los inventarios de los últimos 30 días se mostrarán aquí.</p>
+          <div class="historial-calendario">
+            <div class="barra"><button id="histMesAnterior" class="secundario" type="button" aria-label="Mes anterior">‹</button><strong id="histMesTitulo"></strong><button id="histMesSiguiente" class="secundario" type="button" aria-label="Mes siguiente">›</button></div>
+            <div id="histCalendario" class="calendario-grid"></div>
+            <p class="nota"><span class="leyenda-reciente"></span> Últimos 30 días <span class="leyenda-antigua"></span> Más de 30 días</p>
+          </div>
+          <div id="historialResultado" class="historial-resultado"><p class="nota">Selecciona una fecha para ver su inventario.</p></div>
+          <div id="mensajeHistorial" class="mensaje oculto" role="status"></div>
         </section>
-
         <section id="panelAdministracion" class="panel panel-seccion oculto">
           <h3>Administración</h3>
           <p>En el siguiente paso agregaremos aquí la creación y asignación de cuentas de encargados. Esta pantalla es únicamente la estructura visual por ahora.</p>
@@ -312,6 +337,7 @@
   <script src="/static/productos.js"></script>
   <script src="/static/registro.js"></script>
   <script src="/static/tablas.js"></script>
+  <script src="/static/historial-inventarios.js"></script>
   <script>
     // CONFIGURACIÓN DE SUPABASE
     const SUPABASE_URL = "https://fjthttvprmjrfmmsnxer.supabase.co";
