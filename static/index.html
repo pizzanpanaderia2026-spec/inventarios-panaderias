@@ -482,6 +482,7 @@
     let usuarioActual = null;
     let perfilActual = null;
     let panaderiasAutorizadas = [];
+    let panaderiaSeleccionada = null;
     let sesionActual = null;
 
     function mostrarPantalla(pantalla) {
@@ -750,6 +751,7 @@
         return;
       }
 
+      panaderiaSeleccionada = autorizada;
       document.getElementById("nombrePanaderia").textContent =
         autorizada.nombre;
       const fotoDetalle = document.getElementById("fotoPanaderiaDetalle");
@@ -787,7 +789,8 @@
 
         const boton = document.getElementById("botonLogin");
         const mensaje = document.getElementById("mensajeLogin");
-        const correo = document.getElementById("correo").value.trim();
+        const entradaAcceso = document.getElementById("correo").value.trim();
+        const correo = entradaAcceso.includes("@") ? entradaAcceso : entradaAcceso.toLowerCase() + "@usuarios.pizzan.invalid";
         const contrasena = document.getElementById("contrasena").value;
 
         ocultarMensaje(mensaje);
