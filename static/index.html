@@ -200,6 +200,21 @@
       .boton-seccion { padding: 12px 8px; font-size: 14px; }
     }
   </style>
+<style>
+.admin-resumen{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:14px 0}
+.admin-metrica{background:#f1efed;border-radius:9px;padding:12px;color:#4a4a4a}
+.admin-metrica span{display:block;font-size:.82rem}.admin-metrica strong{display:block;font-size:1.45rem;color:#222;margin-top:4px}
+.admin-acciones{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}
+.admin-boton-compacto{background:#222;color:#fff;border:0;border-radius:5px;padding:7px 12px;font-size:.88rem;min-height:32px}
+.admin-usuario{border:1px solid #e3dfdc;border-radius:9px;padding:12px;margin:10px 0}
+.admin-usuario-acciones{display:flex;gap:7px;flex-wrap:wrap;margin-top:9px}
+.admin-usuario-acciones button{padding:6px 11px;font-size:.85rem}
+.admin-locales{border:1px solid #ddd;border-radius:8px;padding:12px;margin:12px 0}
+.admin-locales label{display:flex;gap:8px;margin:8px 0;align-items:center}
+.admin-confirmacion{border:1px solid #b42318;border-radius:8px;padding:12px;margin:10px 0}
+.admin-confirmacion button{margin-right:6px}
+@media(max-width:480px){.admin-resumen{gap:7px}.admin-metrica{padding:10px}.admin-acciones{gap:6px}}
+</style>
 </head>
 
 <body>
@@ -364,6 +379,14 @@
           <h4>Tabla A · Detalle por producto</h4><div id="tablaDetalle"></div>
           <h4>Tabla B · Resumen por precio</h4><div id="tablaResumen"></div>
           <button id="botonDescargarExcel" type="button">Descargar tablas del día</button>
+          <div class="panel" style="margin-top:18px">
+            <h4>Resumen de un periodo (últimos 30 días)</h4>
+            <p class="nota">Une los registros de varias fechas para saber cuántas conchas, bolillos u otros productos se registraron en el periodo elegido.</p>
+            <div class="campo"><label for="resumenDesde">Desde</label><input id="resumenDesde" type="date"></div>
+            <div class="campo"><label for="resumenHasta">Hasta</label><input id="resumenHasta" type="date"></div>
+            <button id="botonResumenPeriodo" type="button">Descargar resumen Excel</button>
+            <div id="mensajeResumenPeriodo" class="mensaje oculto" role="status"></div>
+          </div>
           <div id="mensajeTablas" class="mensaje oculto" role="status"></div>
         </section>
         <section id="panelRegistro" class="panel panel-seccion oculto"><h3>Registro diario</h3><div class="campo"><label for="fechaRegistro">Fecha</label><input id="fechaRegistro" type="date"></div><div class="barra"><strong id="estadoRegistro">Día abierto</strong></div><div id="mensajeRegistro" class="mensaje oculto" role="alert"></div><div id="filasRegistro"></div><button id="botonGuardarRegistro" type="button">Guardar registro</button> <button id="botonCerrarDia" type="button">Cerrar día</button> <button id="botonReabrirDia" class="secundario" type="button">Reabrir día</button></section>
@@ -394,8 +417,36 @@
           <div id="mensajeHistorial" class="mensaje oculto" role="status"></div>
         </section>
         <section id="panelAdministracion" class="panel panel-seccion oculto">
-          <h3>Administración</h3>
-          <p>En el siguiente paso agregaremos aquí la creación y asignación de cuentas de encargados. Esta pantalla es únicamente la estructura visual por ahora.</p>
+          <div class="admin-encabezado"><h3>Administración</h3></div>
+          <div class="admin-resumen">
+            <div class="admin-metrica"><span>Cuentas visibles</span><strong id="adminTotalUsuarios">—</strong></div>
+            <div class="admin-metrica"><span>Locales</span><strong id="adminTotalLocales">—</strong></div>
+          </div>
+          <div class="admin-acciones">
+            <button id="adminVerUsuarios" class="admin-boton-compacto" type="button">Ver usuarios</button>
+            <button id="adminAgregarUsuario" class="admin-boton-compacto" type="button">Agregar usuario</button>
+          </div>
+          <div id="adminMensaje" class="mensaje oculto" role="status"></div>
+          <div id="adminVistaUsuarios" class="oculto">
+            <div class="barra"><h4>Usuarios</h4><button id="adminVolverInicio" class="secundario" type="button">Volver</button></div>
+            <div id="adminListaUsuarios"></div>
+          </div>
+          <form id="adminFormularioUsuario" class="oculto">
+            <h4 id="adminTituloFormulario">Agregar usuario</h4>
+            <div class="campo"><label for="adminNombre">Nombre</label><input id="adminNombre" maxlength="120" required></div>
+            <div class="campo"><label for="adminUsername">Usuario</label><input id="adminUsername" maxlength="60" autocomplete="off" required></div>
+            <div class="campo"><label for="adminPassword">Contraseña</label><input id="adminPassword" type="password" minlength="8" autocomplete="new-password"><p class="nota" id="adminAyudaPassword">Usa una contraseña de al menos 8 caracteres.</p></div>
+            <fieldset class="admin-locales"><legend>Locales autorizados (mínimo uno)</legend><div id="adminOpcionesLocales"></div></fieldset>
+            <button id="adminGuardarUsuario" type="submit">Crear usuario</button>
+            <button id="adminCancelarUsuario" class="secundario" type="button">Cancelar</button>
+          </form>
+          <form id="adminFormularioNombre" class="oculto">
+            <h4>Editar administradora</h4>
+            <div class="campo"><label for="adminNombrePrincipal">Nombre visible</label><input id="adminNombrePrincipal" maxlength="120" required></div>
+            <p class="nota">El correo, la contraseña y los permisos no se editan aquí.</p>
+            <button type="submit">Guardar nombre</button><button id="adminCancelarNombre" class="secundario" type="button">Cancelar</button>
+          </form>
+          <div id="adminConfirmarEliminar" class="admin-confirmacion oculto"><p><strong>¿En serio quieres eliminar esta cuenta?</strong></p><button id="adminAceptarEliminar" class="boton-peligro" type="button">Aceptar</button><button id="adminCancelarEliminar" class="secundario" type="button">Cancelar</button></div>
         </section>
 
         <button id="botonCerrarSesionDetalle" class="secundario" type="button">
@@ -431,6 +482,7 @@
     let usuarioActual = null;
     let perfilActual = null;
     let panaderiasAutorizadas = [];
+    let panaderiaSeleccionada = null;
     let sesionActual = null;
 
     function mostrarPantalla(pantalla) {
@@ -699,6 +751,7 @@
         return;
       }
 
+      panaderiaSeleccionada = autorizada;
       document.getElementById("nombrePanaderia").textContent =
         autorizada.nombre;
       const fotoDetalle = document.getElementById("fotoPanaderiaDetalle");
@@ -736,7 +789,8 @@
 
         const boton = document.getElementById("botonLogin");
         const mensaje = document.getElementById("mensajeLogin");
-        const correo = document.getElementById("correo").value.trim();
+        const entradaAcceso = document.getElementById("correo").value.trim();
+        const correo = entradaAcceso.includes("@") ? entradaAcceso : entradaAcceso.toLowerCase() + "@usuarios.pizzan.invalid";
         const contrasena = document.getElementById("contrasena").value;
 
         ocultarMensaje(mensaje);
@@ -840,6 +894,180 @@
         dibujarPanaderias();
         mostrarPantalla(pantallaPanaderias);
       });
+
+
+    // Administración real: todas las operaciones pasan por el servidor.
+    let adminUsuariosCache = [];
+    let adminEditarId = null;
+    let adminEliminarId = null;
+    async function adminFetch(ruta, opciones = {}) {
+      const respuesta = await fetch(ruta, {
+        ...opciones,
+        headers: {
+          "Authorization": "Bearer " + sesionActual.access_token,
+          "Content-Type": "application/json",
+          ...(opciones.headers || {})
+        }
+      });
+      const datos = await respuesta.json().catch(() => ({}));
+      if (!respuesta.ok) throw new Error(datos.detail || "No se pudo completar la operación.");
+      return datos;
+    }
+    function adminMensaje(texto, tipo = "error") {
+      mostrarMensaje(document.getElementById("adminMensaje"), texto, tipo);
+    }
+    function adminVista(vista) {
+      document.getElementById("adminVistaUsuarios").classList.toggle("oculto", vista !== "usuarios");
+      document.getElementById("adminFormularioUsuario").classList.toggle("oculto", vista !== "formulario");
+      document.getElementById("adminFormularioNombre").classList.toggle("oculto", vista !== "nombre");
+      document.getElementById("adminConfirmarEliminar").classList.add("oculto");
+    }
+    async function adminCargar() {
+      if (!esAdministrador()) return;
+      try {
+        const datos = await adminFetch("/api/admin/usuarios");
+        adminUsuariosCache = datos.usuarios || [];
+        document.getElementById("adminTotalUsuarios").textContent = datos.total_usuarios;
+        document.getElementById("adminTotalLocales").textContent = datos.total_locales;
+        const lista = document.getElementById("adminListaUsuarios");
+        lista.replaceChildren();
+        adminUsuariosCache.forEach(u => {
+          const card = document.createElement("div");
+          card.className = "admin-usuario";
+          const nombre = document.createElement("strong");
+          nombre.textContent = u.nombre + " (" + (u.es_admin_principal ? "Administradora" : "Encargada") + ")";
+          card.appendChild(nombre);
+          const user = document.createElement("p");
+          user.className = "nota";
+          user.textContent = "@" + u.usuario;
+          card.appendChild(user);
+          const localesTexto = document.createElement("p");
+          localesTexto.textContent = "Locales autorizados: " + (u.locales || []).map(l => l.nombre).join(", ");
+          card.appendChild(localesTexto);
+          const acciones = document.createElement("div");
+          acciones.className = "admin-usuario-acciones";
+          const editar = document.createElement("button");
+          editar.type = "button"; editar.className = "secundario";
+          editar.textContent = u.es_admin_principal ? "Editar nombre" : "Editar";
+          editar.onclick = () => u.es_admin_principal ? adminAbrirNombre(u) : adminAbrirEdicion(u);
+          acciones.appendChild(editar);
+          if (!u.es_admin_principal) {
+            const eliminar = document.createElement("button");
+            eliminar.type = "button"; eliminar.className = "secundario";
+            eliminar.textContent = "Eliminar";
+            eliminar.onclick = () => {
+              adminEliminarId = u.id;
+              document.getElementById("adminConfirmarEliminar").classList.remove("oculto");
+            };
+            acciones.appendChild(eliminar);
+          } else {
+            const nota = document.createElement("p"); nota.className = "nota";
+            nota.textContent = "El correo, la contraseña y los permisos no se editan aquí.";
+            card.appendChild(nota);
+          }
+          card.appendChild(acciones); lista.appendChild(card);
+        });
+        adminVista("usuarios");
+        ocultarMensaje(document.getElementById("adminMensaje"));
+      } catch (e) { adminMensaje(e.message); }
+    }
+    async function adminLocales() {
+      const data = await consultarBackend("/api/panaderias", sesionActual.access_token);
+      return Array.isArray(data) ? data : (data.panaderias || []);
+    }
+    async function adminPrepararLocales(seleccionados = []) {
+      const cont = document.getElementById("adminOpcionesLocales");
+      cont.replaceChildren();
+      const locales = await adminLocales();
+      locales.forEach(l => {
+        const label = document.createElement("label");
+        const input = document.createElement("input");
+        input.type = "checkbox"; input.value = String(l.id);
+        input.checked = seleccionados.map(String).includes(String(l.id));
+        const span = document.createElement("span"); span.textContent = l.nombre;
+        label.append(input, span); cont.appendChild(label);
+      });
+    }
+    async function adminAbrirEdicion(u) {
+      adminEditarId = u.id;
+      document.getElementById("adminTituloFormulario").textContent = "Editar usuario";
+      document.getElementById("adminNombre").value = u.nombre;
+      document.getElementById("adminUsername").value = u.usuario;
+      document.getElementById("adminPassword").value = "";
+      document.getElementById("adminPassword").required = false;
+      document.getElementById("adminAyudaPassword").textContent = "Deja vacío para conservar la contraseña actual.";
+      document.getElementById("adminGuardarUsuario").textContent = "Guardar cambios";
+      await adminPrepararLocales((u.locales || []).map(l => l.id));
+      adminVista("formulario");
+    }
+    async function adminAbrirAgregar() {
+      adminEditarId = null;
+      document.getElementById("adminFormularioUsuario").reset();
+      document.getElementById("adminTituloFormulario").textContent = "Agregar usuario";
+      document.getElementById("adminPassword").required = true;
+      document.getElementById("adminAyudaPassword").textContent = "Usa una contraseña de al menos 8 caracteres.";
+      document.getElementById("adminGuardarUsuario").textContent = "Crear usuario";
+      await adminPrepararLocales([]);
+      adminVista("formulario");
+    }
+    function adminAbrirNombre(u) {
+      document.getElementById("adminNombrePrincipal").value = u.nombre;
+      adminVista("nombre");
+    }
+    document.getElementById("botonAdministracion").addEventListener("click", () => { if (esAdministrador()) adminCargar(); });
+    document.getElementById("adminVerUsuarios").addEventListener("click", adminCargar);
+    document.getElementById("adminAgregarUsuario").addEventListener("click", () => adminAbrirAgregar().catch(e => adminMensaje(e.message)));
+    document.getElementById("adminVolverInicio").addEventListener("click", () => adminVista("inicio"));
+    document.getElementById("adminCancelarUsuario").addEventListener("click", () => adminVista("usuarios"));
+    document.getElementById("adminCancelarNombre").addEventListener("click", () => adminVista("usuarios"));
+    document.getElementById("adminCancelarEliminar").addEventListener("click", () => { adminEliminarId = null; document.getElementById("adminConfirmarEliminar").classList.add("oculto"); });
+    document.getElementById("adminAceptarEliminar").addEventListener("click", async () => {
+      if (!adminEliminarId) return;
+      try { await adminFetch("/api/admin/usuarios/" + encodeURIComponent(adminEliminarId), {method:"DELETE"}); adminEliminarId=null; await adminCargar(); adminMensaje("Cuenta eliminada.", "exito"); }
+      catch(e) { adminMensaje(e.message); }
+    });
+    document.getElementById("adminFormularioUsuario").addEventListener("submit", async ev => {
+      ev.preventDefault();
+      const locales = [...document.querySelectorAll("#adminOpcionesLocales input:checked")].map(x => Number(x.value));
+      if (!locales.length) { adminMensaje("Selecciona al menos un local."); return; }
+      const payload = {nombre:document.getElementById("adminNombre").value.trim(), username:document.getElementById("adminUsername").value.trim(), locales};
+      const pass = document.getElementById("adminPassword").value;
+      if (pass) payload.password = pass;
+      if (!adminEditarId && !pass) { adminMensaje("Escribe una contraseña."); return; }
+      try {
+        if (adminEditarId) await adminFetch("/api/admin/usuarios/" + encodeURIComponent(adminEditarId), {method:"PATCH",body:JSON.stringify(payload)});
+        else await adminFetch("/api/admin/usuarios", {method:"POST",body:JSON.stringify(payload)});
+        await adminCargar(); adminMensaje(adminEditarId ? "Cambios guardados." : "Usuario creado.", "exito");
+      } catch(e) { adminMensaje(e.message); }
+    });
+    document.getElementById("adminFormularioNombre").addEventListener("submit", async ev => {
+      ev.preventDefault();
+      try {
+        await adminFetch("/api/admin/perfil", {method:"PATCH",body:JSON.stringify({nombre:document.getElementById("adminNombrePrincipal").value.trim()})});
+        perfilActual.nombre = document.getElementById("adminNombrePrincipal").value.trim();
+        await adminCargar(); adminMensaje("Nombre actualizado.", "exito");
+      } catch(e) { adminMensaje(e.message); }
+    });
+
+    document.getElementById("botonResumenPeriodo").addEventListener("click", async () => {
+      const desde = document.getElementById("resumenDesde").value;
+      const hasta = document.getElementById("resumenHasta").value;
+      const msg = document.getElementById("mensajeResumenPeriodo");
+      if (!desde || !hasta) { mostrarMensaje(msg, "Selecciona las dos fechas."); return; }
+      if (desde > hasta) { mostrarMensaje(msg, "La fecha inicial debe ser anterior a la final."); return; }
+      if ((Date.parse(hasta+"T00:00:00Z")-Date.parse(desde+"T00:00:00Z"))/86400000 > 29) { mostrarMensaje(msg, "El periodo máximo es de 30 días."); return; }
+      const boton = document.getElementById("botonResumenPeriodo"); boton.disabled = true;
+      try {
+        const url = "/api/inventario/resumen/excel?panaderia_id=" + encodeURIComponent(panaderiaSeleccionada.id) + "&desde=" + encodeURIComponent(desde) + "&hasta=" + encodeURIComponent(hasta);
+        const resp = await fetch(url, {headers:{"Authorization":"Bearer "+sesionActual.access_token}});
+        const data = await resp.json().catch(()=>({}));
+        if (!resp.ok) throw new Error(data.detail || "No se pudo crear el resumen.");
+        const blob = await resp.blob(); const href = URL.createObjectURL(blob);
+        const a = document.createElement("a"); a.href=href; a.download="resumen_inventario_"+desde+"_"+hasta+".xlsx"; a.click(); URL.revokeObjectURL(href);
+        mostrarMensaje(msg, "Se descargó el resumen del periodo.", "exito");
+      } catch(e) { mostrarMensaje(msg, e.message || "Error al descargar."); }
+      finally { boton.disabled = false; }
+    });
 
     // Al abrir la página, revisar si ya existe una sesión.
     async function iniciarAplicacion() {
