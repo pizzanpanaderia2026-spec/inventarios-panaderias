@@ -1,12 +1,124 @@
 (function(){
-const root=document.getElementById("histCalendario");if(!root)return;
-const title=document.getElementById("histMesTitulo"),out=document.getElementById("historialResultado"),msg=document.getElementById("mensajeHistorial");
-let shown=new Date(),selected="";
-const pad=n=>String(n).padStart(2,"0"),iso=d=>d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate());
-function table(heads){const w=document.createElement("div");w.className="tabla-scroll";const t=document.createElement("table"),h=document.createElement("tr");heads.forEach(x=>{const e=document.createElement("th");e.textContent=x;h.appendChild(e)});const thead=document.createElement("thead");thead.appendChild(h);t.appendChild(thead);const b=document.createElement("tbody"),r=document.createElement("tr"),c=document.createElement("td");c.colSpan=heads.length;c.textContent="Los datos aparecerán aquí cuando conectemos el inventario.";r.appendChild(c);b.appendChild(r);t.appendChild(b);w.appendChild(t);out.appendChild(w)}
-function choose(v){selected=v;draw();out.replaceChildren();msg.textContent="";const age=Math.floor((new Date(iso(new Date()))-new Date(v+"T00:00:00"))/86400000);if(age>30){const p=document.createElement("p");p.className="nota";p.textContent="Inventario archivado: las tablas no se muestran para fechas de más de 30 días.";out.appendChild(p);const b=document.createElement("button");b.textContent="Descargar inventario";b.onclick=()=>{msg.textContent="El enlace de Drive se conectará en el siguiente paso.";msg.className="mensaje"};out.appendChild(b)}else{["Tabla A · Detalle por producto","Tabla B · Resumen por precio"].forEach((x,i)=>{const h=document.createElement("h4");h.textContent=x;out.appendChild(h);table(i?["Precio","Cantidad total","Importe"]:["Fecha","Producto","Cantidad","Precio unitario","Total"])});const b=document.createElement("button");b.textContent="Descargar inventario";b.onclick=()=>{msg.textContent="La descarga se conectará en el siguiente paso.";msg.className="mensaje"};out.appendChild(b)}}
-function draw(){root.replaceChildren();title.textContent=shown.toLocaleDateString("es-MX",{month:"long",year:"numeric"});["L","M","X","J","V","S","D"].forEach(x=>{const e=document.createElement("div");e.className="nota";e.style.textAlign="center";e.textContent=x;root.appendChild(e)});const first=new Date(shown.getFullYear(),shown.getMonth(),1),offset=(first.getDay()+6)%7;for(let i=0;i<offset;i++)root.appendChild(document.createElement("span"));const total=new Date(shown.getFullYear(),shown.getMonth()+1,0).getDate(),today=new Date();today.setHours(0,0,0,0);for(let n=1;n<=total;n++){const d=new Date(shown.getFullYear(),shown.getMonth(),n),v=iso(d),age=Math.floor((today-d)/86400000),b=document.createElement("button");b.type="button";b.className="calendario-dia"+(age>30?" antiguo":"")+(selected===v?" seleccionado":"");b.textContent=n;b.disabled=d>today;b.onclick=()=>choose(v);root.appendChild(b)}}
-document.getElementById("histMesAnterior").onclick=()=>{shown=new Date(shown.getFullYear(),shown.getMonth()-1,1);draw()};
-document.getElementById("histMesSiguiente").onclick=()=>{shown=new Date(shown.getFullYear(),shown.getMonth()+1,1);draw()};
-draw();
+  const root = document.getElementById("histCalendario");
+  if (!root) return;
+  const title = document.getElementById("histMesTitulo");
+  const out = document.getElementById("historialResultado");
+  const msg = document.getElementById("mensajeHistorial");
+  let shown = new Date();
+  let selected = "";
+  const pad = n => String(n).padStart(2, "0");
+  const iso = d => d.getFullYear() + "-" + pad(d.getMonth()+1) + "-" + pad(d.getDate());
+
+  function table(heads) {
+    const wrap = document.createElement("div");
+    wrap.className = "tabla-scroll";
+    const t = document.createElement("table");
+    const thead = document.createElement("thead");
+    const trh = document.createElement("tr");
+    heads.forEach(label => {
+      const th = document.createElement("th");
+      th.textContent = label;
+      trh.appendChild(th);
+    });
+    thead.appendChild(trh);
+    t.appendChild(thead);
+    const tbody = document.createElement("tbody");
+    for (let i = 0; i < 4; i++) {
+      const tr = document.createElement("tr");
+      heads.forEach(() => {
+        const td = document.createElement("td");
+        td.innerHTML = "&nbsp;";
+        td.style.height = "34px";
+        tr.appendChild(td);
+      });
+      tbody.appendChild(tr);
+    }
+    t.appendChild(tbody);
+    wrap.appendChild(t);
+    out.appendChild(wrap);
+  }
+
+  function choose(value) {
+    selected = value;
+    draw();
+    out.replaceChildren();
+    msg.textContent = "";
+    msg.className = "mensaje oculto";
+    const today = new Date();
+    today.setHours(0,0,0,0);
+    const date = new Date(value + "T00:00:00");
+    const age = Math.floor((today - date) / 86400000);
+    if (age > 30) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.textContent = "Descargar inventario";
+      button.addEventListener("click", () => {
+        msg.textContent = "El enlace del archivo en Google Drive se conectará en el siguiente paso.";
+        msg.className = "mensaje";
+      });
+      out.appendChild(button);
+      return;
+    }
+    const hA = document.createElement("h4");
+    hA.textContent = "Tabla A · Detalle por producto";
+    out.appendChild(hA);
+    table(["Fecha", "Producto", "Cantidad", "Precio unitario", "Total"]);
+    const hB = document.createElement("h4");
+    hB.textContent = "Tabla B · Resumen por precio";
+    out.appendChild(hB);
+    table(["Precio", "Cantidad total", "Importe"]);
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = "Descargar inventario";
+    button.addEventListener("click", () => {
+      msg.textContent = "La descarga del inventario se conectará en el siguiente paso.";
+      msg.className = "mensaje";
+    });
+    out.appendChild(button);
+  }
+
+  function draw() {
+    root.replaceChildren();
+    title.textContent = shown.toLocaleDateString("es-MX", {month:"long", year:"numeric"});
+    ["L","M","X","J","V","S","D"].forEach(day => {
+      const label = document.createElement("div");
+      label.className = "nota";
+      label.style.textAlign = "center";
+      label.textContent = day;
+      root.appendChild(label);
+    });
+    const first = new Date(shown.getFullYear(), shown.getMonth(), 1);
+    const offset = (first.getDay()+6)%7;
+    for (let i=0; i<offset; i++) root.appendChild(document.createElement("span"));
+    const total = new Date(shown.getFullYear(), shown.getMonth()+1, 0).getDate();
+    const today = new Date();
+    today.setHours(0,0,0,0);
+    for (let n=1; n<=total; n++) {
+      const date = new Date(shown.getFullYear(), shown.getMonth(), n);
+      const value = iso(date);
+      const age = Math.floor((today-date)/86400000);
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "calendario-dia" + (age>30 ? " antiguo" : "") + (selected===value ? " seleccionado" : "");
+      button.textContent = n;
+      button.disabled = date > today;
+      button.setAttribute("aria-label", value + (age>30 ? ", inventario archivado" : ""));
+      button.addEventListener("click", () => choose(value));
+      root.appendChild(button);
+    }
+  }
+
+  document.getElementById("histMesAnterior").addEventListener("click", () => {
+    shown = new Date(shown.getFullYear(), shown.getMonth()-1, 1);
+    draw();
+  });
+  document.getElementById("histMesSiguiente").addEventListener("click", () => {
+    const next = new Date(shown.getFullYear(), shown.getMonth()+1, 1);
+    const now = new Date();
+    if (next.getFullYear() < now.getFullYear() || (next.getFullYear() === now.getFullYear() && next.getMonth() <= now.getMonth())) {
+      shown = next;
+      draw();
+    }
+  });
+  draw();
 })();
