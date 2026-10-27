@@ -148,6 +148,17 @@
     .boton-editar-foto:hover { background: #f3e8d8; }
     .foto-detalle { width: 84px; height: 84px; flex: 0 0 84px; border-radius: 10px; border: 1px solid #e7ded2; background: #f5eee5; display: grid; place-items: center; overflow: hidden; color: #78716c; font-size: 12px; }
     .foto-detalle img { width: 100%; height: 100%; object-fit: cover; }
+    .menu-locales-wrap { position: relative; }
+    .boton-menu-locales { width: 42px; height: 42px; padding: 0; display: inline-grid; place-items: center; font-size: 25px; line-height: 1; background: #fff; color: #713f12; border: 1px solid #e7ded2; }
+    .menu-locales { position: absolute; top: 48px; right: 0; z-index: 10; width: 210px; padding: 5px; background: #fff; border: 1px solid #e7ded2; border-radius: 10px; box-shadow: 0 8px 24px #0002; }
+    .menu-locales button { display: block; width: 100%; text-align: left; background: #fff; color: #292524; border-radius: 7px; }
+    .menu-locales button:hover { background: #f5eee5; }
+    .panel-local-admin { margin-top: 16px; }
+    .zona-foto-local { border: 1px dashed #b9a18a; border-radius: 10px; background: #faf7f2; padding: 22px 14px; text-align: center; color: #704629; }
+    .estado-respaldo { border-radius: 9px; background: #f5eee5; padding: 13px; margin: 12px 0; }
+    .lista-respaldo { display: grid; gap: 12px; border: 1px solid #e7ded2; border-radius: 10px; padding: 14px; margin: 14px 0; }
+    .lista-respaldo label { display: flex; gap: 9px; align-items: flex-start; }
+    .boton-peligro { background: #991b1b; }
 
     .barra {
       display: flex;
@@ -244,20 +255,80 @@
     <!-- SELECCIÓN DE PANADERÍA -->
     <section id="pantallaPanaderias" class="oculto">
       <div class="panel">
-        <div class="barra">
-          <div>
-            <h2>Selecciona una panadería</h2>
-            <p id="saludoUsuario"></p>
+        <div id="panelListaPanaderias">
+          <div class="barra">
+            <div>
+              <h2>Selecciona una panadería</h2>
+              <p id="saludoUsuario"></p>
+            </div>
+            <div class="barra" style="justify-content:flex-end;gap:8px">
+              <div id="menuLocalesWrap" class="menu-locales-wrap oculto">
+                <button id="botonMenuLocales" class="boton-menu-locales" type="button" aria-label="Opciones de locales" aria-haspopup="true" aria-expanded="false">⋮</button>
+                <div id="menuLocales" class="menu-locales oculto" role="menu">
+                  <button id="opcionCrearLocal" type="button" role="menuitem">＋ Crear local</button>
+                  <button id="opcionEliminarLocal" type="button" role="menuitem">▱ Eliminar local</button>
+                </div>
+              </div>
+              <button id="botonCerrarSesion" class="secundario" type="button">Cerrar sesión</button>
+            </div>
           </div>
-
-          <button id="botonCerrarSesion" class="secundario" type="button">
-            Cerrar sesión
-          </button>
+          <div id="mensajePanaderias" class="mensaje oculto" role="alert"></div>
+          <div id="listaPanaderias" class="panaderias"></div>
         </div>
 
-        <div id="mensajePanaderias" class="mensaje oculto" role="alert"></div>
+        <section id="pantallaCrearLocal" class="panel panel-local-admin oculto" aria-labelledby="tituloCrearLocal">
+          <div class="barra">
+            <h2 id="tituloCrearLocal">Agregar local</h2>
+            <button id="volverListaDesdeCrear" class="secundario" type="button">Volver a locales</button>
+          </div>
+          <p class="nota">Registra una nueva panadería. Puedes copiar la configuración de otro local y agregar una foto ahora o más adelante desde el lápiz de su tarjeta.</p>
+          <form id="formCrearLocal">
+            <div class="campo">
+              <label for="nuevoNombreLocal">Nombre del local</label>
+              <input id="nuevoNombreLocal" maxlength="120" placeholder="Escribe el nombre del local" required>
+            </div>
+            <div class="campo">
+              <label for="localCopiarDatos">Copiar datos de otro local (opcional)</label>
+              <select id="localCopiarDatos">
+                <option value="">No copiar datos</option>
+              </select>
+              <p class="nota">Se copiará la configuración del local elegido. No se copiarán inventarios ni cierres históricos.</p>
+            </div>
+            <div class="campo">
+              <label>Foto del local</label>
+              <div class="zona-foto-local">
+                <strong>＋ Agregar foto</strong>
+                <p class="nota">La carga y el guardado de fotos se conectarán en el siguiente paso. También podrás cambiarla desde el lápiz en la tarjeta del local.</p>
+              </div>
+            </div>
+            <div id="mensajeCrearLocal" class="mensaje oculto" role="status"></div>
+            <button id="botonCrearLocal" type="submit" class="ancho">Crear local</button>
+          </form>
+        </section>
 
-        <div id="listaPanaderias" class="panaderias"></div>
+        <section id="pantallaEliminarLocal" class="panel panel-local-admin oculto" aria-labelledby="tituloEliminarLocal">
+          <div class="barra">
+            <h2 id="tituloEliminarLocal">Eliminar local</h2>
+            <button id="volverListaDesdeEliminar" class="secundario" type="button">Volver a locales</button>
+          </div>
+          <p>Selecciona el local que deseas retirar. Antes de permitir la eliminación, sus productos, historial y archivos de los últimos 30 días deberán quedar respaldados en Google Drive.</p>
+          <div class="campo">
+            <label for="localAEliminar">Local que deseas eliminar</label>
+            <select id="localAEliminar" required>
+              <option value="">Selecciona un local</option>
+            </select>
+          </div>
+          <h3>Respaldo obligatorio en Google Drive</h3>
+          <div class="lista-respaldo">
+            <label><input type="checkbox" disabled> <span><strong>Lista de productos</strong><br><span class="nota">Productos, nombres, precios y datos asociados al local.</span></span></label>
+            <label><input type="checkbox" disabled> <span><strong>Historial de inventarios</strong><br><span class="nota">Registros y cierres históricos que deben conservarse.</span></span></label>
+            <label><input type="checkbox" disabled> <span><strong>Archivos de los últimos 30 días</strong><br><span class="nota">Archivos asociados al local, con verificación de que se hayan guardado correctamente.</span></span></label>
+          </div>
+          <div id="estadoRespaldoLocal" class="estado-respaldo" role="status"><strong>Estado del respaldo:</strong><p class="nota">Pendiente. La conexión con Google Drive aún no está implementada. La eliminación permanece bloqueada.</p></div>
+          <div id="mensajeEliminarLocal" class="mensaje oculto" role="alert"></div>
+          <button id="botonEliminarLocal" class="ancho boton-peligro" type="button" disabled>Eliminar local</button>
+          <p class="nota">Si falla el respaldo o no se puede verificar, el local no se eliminará. Esta protección se habilitará cuando el respaldo real en Drive esté conectado.</p>
+        </section>
       </div>
     </section>
 
@@ -426,7 +497,76 @@
         (perfilActual.nombre ? ": " + perfilActual.nombre : "");
 
       dibujarPanaderias();
+      configurarMenuLocales();
+      mostrarVistaLocales("lista");
+      document.getElementById("menuLocalesWrap").classList.toggle("oculto", !esAdministrador());
       mostrarPantalla(pantallaPanaderias);
+    }
+
+    function mostrarVistaLocales(vista) {
+      document.getElementById("panelListaPanaderias").classList.toggle("oculto", vista !== "lista");
+      document.getElementById("pantallaCrearLocal").classList.toggle("oculto", vista !== "crear");
+      document.getElementById("pantallaEliminarLocal").classList.toggle("oculto", vista !== "eliminar");
+      document.getElementById("menuLocales").classList.add("oculto");
+      document.getElementById("botonMenuLocales").setAttribute("aria-expanded", "false");
+      if (vista === "crear") prepararOpcionesCopiarLocal();
+      if (vista === "eliminar") prepararOpcionesEliminarLocal();
+    }
+
+    function configurarMenuLocales() {
+      const wrap = document.getElementById("menuLocalesWrap");
+      const menu = document.getElementById("menuLocales");
+      const boton = document.getElementById("botonMenuLocales");
+      wrap.classList.toggle("oculto", !esAdministrador());
+      boton.onclick = () => {
+        if (!esAdministrador()) return;
+        const abrir = menu.classList.contains("oculto");
+        menu.classList.toggle("oculto", !abrir);
+        boton.setAttribute("aria-expanded", abrir ? "true" : "false");
+      };
+      document.getElementById("opcionCrearLocal").onclick = () => {
+        if (!esAdministrador()) return;
+        document.getElementById("formCrearLocal").reset();
+        ocultarMensaje(document.getElementById("mensajeCrearLocal"));
+        mostrarVistaLocales("crear");
+      };
+      document.getElementById("opcionEliminarLocal").onclick = () => {
+        if (!esAdministrador()) return;
+        ocultarMensaje(document.getElementById("mensajeEliminarLocal"));
+        mostrarVistaLocales("eliminar");
+      };
+      document.getElementById("volverListaDesdeCrear").onclick = () => mostrarVistaLocales("lista");
+      document.getElementById("volverListaDesdeEliminar").onclick = () => mostrarVistaLocales("lista");
+      document.getElementById("formCrearLocal").onsubmit = (evento) => {
+        evento.preventDefault();
+        if (!esAdministrador()) return;
+        mostrarMensaje(document.getElementById("mensajeCrearLocal"),
+          "La creación real del local y la entrada directa al nuevo local se conectarán en el siguiente paso. No se guardó ningún cambio.",
+          "error");
+      };
+      document.getElementById("botonEliminarLocal").onclick = () => {
+        if (!esAdministrador()) return;
+        mostrarMensaje(document.getElementById("mensajeEliminarLocal"),
+          "La eliminación está bloqueada hasta que Google Drive esté conectado y se verifique el respaldo real de productos, historial y archivos de los últimos 30 días.",
+          "error");
+      };
+    }
+
+    function prepararOpcionesCopiarLocal() {
+      const select = document.getElementById("localCopiarDatos");
+      select.replaceChildren(new Option("No copiar datos", ""));
+      panaderiasAutorizadas.forEach(local => {
+        if (local.activa === false) return;
+        select.add(new Option(local.nombre, String(local.id)));
+      });
+    }
+
+    function prepararOpcionesEliminarLocal() {
+      const select = document.getElementById("localAEliminar");
+      select.replaceChildren(new Option("Selecciona un local", ""));
+      panaderiasAutorizadas.forEach(local => {
+        select.add(new Option(local.nombre, String(local.id)));
+      });
     }
 
     function dibujarPanaderias() {
@@ -678,6 +818,8 @@
 
         document.getElementById("formLogin").reset();
         document.getElementById("listaPanaderias").replaceChildren();
+        document.getElementById("menuLocalesWrap").classList.add("oculto");
+        mostrarVistaLocales("lista");
         mostrarPantalla(pantallaLogin);
       } catch (error) {
         alert(error.message || "No se pudo cerrar la sesión.");
