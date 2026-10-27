@@ -123,7 +123,9 @@
       text-align: center;
     }
 
-    .panel-seccion { margin-top: 14px; }
+    /* Solo una sección puede mostrarse a la vez. */
+    .panel-seccion { display: none !important; margin-top: 14px; }
+    .panel-seccion.seccion-activa { display: block !important; }
 
     .boton-panaderia {
       min-height: 90px;
@@ -467,10 +469,19 @@
     }
 
     function mostrarSeccion(idSeccion) {
-      ["panelRegistro", "panelTablas", "panelProductos", "panelHistorial", "panelAdministracion"]
-        .forEach(id => document.getElementById(id)?.classList.toggle("oculto", id !== idSeccion));
+      const secciones = ["panelRegistro", "panelTablas", "panelProductos", "panelHistorial", "panelAdministracion"];
+      secciones.forEach(id => {
+        const panel = document.getElementById(id);
+        if (!panel) return;
+        const activa = id === idSeccion;
+        panel.classList.toggle("seccion-activa", activa);
+        panel.classList.toggle("oculto", !activa);
+        panel.setAttribute("aria-hidden", activa ? "false" : "true");
+      });
       document.querySelectorAll(".boton-seccion").forEach(boton => {
-        boton.classList.toggle("activo", boton.dataset.seccion === idSeccion);
+        const activo = boton.dataset.seccion === idSeccion;
+        boton.classList.toggle("activo", activo);
+        boton.setAttribute("aria-pressed", activo ? "true" : "false");
       });
     }
 
