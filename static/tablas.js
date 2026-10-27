@@ -1,40 +1,8 @@
 (function(){
- const panel=document.getElementById("panelTablas"); if(!panel)return;
- let token=null,bakery=null;
- const desde=document.getElementById("histDesde"),hasta=document.getElementById("histHasta");
- const msg=document.getElementById("mensajeTablas"),detalle=document.getElementById("tablaDetalle"),resumen=document.getElementById("tablaResumen");
- const now=new Date(), today=new Date(now.getTime()-now.getTimezoneOffset()*60000).toISOString().slice(0,10);
- desde.value=today; hasta.value=today;
- window.iniciarTablasHistorial=function(sesion,panaderia){token=sesion.access_token;bakery=panaderia;};
- async function api(url){const r=await fetch(url,{headers:{Authorization:"Bearer "+token,Accept:"application/json"}});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.detail||"No se pudo consultar el historial.");return d;}
- function cell(tr,text,tag="td"){const el=document.createElement(tag);el.textContent=text;tr.appendChild(el);}
- function tableDraw(target,heads,rows){target.replaceChildren();const t=document.createElement("table");t.style.width="100%";t.style.borderCollapse="collapse";const thead=document.createElement("thead"),hr=document.createElement("tr");heads.forEach(h=>cell(hr,h,"th"));thead.append(hr);t.append(thead);const tb=document.createElement("tbody");rows.forEach(row=>{const tr=document.createElement("tr");row.forEach(v=>cell(tr,String(v)));tb.append(tr);});t.append(tb);target.append(t);}
- function money(n){return "$"+Number(n).toFixed(2);}
- document.getElementById("botonDescargarExcel").addEventListener("click",async()=>{
-  try{
-   if(!token||!bakery)throw new Error("Selecciona una panadería primero.");
-   const url="/api/historial/excel?panaderia_id="+bakery.id+"&desde="+desde.value+"&hasta="+hasta.value;
-   const r=await fetch(url,{headers:{Authorization:"Bearer "+token}});
-   if(!r.ok){const d=await r.json().catch(()=>({}));throw new Error(d.detail||"No se pudo descargar el Excel.");}
-   const blob=await r.blob();const objectUrl=URL.createObjectURL(blob);const a=document.createElement("a");a.href=objectUrl;a.download="historial_"+bakery.id+"_"+desde.value+"_"+hasta.value+".xlsx";document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(objectUrl);
-   msg.textContent="Excel descargado.";msg.className="mensaje exito";
-  }catch(e){msg.textContent=e.message;msg.className="mensaje error";}
- });
- document.getElementById("botonConsultarTablas").addEventListener("click",async()=>{
-  try{
-   if(!token||!bakery)throw new Error("Selecciona una panadería primero.");
-   const d=await api("/api/historial?panaderia_id="+bakery.id+"&desde="+desde.value+"&hasta="+hasta.value);
-   const rows=[],sum=new Map();let grand=0;
-   (d.historial||[]).forEach(day=>(day.lineas||[]).forEach(x=>{
-    const price=Number(x.precio_unitario),qty=Number(x.cantidad),total=Number(x.total);grand+=total;
-    rows.push([day.cierre.fecha,x.producto,qty,money(price),money(total)]);
-    const key=price.toFixed(2),old=sum.get(key)||{qty:0,total:0};old.qty+=qty;old.total+=total;sum.set(key,old);
-   }));
-   tableDraw(detalle,["Fecha","Producto","Cantidad","Precio unitario","Total"],rows);
-   const summary=[...sum.entries()].sort((a,b)=>Number(a[0])-Number(b[0])).map(([p,v])=>[money(p),v.qty,money(v.total)]);
-   summary.push(["TOTAL GENERAL",summary.reduce((n,x)=>n+Number(x[1]),0),money(grand)]);
-   tableDraw(resumen,["Precio","Cantidad total","Importe"],summary);
-   msg.textContent="Consulta actualizada.";msg.className="mensaje exito";
-  }catch(e){msg.textContent=e.message;msg.className="mensaje error";}
- });
+const panel=document.getElementById("panelTablas");if(!panel)return;
+const detalle=document.getElementById("tablaDetalle"),resumen=document.getElementById("tablaResumen"),msg=document.getElementById("mensajeTablas");
+function draw(target,heads){const w=document.createElement("div");w.className="tabla-scroll";const t=document.createElement("table"),h=document.createElement("tr");heads.forEach(x=>{const e=document.createElement("th");e.textContent=x;h.appendChild(e)});const hd=document.createElement("thead");hd.appendChild(h);t.appendChild(hd);const body=document.createElement("tbody"),r=document.createElement("tr"),c=document.createElement("td");c.colSpan=heads.length;c.textContent="Los datos del día anterior aparecerán aquí.";r.appendChild(c);body.appendChild(r);t.appendChild(body);w.appendChild(t);target.replaceChildren(w)}
+draw(detalle,["Fecha","Producto","Cantidad","Precio unitario","Total"]);draw(resumen,["Precio","Cantidad total","Importe"]);
+document.getElementById("botonDescargarExcel").addEventListener("click",()=>{msg.textContent="La descarga de las tablas se conectará en el siguiente paso.";msg.className="mensaje"});
+window.iniciarTablasHistorial=function(sesion,panaderia){const f=document.getElementById("fechaTablas");if(f)f.textContent="Resultado del día anterior al último cierre registrado.";};
 })();
