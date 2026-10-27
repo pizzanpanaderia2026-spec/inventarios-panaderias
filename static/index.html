@@ -84,6 +84,47 @@
       gap: 14px;
     }
 
+    .menu-secciones {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+      margin: 22px 0;
+    }
+
+    .boton-seccion {
+      min-height: 58px;
+      font-weight: 700;
+      background: #713f12;
+    }
+
+    .boton-seccion.activo {
+      outline: 3px solid #d6b48a;
+      outline-offset: 2px;
+    }
+
+    .encabezado-panaderia {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .foto-panaderia {
+      width: 64px;
+      height: 64px;
+      flex: 0 0 64px;
+      border-radius: 10px;
+      border: 1px solid #e7ded2;
+      background: #f5eee5;
+      display: grid;
+      place-items: center;
+      color: #78716c;
+      font-size: 11px;
+      text-align: center;
+    }
+
+    .panel-seccion { margin-top: 14px; }
+
     .boton-panaderia {
       min-height: 90px;
       font-size: 18px;
@@ -126,6 +167,8 @@
     @media (max-width: 500px) {
       header h1 { font-size: 21px; }
       .panel { padding: 15px; }
+      .menu-secciones { grid-template-columns: 1fr 1fr; }
+      .boton-seccion { padding: 12px 8px; font-size: 14px; }
     }
   </style>
 </head>
@@ -203,22 +246,34 @@
     <!-- PANTALLA DE LA PANADERÍA SELECCIONADA -->
     <section id="pantallaDetalle" class="oculto">
       <div class="panel">
-        <div class="barra">
-          <h2 id="nombrePanaderia">Panadería</h2>
-          <button id="botonVolver" class="secundario" type="button">
-            Volver
-          </button>
+        <div class="encabezado-panaderia">
+          <div>
+            <h2 id="nombrePanaderia">Panadería</h2>
+            <p id="detalleUsuario"></p>
+          </div>
+          <div class="foto-panaderia" aria-label="Espacio reservado para la foto de la panadería">Foto</div>
         </div>
-
-        <p id="detalleUsuario"></p>
+        <div class="barra">
+          <span></span>
+          <button id="botonVolver" class="secundario" type="button">Volver</button>
+        </div>
 
         <div class="mensaje exito">
           Has iniciado sesión y seleccionado una panadería autorizada.
         </div>
 
-        <section id="panelTablas" class="panel"><h3>Tablas e historial</h3><p class="nota">Consulta los registros guardados por fecha; el resumen agrupa las cantidades por precio.</p><div class="campo"><label for="histDesde">Desde</label><input id="histDesde" type="date"></div><div class="campo"><label for="histHasta">Hasta</label><input id="histHasta" type="date"></div><button id="botonConsultarTablas" type="button">Consultar tablas</button> <button id="botonDescargarExcel" class="secundario" type="button">Descargar Excel</button><div id="mensajeTablas" class="mensaje oculto" role="status"></div><h4>Tabla A · Detalle por producto</h4><div id="tablaDetalle"></div><h4>Tabla B · Resumen por precio</h4><div id="tablaResumen"></div></section>
-        <section id="panelRegistro" class="panel"><h3>Registro diario</h3><div class="campo"><label for="fechaRegistro">Fecha</label><input id="fechaRegistro" type="date"></div><div class="barra"><strong id="estadoRegistro">Día abierto</strong></div><div id="mensajeRegistro" class="mensaje oculto" role="alert"></div><div id="filasRegistro"></div><button id="botonGuardarRegistro" type="button">Guardar registro</button> <button id="botonCerrarDia" type="button">Cerrar día</button> <button id="botonReabrirDia" class="secundario" type="button">Reabrir día</button></section>
-        <h3>Catálogo de productos</h3>
+        <nav id="menuSecciones" class="menu-secciones" aria-label="Secciones de la panadería">
+          <button class="boton-seccion" type="button" data-seccion="panelRegistro">Registro</button>
+          <button class="boton-seccion" type="button" data-seccion="panelTablas">Tablas</button>
+          <button class="boton-seccion" type="button" data-seccion="panelProductos">Agregar productos</button>
+          <button class="boton-seccion" type="button" data-seccion="panelHistorial">Historial de inventarios</button>
+          <button id="botonAdministracion" class="boton-seccion oculto" type="button" data-seccion="panelAdministracion">Administración</button>
+        </nav>
+
+        <section id="panelTablas" class="panel panel-seccion oculto"><h3>Tablas</h3><p class="nota">Consulta los registros guardados por fecha; el resumen agrupa las cantidades por precio.</p><div class="campo"><label for="histDesde">Desde</label><input id="histDesde" type="date"></div><div class="campo"><label for="histHasta">Hasta</label><input id="histHasta" type="date"></div><button id="botonConsultarTablas" type="button">Consultar tablas</button> <button id="botonDescargarExcel" class="secundario" type="button">Descargar Excel</button><div id="mensajeTablas" class="mensaje oculto" role="status"></div><h4>Tabla A · Detalle por producto</h4><div id="tablaDetalle"></div><h4>Tabla B · Resumen por precio</h4><div id="tablaResumen"></div></section>
+        <section id="panelRegistro" class="panel panel-seccion oculto"><h3>Registro diario</h3><div class="campo"><label for="fechaRegistro">Fecha</label><input id="fechaRegistro" type="date"></div><div class="barra"><strong id="estadoRegistro">Día abierto</strong></div><div id="mensajeRegistro" class="mensaje oculto" role="alert"></div><div id="filasRegistro"></div><button id="botonGuardarRegistro" type="button">Guardar registro</button> <button id="botonCerrarDia" type="button">Cerrar día</button> <button id="botonReabrirDia" class="secundario" type="button">Reabrir día</button></section>
+        <section id="panelProductos" class="panel panel-seccion oculto">
+        <h3>Agregar productos</h3>
         <p class="nota">Agrega productos y su precio actual para esta panadería.</p>
         <div id="mensajeProductos" class="mensaje oculto" role="alert"></div>
         <form id="formProducto">
@@ -230,6 +285,17 @@
         <div class="barra"><h3>Productos registrados</h3><button id="botonActualizarProductos" class="secundario" type="button">Actualizar</button></div>
         <div id="listaProductos"></div>
         <div class="panel"><p>Descarga cuando lo necesites una hoja con los productos registrados y sus precios por fecha. No se guarda automáticamente.</p><button id="botonListaPrecios" class="secundario" type="button">Descargar lista de productos (Excel)</button><div id="mensajeListaPrecios" class="mensaje oculto" role="status"></div></div>
+        </section>
+
+        <section id="panelHistorial" class="panel panel-seccion oculto">
+          <h3>Historial de inventarios</h3>
+          <p>Consulta inventarios anteriores desde la sección Tablas. El calendario y las descargas del historial se conectarán en el siguiente paso.</p>
+        </section>
+
+        <section id="panelAdministracion" class="panel panel-seccion oculto">
+          <h3>Administración</h3>
+          <p>En el siguiente paso agregaremos aquí la creación y asignación de cuentas de encargados. Esta pantalla es únicamente la estructura visual por ahora.</p>
+        </section>
 
         <button id="botonCerrarSesionDetalle" class="secundario" type="button">
           Cerrar sesión
@@ -395,6 +461,28 @@
     });
 
 
+    function esAdministrador() {
+      const rol = String(
+        perfilActual?.rol || perfilActual?.tipo_usuario || perfilActual?.tipo || ""
+      ).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+      return rol.includes("admin");
+    }
+
+    function mostrarSeccion(idSeccion) {
+      ["panelRegistro", "panelTablas", "panelProductos", "panelHistorial", "panelAdministracion"]
+        .forEach(id => document.getElementById(id)?.classList.toggle("oculto", id !== idSeccion));
+      document.querySelectorAll(".boton-seccion").forEach(boton => {
+        boton.classList.toggle("activo", boton.dataset.seccion === idSeccion);
+      });
+    }
+
+    document.querySelectorAll(".boton-seccion").forEach(boton => {
+      boton.addEventListener("click", () => {
+        if (boton.id === "botonAdministracion" && !esAdministrador()) return;
+        mostrarSeccion(boton.dataset.seccion);
+      });
+    });
+
     function abrirPanaderia(panaderia) {
       // Solo se permite seleccionar una panadería recibida
       // por el backend para la cuenta autenticada.
@@ -412,6 +500,8 @@
 
       document.getElementById("nombrePanaderia").textContent =
         autorizada.nombre;
+      document.getElementById("botonAdministracion").classList.toggle("oculto", !esAdministrador());
+      mostrarSeccion("panelRegistro");
 
       document.getElementById("detalleUsuario").textContent =
         "Cuenta: " + (usuarioActual.email || "Usuario autenticado");
