@@ -28,7 +28,7 @@
     header p { margin: 0; }
 
     main {
-      width: min(100% - 24px, 800px);
+      width: min(100% - 24px, 1200px);
       margin: 24px auto;
     }
 
@@ -286,7 +286,7 @@
         </nav>
 
         <section id="panelTablas" class="panel panel-seccion oculto">
-          <h3>Tablas del día anterior</h3><p class="nota" id="fechaTablas">Resultado del último día cerrado.</p>
+          <h3>Tablas del cierre del día anterior</h3><p class="nota" id="fechaTablas">Aquí se mostrarán los datos del último cierre del día anterior.</p>
           <h4>Tabla A · Detalle por producto</h4><div id="tablaDetalle"></div>
           <h4>Tabla B · Resumen por precio</h4><div id="tablaResumen"></div>
           <button id="botonDescargarExcel" type="button">Descargar tablas del día</button>
@@ -310,7 +310,7 @@
 
         <section id="panelHistorial" class="panel panel-seccion oculto">
           <h3>Historial de inventarios</h3>
-          <p class="nota">Selecciona una fecha. Los inventarios de los últimos 30 días se mostrarán aquí.</p>
+          <p class="nota">Selecciona una fecha del calendario. Las fechas recientes muestran las tablas; las anteriores quedan disponibles para descargar su archivo.</p>
           <div class="historial-calendario">
             <div class="barra"><button id="histMesAnterior" class="secundario" type="button" aria-label="Mes anterior">‹</button><strong id="histMesTitulo"></strong><button id="histMesSiguiente" class="secundario" type="button" aria-label="Mes siguiente">›</button></div>
             <div id="histCalendario" class="calendario-grid"></div>
@@ -336,8 +336,8 @@
 
   <script src="/static/productos.js"></script>
   <script src="/static/registro.js"></script>
-  <script src="/static/tablas.js"></script>
-  <script src="/static/historial-inventarios.js"></script>
+  <script src="/static/tablas.js?v=2"></script>
+  <script src="/static/historial-inventarios.js?v=2"></script>
   <script>
     // CONFIGURACIÓN DE SUPABASE
     const SUPABASE_URL = "https://fjthttvprmjrfmmsnxer.supabase.co";
