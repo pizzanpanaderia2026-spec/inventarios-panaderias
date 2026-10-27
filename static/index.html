@@ -200,6 +200,21 @@
       .boton-seccion { padding: 12px 8px; font-size: 14px; }
     }
   </style>
+<style>
+.admin-resumen{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:14px 0}
+.admin-metrica{background:#f1efed;border-radius:9px;padding:12px;color:#4a4a4a}
+.admin-metrica span{display:block;font-size:.82rem}.admin-metrica strong{display:block;font-size:1.45rem;color:#222;margin-top:4px}
+.admin-acciones{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}
+.admin-boton-compacto{background:#222;color:#fff;border:0;border-radius:5px;padding:7px 12px;font-size:.88rem;min-height:32px}
+.admin-usuario{border:1px solid #e3dfdc;border-radius:9px;padding:12px;margin:10px 0}
+.admin-usuario-acciones{display:flex;gap:7px;flex-wrap:wrap;margin-top:9px}
+.admin-usuario-acciones button{padding:6px 11px;font-size:.85rem}
+.admin-locales{border:1px solid #ddd;border-radius:8px;padding:12px;margin:12px 0}
+.admin-locales label{display:flex;gap:8px;margin:8px 0;align-items:center}
+.admin-confirmacion{border:1px solid #b42318;border-radius:8px;padding:12px;margin:10px 0}
+.admin-confirmacion button{margin-right:6px}
+@media(max-width:480px){.admin-resumen{gap:7px}.admin-metrica{padding:10px}.admin-acciones{gap:6px}}
+</style>
 </head>
 
 <body>
@@ -394,8 +409,36 @@
           <div id="mensajeHistorial" class="mensaje oculto" role="status"></div>
         </section>
         <section id="panelAdministracion" class="panel panel-seccion oculto">
-          <h3>Administración</h3>
-          <p>En el siguiente paso agregaremos aquí la creación y asignación de cuentas de encargados. Esta pantalla es únicamente la estructura visual por ahora.</p>
+          <div class="admin-encabezado"><h3>Administración</h3></div>
+          <div class="admin-resumen">
+            <div class="admin-metrica"><span>Cuentas visibles</span><strong id="adminTotalUsuarios">—</strong></div>
+            <div class="admin-metrica"><span>Locales</span><strong id="adminTotalLocales">—</strong></div>
+          </div>
+          <div class="admin-acciones">
+            <button id="adminVerUsuarios" class="admin-boton-compacto" type="button">Ver usuarios</button>
+            <button id="adminAgregarUsuario" class="admin-boton-compacto" type="button">Agregar usuario</button>
+          </div>
+          <div id="adminMensaje" class="mensaje oculto" role="status"></div>
+          <div id="adminVistaUsuarios" class="oculto">
+            <div class="barra"><h4>Usuarios</h4><button id="adminVolverInicio" class="secundario" type="button">Volver</button></div>
+            <div id="adminListaUsuarios"></div>
+          </div>
+          <form id="adminFormularioUsuario" class="oculto">
+            <h4 id="adminTituloFormulario">Agregar usuario</h4>
+            <div class="campo"><label for="adminNombre">Nombre</label><input id="adminNombre" maxlength="120" required></div>
+            <div class="campo"><label for="adminUsername">Usuario</label><input id="adminUsername" maxlength="60" autocomplete="off" required></div>
+            <div class="campo"><label for="adminPassword">Contraseña</label><input id="adminPassword" type="password" minlength="8" autocomplete="new-password"><p class="nota" id="adminAyudaPassword">Usa una contraseña de al menos 8 caracteres.</p></div>
+            <fieldset class="admin-locales"><legend>Locales autorizados (mínimo uno)</legend><div id="adminOpcionesLocales"></div></fieldset>
+            <button id="adminGuardarUsuario" type="submit">Crear usuario</button>
+            <button id="adminCancelarUsuario" class="secundario" type="button">Cancelar</button>
+          </form>
+          <form id="adminFormularioNombre" class="oculto">
+            <h4>Editar administradora</h4>
+            <div class="campo"><label for="adminNombrePrincipal">Nombre visible</label><input id="adminNombrePrincipal" maxlength="120" required></div>
+            <p class="nota">El correo, la contraseña y los permisos no se editan aquí.</p>
+            <button type="submit">Guardar nombre</button><button id="adminCancelarNombre" class="secundario" type="button">Cancelar</button>
+          </form>
+          <div id="adminConfirmarEliminar" class="admin-confirmacion oculto"><p><strong>¿En serio quieres eliminar esta cuenta?</strong></p><button id="adminAceptarEliminar" class="boton-peligro" type="button">Aceptar</button><button id="adminCancelarEliminar" class="secundario" type="button">Cancelar</button></div>
         </section>
 
         <button id="botonCerrarSesionDetalle" class="secundario" type="button">
