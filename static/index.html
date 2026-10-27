@@ -462,10 +462,8 @@
 
 
     function esAdministrador() {
-      const rol = String(
-        perfilActual?.rol || perfilActual?.tipo_usuario || perfilActual?.tipo || ""
-      ).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-      return rol.includes("admin");
+      const rol = String(perfilActual?.rol || "").toLowerCase();
+      return rol === "admin" && perfilActual?.es_admin_principal === true;
     }
 
     function mostrarSeccion(idSeccion) {
