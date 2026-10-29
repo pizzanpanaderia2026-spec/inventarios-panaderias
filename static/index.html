@@ -379,14 +379,6 @@
           <h4>Tabla A · Detalle por producto</h4><div id="tablaDetalle"></div>
           <h4>Tabla B · Resumen por precio</h4><div id="tablaResumen"></div>
           <button id="botonDescargarExcel" type="button">Descargar tablas del día</button>
-          <div class="panel" style="margin-top:18px">
-            <h4>Resumen de un periodo (últimos 30 días)</h4>
-            <p class="nota">Une los registros de varias fechas para saber cuántas conchas, bolillos u otros productos se registraron en el periodo elegido.</p>
-            <div class="campo"><label for="resumenDesde">Desde</label><input id="resumenDesde" type="date"></div>
-            <div class="campo"><label for="resumenHasta">Hasta</label><input id="resumenHasta" type="date"></div>
-            <button id="botonResumenPeriodo" type="button">Descargar resumen Excel</button>
-            <div id="mensajeResumenPeriodo" class="mensaje oculto" role="status"></div>
-          </div>
           <div id="mensajeTablas" class="mensaje oculto" role="status"></div>
         </section>
         <section id="panelRegistro" class="panel panel-seccion oculto"><h3>Registro diario</h3><div class="campo"><label for="fechaRegistro">Fecha</label><input id="fechaRegistro" type="date"></div><div class="barra"><strong id="estadoRegistro">Día abierto</strong></div><div id="mensajeRegistro" class="mensaje oculto" role="alert"></div><div id="filasRegistro"></div><button id="botonGuardarRegistro" type="button">Guardar registro</button> <button id="botonCerrarDia" type="button">Cerrar día</button> <button id="botonReabrirDia" class="secundario" type="button">Reabrir día</button></section>
@@ -414,6 +406,14 @@
             <p class="nota"><span class="leyenda-reciente"></span> Últimos 30 días <span class="leyenda-antigua"></span> Más de 30 días</p>
           </div>
           <div id="historialResultado" class="historial-resultado"><p class="nota">Selecciona una fecha para ver su inventario.</p></div>
+                    <div class="panel" style="margin-top:18px">
+            <h4>Resumen de un periodo (últimos 30 días)</h4>
+            <p class="nota">Une los registros de varias fechas para saber cuántas conchas, bolillos u otros productos se registraron en el periodo elegido.</p>
+            <div class="campo"><label for="resumenDesde">Desde</label><input id="resumenDesde" type="date"></div>
+            <div class="campo"><label for="resumenHasta">Hasta</label><input id="resumenHasta" type="date"></div>
+            <button id="botonResumenPeriodo" type="button">Descargar resumen Excel</button>
+            <div id="mensajeResumenPeriodo" class="mensaje oculto" role="status"></div>
+          </div>
           <div id="mensajeHistorial" class="mensaje oculto" role="status"></div>
         </section>
         <section id="panelAdministracion" class="panel panel-seccion oculto">
