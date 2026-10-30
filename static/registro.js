@@ -1,73 +1,207 @@
-// Registro diario de cantidades por producto.
+// Registro diario: prototipo de interfaz. No consulta ni modifica el servidor.
 (function () {
   const panel = document.getElementById("panelRegistro");
   if (!panel) return;
-  let token = null, bakery = null, catalogo = [], cierre = null;
+
+  let catalogo = [];
+  let productoElegido = null;
+  let productosRegistro = [];
+  let estadoDia = "abierto";
+
   const fecha = document.getElementById("fechaRegistro");
   const filas = document.getElementById("filasRegistro");
   const mensaje = document.getElementById("mensajeRegistro");
-  const hoy = new Date();
-  fecha.value = new Date(hoy.getTime() - hoy.getTimezoneOffset() * 60000).toISOString().slice(0,10);
+  const buscar = document.getElementById("buscarProductoRegistro");
+  const sugerencias = document.getElementById("sugerenciasProductoRegistro");
+  const elegido = document.getElementById("productoElegidoRegistro");
+  const cantidad = document.getElementById("cantidadProductoRegistro");
 
-  window.iniciarRegistroDiario = async function (sesion, panaderia, productos) {
-    token = sesion.access_token; bakery = panaderia; catalogo = productos || [];
-    await cargar();
+  function fechaLocal(d) {
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return year + "-" + month + "-" + day;
+  }
+
+  function configurarFechas() {
+    const hoy = new Date();
+    const max = fechaLocal(hoy);
+    const minimo = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate() - 2);
+    fecha.max = max;
+    fecha.min = fechaLocal(minimo);
+    if (!fecha.value || fecha.value > max || fecha.value < fecha.min) fecha.value = max;
+  }
+
+  window.iniciarRegistroDiario = function (_sesion, _panaderia, productos) {
+    catalogo = Array.isArray(productos) ? productos : [];
+    configurarFechas();
+    dibujar();
   };
-  async function api(url, options={}) {
-    const r = await fetch(url,{...options,headers:{Authorization:"Bearer "+token,Accept:"application/json",...(options.body?{"Content-Type":"application/json"}:{})}});
-    const d=await r.json().catch(()=>({}));
-    if(!r.ok) throw new Error(d.detail || "No se pudo completar la operación.");
-    return d;
+
+  window.actualizarRegistroCatalogo = async function (productos) {
+    catalogo = Array.isArray(productos) ? productos : [];
+    mostrarSugerencias();
+    return true;
+  };
+
+  function productosDisponibles() {
+    const activos = catalogo.filter(p => p && p.activo !== false);
+    if (activos.length) return activos;
+    // Productos de muestra para que la maqueta pueda apreciarse antes de cargar un catálogo.
+    return [
+      {id:"demo-mini", nombre:"Dona mini", precio:3, activo:true},
+      {id:"demo-glaseada", nombre:"Dona glaseada", precio:5, activo:true},
+      {id:"demo-grande", nombre:"Dona grande", precio:8, activo:true}
+    ];
   }
-  function aviso(t, tipo="error") { mensaje.textContent=t; mensaje.className="mensaje "+tipo; }
-  async function cargar() {
-    if(!token||!bakery||!fecha.value) return;
-    try {
-      const d=await api("/api/registro?panaderia_id="+bakery.id+"&fecha_registro="+fecha.value);
-      cierre=d.cierre;
-      const guardadas=new Map((d.lineas||[]).map(x=>[String(x.producto_id),x]));
-      dibujar(guardadas);
-      const cerrado=cierre && cierre.estado==="cerrado";
-      document.getElementById("botonGuardarRegistro").disabled=!!cerrado;
-      document.getElementById("botonCerrarDia").disabled=!!cerrado;
-      document.getElementById("botonReabrirDia").disabled=!cerrado;
-      document.getElementById("estadoRegistro").textContent=cerrado?"Día cerrado":"Día abierto";
-    } catch(e) { aviso(e.message); filas.replaceChildren(); }
+
+  function aviso(texto, tipo = "exito") {
+    mensaje.textContent = texto;
+    mensaje.className = "mensaje " + tipo;
   }
-  function dibujar(guardadas) {
+
+  function limpiarSeleccion() {
+    productoElegido = null;
+    elegido.classList.add("oculto");
+    buscar.value = "";
+    cantidad.value = "";
+    sugerencias.replaceChildren();
+    sugerencias.classList.add("oculto");
+    buscar.focus();
+  }
+
+  function seleccionarProducto(producto) {
+    productoElegido = producto;
+    document.getElementById("nombreProductoElegido").textContent = producto.nombre;
+    document.getElementById("precioProductoElegido").textContent = "$" + Number(producto.precio).toFixed(2) + " por pieza";
+    elegido.classList.remove("oculto");
+    sugerencias.classList.add("oculto");
+    sugerencias.replaceChildren();
+    cantidad.value = "";
+    cantidad.focus();
+  }
+
+  function mostrarSugerencias() {
+    const consulta = buscar.value.trim().toLocaleLowerCase("es");
+    sugerencias.replaceChildren();
+    if (!consulta) {
+      sugerencias.classList.add("oculto");
+      return;
+    }
+    const coincidencias = productosDisponibles().filter(p =>
+      String(p.nombre || "").toLocaleLowerCase("es").includes(consulta)
+    ).slice(0, 8);
+    if (!coincidencias.length) {
+      const vacio = document.createElement("div");
+      vacio.className = "nota";
+      vacio.style.padding = "12px";
+      vacio.textContent = "No hay coincidencias en el catálogo.";
+      sugerencias.append(vacio);
+    } else {
+      coincidencias.forEach(producto => {
+        const opcion = document.createElement("button");
+        opcion.type = "button";
+        opcion.className = "registro-sugerencia";
+        opcion.setAttribute("role", "option");
+        const nombre = document.createElement("span");
+        nombre.textContent = producto.nombre;
+        const precio = document.createElement("strong");
+        precio.textContent = "$" + Number(producto.precio).toFixed(2);
+        opcion.append(nombre, precio);
+        opcion.addEventListener("click", () => seleccionarProducto(producto));
+        sugerencias.append(opcion);
+      });
+    }
+    sugerencias.classList.remove("oculto");
+  }
+
+  function dibujar() {
     filas.replaceChildren();
-    const activos=catalogo.filter(p=>p.activo);
-    if(!activos.length){filas.textContent="Primero agrega productos en el catálogo.";return;}
-    activos.forEach(p=>{
-      const row=document.createElement("div");row.className="panel";
-      const label=document.createElement("label");label.textContent=p.nombre+" · $"+Number(p.precio).toFixed(2);
-      const input=document.createElement("input");input.type="number";input.min="0";input.step="1";input.inputMode="numeric";input.placeholder="Cantidad en piezas";input.dataset.productoId=p.id;
-      const value=guardadas.get(String(p.id)); if(value) input.value=value.cantidad;
-      row.append(label,input);filas.appendChild(row);
-    });
+    if (!productosRegistro.length) {
+      const vacio = document.createElement("p");
+      vacio.className = "nota";
+      vacio.textContent = "Aún no has agregado productos.";
+      filas.append(vacio);
+    } else {
+      productosRegistro.forEach((item, indice) => {
+        const fila = document.createElement("div");
+        fila.className = "registro-fila";
+        const detalle = document.createElement("div");
+        const nombre = document.createElement("strong");
+        nombre.textContent = item.nombre;
+        const meta = document.createElement("small");
+        meta.textContent = "$" + Number(item.precio).toFixed(2) + " × " + item.cantidad + " piezas";
+        detalle.append(nombre, meta);
+        const subtotal = document.createElement("strong");
+        subtotal.className = "registro-subtotal";
+        subtotal.textContent = "$" + (Number(item.precio) * item.cantidad).toFixed(2);
+        const quitar = document.createElement("button");
+        quitar.type = "button";
+        quitar.textContent = "Quitar";
+        quitar.setAttribute("aria-label", "Quitar " + item.nombre);
+        quitar.addEventListener("click", () => {
+          productosRegistro.splice(indice, 1);
+          dibujar();
+        });
+        fila.append(detalle, subtotal, quitar);
+        filas.append(fila);
+      });
+    }
+    const total = productosRegistro.reduce((suma, item) => suma + Number(item.precio) * item.cantidad, 0);
+    document.getElementById("totalRegistro").textContent = "$" + total.toFixed(2);
+    document.getElementById("estadoRegistro").textContent = estadoDia === "cerrado" ? "Día cerrado (simulación)" : "Día abierto (simulación)";
+    document.getElementById("botonGuardarRegistro").disabled = estadoDia === "cerrado";
+    document.getElementById("botonCerrarDia").disabled = estadoDia === "cerrado";
+    document.getElementById("botonReabrirDia").disabled = estadoDia !== "cerrado";
   }
-  document.getElementById("fechaRegistro").addEventListener("change",cargar);
-  document.getElementById("botonGuardarRegistro").addEventListener("click",async()=>{
-    try {
-      const lineas=[...filas.querySelectorAll("input[data-producto-id]")].filter(i=>i.value.trim()!=="").map(i=>({producto_id:Number(i.dataset.productoId),cantidad:Number(i.value)}));
-      if(lineas.some(x=>!Number.isInteger(x.cantidad)||x.cantidad<0)){aviso("Las cantidades deben ser números enteros de cero o más.");return;}
-      await api("/api/registro",{method:"PUT",body:JSON.stringify({panaderia_id:bakery.id,fecha:fecha.value,lineas})});
-      aviso("Registro guardado. Aún no has cerrado el día.","exito");await cargar();
-    } catch(e){aviso(e.message);}
+
+  buscar.addEventListener("input", mostrarSugerencias);
+  buscar.addEventListener("focus", mostrarSugerencias);
+  document.addEventListener("click", event => {
+    if (!event.target.closest(".registro-buscador")) sugerencias.classList.add("oculto");
   });
-  document.getElementById("botonCerrarDia").addEventListener("click",async()=>{
-    if(!confirm("¿Cerrar el día? Revisa las cantidades antes de continuar.")) return;
-    try {
-      await api("/api/registro/cerrar?panaderia_id="+bakery.id+"&fecha_registro="+fecha.value,{method:"POST"});
-      aviso("Día cerrado correctamente.","exito");await cargar();
-    } catch(e){aviso(e.message);}
+  fecha.addEventListener("change", () => {
+    productosRegistro = [];
+    estadoDia = "abierto";
+    limpiarSeleccion();
+    dibujar();
+    aviso("Fecha seleccionada. La vista es una simulación; no se cargaron datos guardados.");
   });
-  window.actualizarRegistroCatalogo = async function(productos){catalogo=productos||[];await cargar();};
+  document.getElementById("botonAgregarProductoRegistro").addEventListener("click", () => {
+    if (!productoElegido) return;
+    const unidades = Number(cantidad.value);
+    if (!Number.isInteger(unidades) || unidades < 1) {
+      aviso("Escribe una cantidad entera mayor que cero.", "error");
+      cantidad.focus();
+      return;
+    }
+    const existente = productosRegistro.find(x => String(x.id) === String(productoElegido.id));
+    if (existente) existente.cantidad += unidades;
+    else productosRegistro.push({
+      id: productoElegido.id,
+      nombre: productoElegido.nombre,
+      precio: Number(productoElegido.precio),
+      cantidad: unidades
+    });
+    limpiarSeleccion();
+    dibujar();
+    aviso("Producto agregado a la vista del registro.");
+  });
+  document.getElementById("botonCancelarProductoRegistro").addEventListener("click", limpiarSeleccion);
+  document.getElementById("botonGuardarRegistro").addEventListener("click", () => {
+    aviso("Simulación: el registro se mostraría guardado. No se enviaron datos al servidor.");
+  });
+  document.getElementById("botonCerrarDia").addEventListener("click", () => {
+    estadoDia = "cerrado";
+    dibujar();
+    aviso("Simulación: el día aparece cerrado solo en esta pantalla.");
+  });
+  document.getElementById("botonReabrirDia").addEventListener("click", () => {
+    estadoDia = "abierto";
+    dibujar();
+    aviso("Simulación: el día aparece reabierto solo en esta pantalla.");
+  });
+
+  configurarFechas();
+  dibujar();
 })();
-  document.getElementById("botonReabrirDia").addEventListener("click",async()=>{
-    const motivo=prompt("Motivo de la reapertura (obligatorio para correcciones después de 48 horas):") || "";
-    try {
-      await api("/api/registro/reabrir",{method:"POST",body:JSON.stringify({panaderia_id:Number(bakery.id),fecha:fecha.value,motivo})});
-      aviso("Registro reabierto. Los cambios quedarán sujetos a auditoría.","exito");await cargar();
-    } catch(e){aviso(e.message);}
-  });

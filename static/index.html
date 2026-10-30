@@ -160,6 +160,23 @@
     .lista-respaldo label { display: flex; gap: 9px; align-items: flex-start; }
     .boton-peligro { background: #991b1b; }
 
+    /* Interfaz visual del Registro diario */
+    .registro-captura{max-width:680px;margin:18px 0;position:relative}
+    .registro-buscador{position:relative}
+    .registro-sugerencias{position:absolute;top:100%;left:0;right:0;z-index:20;background:#fff;border:1px solid #d6c7b7;border-radius:9px;box-shadow:0 8px 20px #0002;max-height:240px;overflow:auto}
+    .registro-sugerencia{display:flex;justify-content:space-between;gap:12px;width:100%;border-radius:0;background:#fff;color:#292524;text-align:left;border-bottom:1px solid #eee7df}
+    .registro-sugerencia:hover,.registro-sugerencia:focus{background:#f5eee5}
+    .registro-producto-elegido{border:1px solid #e7ded2;border-radius:10px;padding:14px;background:#faf7f2}
+    .registro-producto-elegido .campo{margin:12px 0}
+    .registro-lista{display:grid;gap:9px}
+    .registro-fila{display:grid;grid-template-columns:minmax(0,1fr) auto auto;align-items:center;gap:12px;border:1px solid #e7ded2;border-radius:9px;padding:12px}
+    .registro-fila small{display:block;color:#78716c;margin-top:4px}
+    .registro-fila button{padding:8px 10px;background:#eee7df;color:#292524}
+    .registro-total{display:flex;justify-content:space-between;align-items:center;padding:14px 2px;margin-top:10px;border-top:2px solid #e7ded2;font-size:18px}
+    .registro-acciones{justify-content:flex-start;margin-top:10px}
+    @media(max-width:520px){.registro-fila{grid-template-columns:minmax(0,1fr) auto}.registro-fila .registro-subtotal{grid-column:1}.registro-fila button{grid-column:2;grid-row:1/3}.registro-acciones button{flex:1;padding:11px 8px}}
+
+
     .barra {
       display: flex;
       justify-content: space-between;
@@ -381,7 +398,25 @@
           <button id="botonDescargarExcel" type="button">Descargar tablas del día</button>
           <div id="mensajeTablas" class="mensaje oculto" role="status"></div>
         </section>
-        <section id="panelRegistro" class="panel panel-seccion oculto"><h3>Registro diario</h3><div class="campo"><label for="fechaRegistro">Fecha</label><input id="fechaRegistro" type="date"></div><div class="barra"><strong id="estadoRegistro">Día abierto</strong></div><div id="mensajeRegistro" class="mensaje oculto" role="alert"></div><div id="filasRegistro"></div><button id="botonGuardarRegistro" type="button">Guardar registro</button> <button id="botonCerrarDia" type="button">Cerrar día</button> <button id="botonReabrirDia" class="secundario" type="button">Reabrir día</button></section>
+        <section id="panelRegistro" class="panel panel-seccion oculto">
+          <h3>Registro diario</h3>
+          <div class="campo"><label for="fechaRegistro">Fecha</label><input id="fechaRegistro" type="date"><p class="nota">Vista de interfaz: puedes elegir hoy o cualquiera de los dos días calendario anteriores.</p></div>
+          <div class="barra"><strong id="estadoRegistro">Día abierto</strong></div>
+          <div id="mensajeRegistro" class="mensaje oculto" role="status"></div>
+          <div class="registro-captura">
+            <div class="campo registro-buscador"><label for="buscarProductoRegistro">Buscar producto</label><input id="buscarProductoRegistro" type="search" placeholder="Escribe el nombre, por ejemplo: do" autocomplete="off" aria-autocomplete="list" aria-controls="sugerenciasProductoRegistro"><div id="sugerenciasProductoRegistro" class="registro-sugerencias oculto" role="listbox"></div></div>
+            <div id="productoElegidoRegistro" class="registro-producto-elegido oculto">
+              <div><strong id="nombreProductoElegido"></strong><span id="precioProductoElegido" class="nota"></span></div>
+              <div class="campo"><label for="cantidadProductoRegistro">Cantidad</label><input id="cantidadProductoRegistro" type="number" min="1" step="1" inputmode="numeric" placeholder="Escribe la cantidad"></div>
+              <div class="barra"><button id="botonAgregarProductoRegistro" type="button">Agregar al registro</button><button id="botonCancelarProductoRegistro" class="secundario" type="button">Cancelar</button></div>
+            </div>
+          </div>
+          <h4>Productos del registro</h4>
+          <div id="filasRegistro" class="registro-lista"><p class="nota">Aún no has agregado productos.</p></div>
+          <div class="registro-total"><span>Total</span><strong id="totalRegistro">$0.00</strong></div>
+          <div class="barra registro-acciones"><button id="botonGuardarRegistro" type="button">Guardar registro</button><button id="botonCerrarDia" type="button">Cerrar día</button><button id="botonReabrirDia" class="secundario" type="button">Reabrir día</button></div>
+          <p class="nota">Esta pantalla es una simulación visual. Los cambios no se guardan ni modifican cierres.</p>
+        </section>
         <section id="panelProductos" class="panel panel-seccion oculto">
         <h3>Agregar productos</h3>
         <p class="nota">Agrega productos y su precio actual para esta panadería.</p>
