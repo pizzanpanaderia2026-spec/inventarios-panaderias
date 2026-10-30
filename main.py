@@ -431,7 +431,7 @@ def eliminar_o_desactivar_producto(
         raise HTTPException(status_code=503, detail="No se pudo eliminar o desactivar el producto.")
 
 
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pydantic import model_validator
 
 
