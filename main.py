@@ -6,6 +6,7 @@ import unicodedata
 from fastapi import FastAPI, Header, HTTPException
 from fastapi.responses import FileResponse, StreamingResponse
 from io import BytesIO
+from zoneinfo import ZoneInfo
 from openpyxl import Workbook
 from fastapi.staticfiles import StaticFiles
 from supabase import create_client
@@ -687,27 +688,24 @@ def reabrir_registro(
     usuario = obtener_usuario_autenticado(authorization)
     perfil = obtener_perfil(str(usuario.id))
     comprobar_acceso_panaderia(str(usuario.id), perfil, solicitud.panaderia_id)
+    hoy_local = datetime.now(ZoneInfo("America/Mexico_City")).date()
+    fecha_minima = hoy_local - timedelta(days=2)
+    if solicitud.fecha < fecha_minima or solicitud.fecha > hoy_local:
+        raise HTTPException(
+            status_code=403,
+            detail="Solo se pueden reabrir registros de hoy y de los dos días calendario anteriores.",
+        )
     try:
         cierre = buscar_cierre(solicitud.panaderia_id, solicitud.fecha)
         if cierre["estado"] != "cerrado":
             return {"reabierto": True, "mensaje": "El día ya está abierto."}
-        if solicitud.fecha > date.today():
-            raise HTTPException(status_code=422, detail="No puedes reabrir una fecha futura.")
-        cerrado_en = datetime.fromisoformat(cierre["cerrado_en"].replace("Z", "+00:00"))
-        ahora = datetime.now(timezone.utc)
-        dentro_de_48h = (ahora - cerrado_en).total_seconds() < 48 * 3600
-        admin = es_admin_principal(perfil)
-        if not dentro_de_48h and not admin:
-            raise HTTPException(status_code=403, detail="Pasaron 48 horas. Solo el administrador principal puede reabrir este registro.")
-        motivo = (solicitud.motivo or "").strip()
-        if not dentro_de_48h and admin and len(motivo) < 5:
-            raise HTTPException(status_code=422, detail="Para una corrección después de 48 horas, escribe un motivo de al menos 5 caracteres.")
+        motivo = (solicitud.motivo or "").strip() or "Reapertura dentro de los últimos dos días calendario."
         resultado = supabase.rpc("reabrir_cierre_diario", {
             "p_cierre_id": cierre["id"],
             "p_usuario_id": str(usuario.id),
-            "p_motivo": motivo or "",
-            "p_dentro_de_48h": dentro_de_48h,
-            "p_fecha": ahora.isoformat(),
+            "p_motivo": motivo,
+            "p_dentro_de_48h": True,
+            "p_fecha": datetime.now(timezone.utc).isoformat(),
         }).execute()
         return {"reabierto": True, "cierre": resultado.data}
     except HTTPException:
