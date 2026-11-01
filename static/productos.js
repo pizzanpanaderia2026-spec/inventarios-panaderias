@@ -178,17 +178,24 @@
   }
   async function bulkAction(action){
     if(!selected.size)return notice("Selecciona al menos un producto.");
-    if(action==="desactivar"&&!confirm("¿Desactivar los productos seleccionados? Se moverán a Productos desactivados."))return;
-    let categoryId=null;
     if(action==="mover"){
       const options=categories.filter(c=>c.activa&&!c.protegida);
-      const promptText="Escribe el número de la categoría de destino:\n"+options.map((c,i)=>(i+1)+". "+c.nombre).join("\n");
-      const n=Number(prompt(promptText));if(!Number.isInteger(n)||n<1||n>options.length)return;
-      categoryId=options[n-1].id;
+      if(!options.length)return notice("No hay categorías activas para mover los productos.");
+      const actions=document.querySelector(".catalogo-acciones-seleccion");
+      if(actions.querySelector(".catalogo-mover-selector"))return;
+      const picker=document.createElement("div");picker.className="catalogo-mover-selector";picker.style.cssText="display:flex;gap:8px;flex-wrap:wrap;width:100%;margin-top:8px";
+      const select=document.createElement("select");select.style.cssText="flex:1;min-width:180px;padding:10px;border:1px solid #cfc5b8;border-radius:8px";
+      options.forEach(c=>{const o=document.createElement("option");o.value=c.id;o.textContent=c.nombre;select.append(o)});
+      picker.append(select,makeButton("Confirmar",()=>ejecutarAccionMultiple("mover",Number(select.value))),makeButton("Cancelar",()=>picker.remove()));
+      actions.append(picker);return;
     }
+    if(action==="desactivar"&&!confirm("¿Desactivar los productos seleccionados? Se moverán a Productos desactivados."))return;
     if(action==="eliminar"&&!confirm("Los productos con historial se desactivarán; los que nunca se registraron se eliminarán definitivamente. ¿Continuar?"))return;
+    await ejecutarAccionMultiple(action,null);
+  }
+  async function ejecutarAccionMultiple(action,categoryId){
     try{
-      const r=await api("/api/catalogo/productos/acciones",{method:"POST",body:JSON.stringify({panaderia_id:bakery.id,producto_ids:[...selected],accion,categoria_destino_id:categoryId})});
+      const r=await api("/api/catalogo/productos/acciones",{method:"POST",body:JSON.stringify({panaderia_id:bakery.id,producto_ids:[...selected],accion:action,categoria_destino_id:categoryId})});
       if(action==="eliminar")notice("Eliminados: "+r.eliminados+". Desactivados por tener historial: "+r.desactivados+".","exito");
       else notice(action==="mover"?"Productos movidos.":"Productos desactivados.","exito");
       selected.clear();selectionMode=false;categoryMenuOpen=null;await load();
@@ -202,13 +209,18 @@
   async function reactivate(p){
     const options=categories.filter(c=>c.activa&&!c.protegida);
     if(!options.length)return notice("Primero crea o reactiva una categoría para asignar el producto.");
+    const row=[...document.querySelectorAll(".catalogo-producto")].find(el=>el.textContent.includes(p.nombre));
+    if(!row)return;
+    if(row.querySelector(".catalogo-reactivar-selector"))return;
     const originalIndex=options.findIndex(c=>String(c.id)===String(p.categoria_original_id));
-    const defaultIndex=originalIndex>=0?originalIndex+1:1;
-    const promptText="Elige la categoría para reactivar el producto.\n"+options.map((c,i)=>(i+1)+". "+c.nombre+(i===originalIndex?" (original)":"")).join("\n");
-    const n=Number(prompt(promptText,String(defaultIndex)));
-    if(!Number.isInteger(n)||n<1||n>options.length)return;
-    const target=options[n-1].id;
-    try{await api("/api/catalogo/productos/"+p.id+"?panaderia_id="+bakery.id,{method:"PATCH",body:JSON.stringify({activo:true,categoria_id:target})});await load();notice("Producto reactivado en "+options[n-1].nombre+".","exito");}
+    const picker=document.createElement("div");picker.className="catalogo-reactivar-selector";picker.style.cssText="display:flex;gap:8px;flex-wrap:wrap;width:100%;padding:8px 0";
+    const select=document.createElement("select");select.style.cssText="flex:1;min-width:180px;padding:9px;border:1px solid #cfc5b8;border-radius:8px";
+    options.forEach((c,i)=>{const o=document.createElement("option");o.value=c.id;o.textContent=c.nombre+(i===originalIndex?" (original)":"");if(i===originalIndex)o.selected=true;select.append(o)});
+    picker.append(select,makeButton("Confirmar",()=>confirmarReactivacion(p,Number(select.value))),makeButton("Cancelar",()=>picker.remove()));
+    row.append(picker);
+  }
+  async function confirmarReactivacion(p,categoryId){
+    try{await api("/api/catalogo/productos/"+p.id+"?panaderia_id="+bakery.id,{method:"PATCH",body:JSON.stringify({activo:true,categoria_id:categoryId})});await load();notice("Producto reactivado.","exito");}
     catch(e){notice(e.message);}
   }
   form.addEventListener("submit",async e=>{
