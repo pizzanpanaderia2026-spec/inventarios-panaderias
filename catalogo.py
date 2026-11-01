@@ -52,6 +52,7 @@ def _tiene_historial_cerrado(core, product_id):
 
 
 def _desactivar(core, product, protected_id):
+    _tiene_historial_cerrado(core, product["id"])  # Retira líneas provisionales de días abiertos.
     current_category = product.get("categoria_id")
     original = product.get("categoria_original_id")
     if current_category != protected_id and not original:
@@ -174,6 +175,7 @@ def eliminar_categoria(categoria_id: int, panaderia_id: int, authorization: str 
         protected = core.supabase.table("categorias_productos").select("id").eq("panaderia_id", panaderia_id).eq("protegida", True).limit(1).execute().data
         if not protected:
             raise HTTPException(status_code=503, detail="No existe la categoría protegida.")
+            _tiene_historial_cerrado(core, product["id"])
         # Pierden su categoría original, pero siguen localizables en la carpeta protegida.
         for product in products:
             core.supabase.table("productos").update({"activo": False, "categoria_id": protected[0]["id"], "categoria_original_id": None}).eq("id", product["id"]).execute()
