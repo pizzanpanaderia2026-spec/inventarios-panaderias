@@ -94,17 +94,36 @@
   };
 
   async function api(url, options = {}) {
-    const r = await fetch(url, {
-      ...options,
-      headers: {
-        Authorization: "Bearer " + token,
-        Accept: "application/json",
-        ...(options.body ? { "Content-Type": "application/json" } : {})
+    const method = String(options.method || "GET").toUpperCase();
+    const maxAttempts = method === "GET" ? 6 : 1;
+    let lastError;
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      try {
+        const response = await fetch(url, {
+          ...options,
+          headers: {
+            Authorization: "Bearer " + token,
+            Accept: "application/json",
+            ...(options.body ? { "Content-Type": "application/json" } : {})
+          }
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          const error = new Error(data.detail || "No se pudo completar la operación.");
+          error.status = response.status;
+          if (![429, 502, 503, 504].includes(response.status) || attempt === maxAttempts - 1) throw error;
+          lastError = error;
+        } else {
+          return data;
+        }
+      } catch (error) {
+        lastError = error;
+        if (error.status && ![429, 502, 503, 504].includes(error.status)) throw error;
+        if (attempt === maxAttempts - 1) throw error;
       }
-    });
-    const d = await r.json().catch(() => ({}));
-    if (!r.ok) throw new Error(d.detail || "No se pudo completar la operación.");
-    return d;
+      await new Promise(resolve => setTimeout(resolve, Math.min(1000 * (2 ** attempt), 8000)));
+    }
+    throw lastError || new Error("No se pudo consultar el registro.");
   }
 
   function aviso(t, tipo = "error") {
