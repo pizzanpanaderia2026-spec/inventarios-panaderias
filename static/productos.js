@@ -3,7 +3,7 @@
   const root = document.getElementById("catalogoProductos");
   if (!root) return;
   let token = null, bakery = null, categories = [], products = [], isAdmin = false;
-  let openCategory = null, menuOpen = false, selectionMode = false, selected = new Set(), editingProduct = null, editingCategory = null;
+  let openCategory = null, globalMenuOpen = false, categoryMenuOpen = null, selectionMode = false, selected = new Set(), editingProduct = null, editingCategory = null;
   const message = document.getElementById("mensajeProductos");
   const form = document.getElementById("formProducto");
   const nameInput = document.getElementById("nombreProducto");
@@ -82,13 +82,13 @@
     const sub=document.createElement("p");sub.className="nota";sub.textContent="Organiza los productos de esta panadería.";
     title.append(h,sub);
     const global=document.createElement("div");global.className="catalogo-menu-wrap";
-    const dots=makeButton("⋮",()=>{menuOpen=!menuOpen;draw()},"catalogo-tres-puntos");
+    const dots=makeButton("⋮",()=>{globalMenuOpen=!globalMenuOpen;draw()},"catalogo-tres-puntos");
     dots.setAttribute("aria-label","Opciones del catálogo");global.append(dots);
-    if(menuOpen){
+    if(globalMenuOpen){
       const menu=document.createElement("div");menu.className="catalogo-menu";
-      menu.append(makeButton("＋ Nueva categoría",()=>{menuOpen=false;showCategoryForm()}));
-      menu.append(makeButton("＋ Nuevo producto",()=>{menuOpen=false;showProductForm()}));
-      menu.append(makeButton("Ver productos desactivados",()=>{menuOpen=false;openCategory=categories.find(c=>c.protegida)?.id||null;draw()}));
+      menu.append(makeButton("＋ Nueva categoría",()=>{globalMenuOpen=false;showCategoryForm()}));
+      menu.append(makeButton("＋ Nuevo producto",()=>{globalMenuOpen=false;showProductForm()}));
+      menu.append(makeButton("Ver productos desactivados",()=>{globalMenuOpen=false;openCategory=categories.find(c=>c.protegida)?.id||null;draw()}));
       global.append(menu);
     }
     heading.append(title,global);root.append(heading);
@@ -113,9 +113,9 @@
       head.append(open);
       if(!c.protegida){
         const actions=document.createElement("div");actions.className="catalogo-menu-wrap";
-        const dots=makeButton("⋮",()=>{openCategory=c.id;menuOpen=menuOpen===c.id?false:c.id;draw()},"catalogo-tres-puntos");
+        const dots=makeButton("⋮",()=>{openCategory=c.id;categoryMenuOpen=categoryMenuOpen===c.id?null:c.id;draw()},"catalogo-tres-puntos");
         dots.setAttribute("aria-label","Opciones de "+c.nombre);actions.append(dots);
-        if(menuOpen===c.id){
+        if(categoryMenuOpen===c.id){
           const menu=document.createElement("div");menu.className="catalogo-menu";
           menu.append(makeButton("Seleccionar productos",()=>{openCategory=c.id;selectionMode=true;selected.clear();menuOpen=false;draw()}));
           menu.append(makeButton("Agregar producto",()=>showProductForm(null,c.id)));
@@ -146,6 +146,7 @@
           row.append(info);
           if(c.protegida){
             row.append(makeButton("Reactivar",()=>reactivate(p),"secundario"));
+            if(!selectionMode) row.append(makeButton("Eliminar",()=>deleteInactiveProduct(p),"boton-peligro"));
           } else if(!selectionMode) {
             row.append(makeButton("Editar",()=>showProductForm(p,p.categoria_id),"secundario"));
           }
@@ -167,12 +168,12 @@
   }
   function drawSelectionActions(){const search=document.querySelector(".catalogo-busqueda");drawFiltered(search?search.value:"");}
   async function toggleCategory(c){
-    try{await api("/api/catalogo/categorias/"+c.id+"?panaderia_id="+bakery.id,{method:"PATCH",body:JSON.stringify({activa:!c.activa})});menuOpen=false;await load();notice(c.activa?"Categoría desactivada.":"Categoría reactivada.","exito");}
+    try{await api("/api/catalogo/categorias/"+c.id+"?panaderia_id="+bakery.id,{method:"PATCH",body:JSON.stringify({activa:!c.activa})});categoryMenuOpen=null;await load();notice(c.activa?"Categoría desactivada.":"Categoría reactivada.","exito");}
     catch(e){notice(e.message);}
   }
   async function deleteCategory(c){
     if(!confirm("¿Eliminar la categoría "+c.nombre+"? Sus productos quedarán desactivados y sin categoría; el historial se conservará."))return;
-    try{const r=await api("/api/catalogo/categorias/"+c.id+"?panaderia_id="+bakery.id,{method:"DELETE"});notice("Categoría eliminada. "+r.productos_desactivados+" productos quedaron desactivados y sin categoría.","exito");menuOpen=false;openCategory=null;await load();}
+    try{const r=await api("/api/catalogo/categorias/"+c.id+"?panaderia_id="+bakery.id,{method:"DELETE"});notice("Categoría eliminada. "+r.productos_desactivados+" productos quedaron desactivados y sin categoría.","exito");categoryMenuOpen=null;openCategory=null;await load();}
     catch(e){notice(e.message);}
   }
   async function bulkAction(action){
@@ -189,8 +190,13 @@
       const r=await api("/api/catalogo/productos/acciones",{method:"POST",body:JSON.stringify({panaderia_id:bakery.id,producto_ids:[...selected],accion,categoria_destino_id:categoryId})});
       if(action==="eliminar")notice("Eliminados: "+r.eliminados+". Desactivados por tener historial: "+r.desactivados+".","exito");
       else notice(action==="mover"?"Productos movidos.":"Productos desactivados.","exito");
-      selected.clear();selectionMode=false;menuOpen=false;await load();
+      selected.clear();selectionMode=false;categoryMenuOpen=null;await load();
     }catch(e){notice(e.message);}
+  }
+  async function deleteInactiveProduct(p){
+    if(!confirm("¿Eliminar definitivamente este producto? Solo se permitirá si nunca ha formado parte de un registro histórico."))return;
+    try{const r=await api("/api/catalogo/productos/"+p.id+"?panaderia_id="+bakery.id,{method:"DELETE"});notice(r.accion==="eliminado"?"Producto eliminado.":"El producto tenía historial y permanece desactivado.","exito");await load();}
+    catch(e){notice(e.message);}
   }
   async function reactivate(p){
     const original=p.categoria_original_id;
