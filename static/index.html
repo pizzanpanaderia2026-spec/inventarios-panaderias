@@ -387,7 +387,10 @@
         </div>
         <div class="barra">
           <span></span>
-          <button id="botonVolver" class="secundario" type="button">Volver</button>
+          <div class="barra">
+            <button id="botonActualizarPagina" class="secundario" type="button" title="Volver a cargar la aplicación">⟳ Actualizar</button>
+            <button id="botonVolver" class="secundario" type="button">Volver</button>
+          </div>
         </div>
 
         <div class="mensaje exito">
@@ -795,7 +798,7 @@
       });
     });
 
-    function abrirPanaderia(panaderia) {
+    async function abrirPanaderia(panaderia) {
       // Solo se permite seleccionar una panadería recibida
       // por el backend para la cuenta autenticada.
       const autorizada = panaderiasAutorizadas.find(
@@ -830,14 +833,34 @@
         "Cuenta: " + (usuarioActual.email || "Usuario autenticado");
 
       mostrarPantalla(pantallaDetalle);
-      if (window.iniciarCatalogoProductos) {
-        window.iniciarCatalogoProductos(sesionActual, autorizada);
-      }
-      if (window.iniciarTablasHistorial) {
-        window.iniciarTablasHistorial(sesionActual, autorizada);
-      }
-      if (window.iniciarRegistroDiario) {
-        window.iniciarRegistroDiario(sesionActual, autorizada, []);
+      try {
+        // Cargar catálogo antes del registro: el registro necesita sus productos
+        // para mostrar correctamente las líneas guardadas.
+        const catalogo = window.iniciarCatalogoProductos
+          ? await window.iniciarCatalogoProductos(sesionActual, autorizada)
+          : { productos: [], categorias: [] };
+
+        if (!catalogo) {
+          mostrarMensaje(
+            document.getElementById("mensajeRegistro"),
+            "No se pudo cargar el catálogo después de varios intentos. Toca Actualizar para volver a intentarlo."
+          );
+          return;
+        }
+
+        if (window.iniciarTablasHistorial) {
+          window.iniciarTablasHistorial(sesionActual, autorizada);
+        }
+        if (window.iniciarRegistroDiario) {
+          await window.iniciarRegistroDiario(
+            sesionActual, autorizada, catalogo.productos, catalogo.categorias
+          );
+        }
+      } catch (error) {
+        mostrarMensaje(
+          document.getElementById("mensajeRegistro"),
+          "No se pudo cargar la información inicial. " + (error.message || "Intenta actualizar la página.")
+        );
       }
     }
 
@@ -953,6 +976,9 @@
         dibujarPanaderias();
         mostrarPantalla(pantallaPanaderias);
       });
+
+    document.getElementById("botonActualizarPagina")
+      .addEventListener("click", () => window.location.reload());
 
 
     // Administración real: todas las operaciones pasan por el servidor.
