@@ -7,6 +7,7 @@ from fastapi import FastAPI, Header, HTTPException
 from fastapi.responses import FileResponse, StreamingResponse
 from io import BytesIO
 from openpyxl import Workbook
+from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from fastapi.staticfiles import StaticFiles
 from supabase import create_client
 
@@ -714,6 +715,201 @@ def reabrir_registro(
         raise
     except Exception:
         raise HTTPException(status_code=503, detail="No se pudo reabrir el registro. Verifica que la migración esté aplicada.")
+
+
+
+
+def obtener_datos_ultimo_cierre(panaderia_id: int, usuario_id: str, perfil: dict):
+    comprobar_acceso_panaderia(usuario_id, perfil, panaderia_id)
+    cierres = (
+        supabase.table("cierres_diarios")
+        .select("id,panaderia_id,fecha,estado,cerrado_por,cerrado_por_nombre")
+        .eq("panaderia_id", panaderia_id)
+        .eq("estado", "cerrado")
+        .order("fecha", desc=True)
+        .limit(1)
+        .execute()
+    ).data
+    if not cierres:
+        return None
+    cierre = cierres[0]
+    nombre_usuario = cierre.get("cerrado_por_nombre")
+    if not nombre_usuario and cierre.get("cerrado_por"):
+        perfil_cierre = (
+            supabase.table("perfiles").select("nombre")
+            .eq("id", cierre["cerrado_por"]).limit(1).execute()
+        ).data
+        if perfil_cierre:
+            nombre_usuario = perfil_cierre[0].get("nombre")
+    cierre["cerrado_por_nombre"] = nombre_usuario or "Usuario"
+    detalles = (
+        supabase.table("inventario_detalles")
+        .select("producto_id,cantidad,precio_unitario,producto_nombre")
+        .eq("cierre_id", cierre["id"])
+        .execute()
+    ).data
+    lineas = []
+    resumen = {}
+    total_piezas = 0
+    total_importe = Decimal("0")
+    for detalle in detalles:
+        cantidad = int(detalle.get("cantidad") or 0)
+        precio = Decimal(str(detalle.get("precio_unitario") or "0"))
+        importe = precio * cantidad
+        nombre = detalle.get("producto_nombre") or f"Producto {detalle.get('producto_id')}"
+        lineas.append({
+            "producto": nombre,
+            "cantidad": cantidad,
+            "precio_unitario": str(precio),
+            "total": str(importe),
+        })
+        clave = precio.quantize(Decimal("0.01"))
+        if clave not in resumen:
+            resumen[clave] = {"cantidad": 0, "total": Decimal("0")}
+        resumen[clave]["cantidad"] += cantidad
+        resumen[clave]["total"] += importe
+        total_piezas += cantidad
+        total_importe += importe
+    resumen_salida = [
+        {"precio": str(precio), "cantidad": valores["cantidad"], "total": str(valores["total"])}
+        for precio, valores in sorted(resumen.items())
+    ]
+    return {
+        "cierre": cierre,
+        "lineas": lineas,
+        "resumen": resumen_salida,
+        "total_piezas": total_piezas,
+        "total_importe": str(total_importe),
+    }
+
+
+@app.get("/api/tablas/ultimo-cierre")
+def consultar_tablas_ultimo_cierre(
+    panaderia_id: int,
+    authorization: str | None = Header(default=None),
+):
+    usuario = obtener_usuario_autenticado(authorization)
+    perfil = obtener_perfil(str(usuario.id))
+    try:
+        datos = obtener_datos_ultimo_cierre(panaderia_id, str(usuario.id), perfil)
+        return datos or {"cierre": None, "lineas": [], "resumen": [], "total_piezas": 0, "total_importe": "0"}
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=503, detail="No se pudieron consultar las tablas del último cierre.")
+
+
+@app.get("/api/tablas/ultimo-cierre/excel")
+def descargar_tablas_ultimo_cierre_excel(
+    panaderia_id: int,
+    authorization: str | None = Header(default=None),
+):
+    usuario = obtener_usuario_autenticado(authorization)
+    perfil = obtener_perfil(str(usuario.id))
+    try:
+        datos = obtener_datos_ultimo_cierre(panaderia_id, str(usuario.id), perfil)
+        if not datos:
+            raise HTTPException(status_code=404, detail="Todavía no hay un día cerrado para descargar.")
+        cierre = datos["cierre"]
+        libro = Workbook()
+        hoja = libro.active
+        hoja.title = "Cierre del día"
+        hoja.sheet_view.showGridLines = False
+        hoja.merge_cells("A1:D1")
+        hoja["A1"] = "INVENTARIO DIARIO"
+        hoja["A1"].font = Font(name="Arial", size=16, bold=True, color="FFFFFF")
+        hoja["A1"].fill = PatternFill("solid", fgColor="713F12")
+        hoja["A1"].alignment = Alignment(horizontal="center", vertical="center")
+        hoja.row_dimensions[1].height = 28
+        hoja.merge_cells("A2:D2")
+        hoja["A2"] = f"Fecha: {cierre['fecha']}"
+        hoja["A2"].font = Font(name="Arial", size=12, bold=True, color="292524")
+        hoja["A2"].alignment = Alignment(horizontal="left")
+        hoja.merge_cells("A3:D3")
+        hoja["A3"] = f"Cerrado por: {cierre.get('cerrado_por_nombre') or 'Usuario'}"
+        hoja["A3"].font = Font(name="Arial", size=10, italic=True, color="78716C")
+        hoja["A3"].alignment = Alignment(horizontal="left")
+        
+        def encabezado_tabla(fila, titulo, columnas):
+            hoja.merge_cells(start_row=fila, start_column=1, end_row=fila, end_column=len(columnas))
+            celda = hoja.cell(fila, 1, titulo)
+            celda.font = Font(name="Arial", size=11, bold=True, color="FFFFFF")
+            celda.fill = PatternFill("solid", fgColor="8A5A2B")
+            celda.alignment = Alignment(horizontal="left")
+            fila += 1
+            for columna, texto in enumerate(columnas, start=1):
+                c = hoja.cell(fila, columna, texto)
+                c.font = Font(name="Arial", bold=True, color="292524")
+                c.fill = PatternFill("solid", fgColor="F3E8D8")
+                c.alignment = Alignment(horizontal="center")
+                c.border = Border(bottom=Side(style="thin", color="D6C6B5"))
+            return fila + 1
+
+        fila = encabezado_tabla(5, "TABLA A · DETALLE POR PRODUCTO", ["Producto", "Cantidad", "Precio unitario", "Importe"])
+        for linea in datos["lineas"]:
+            hoja.cell(fila, 1, linea["producto"])
+            hoja.cell(fila, 2, int(linea["cantidad"]))
+            hoja.cell(fila, 3, float(Decimal(linea["precio_unitario"])))
+            hoja.cell(fila, 4, float(Decimal(linea["total"])))
+            hoja.cell(fila, 3).number_format = '"$"#,##0.00'
+            hoja.cell(fila, 4).number_format = '"$"#,##0.00'
+            fila += 1
+        hoja.cell(fila, 1, "TOTAL GENERAL")
+        hoja.cell(fila, 2, datos["total_piezas"])
+        hoja.cell(fila, 4, float(Decimal(datos["total_importe"])))
+        hoja.cell(fila, 4).number_format = '"$"#,##0.00'
+        for c in hoja[fila][:4]:
+            c.font = Font(bold=True)
+            c.fill = PatternFill("solid", fgColor="F3E8D8")
+        fila += 2
+        fila = encabezado_tabla(fila, "TABLA B · RESUMEN POR PRECIO", ["Precio unitario", "Cantidad total", "Importe"])
+        for linea in datos["resumen"]:
+            hoja.cell(fila, 1, float(Decimal(linea["precio"])))
+            hoja.cell(fila, 2, int(linea["cantidad"]))
+            hoja.cell(fila, 3, float(Decimal(linea["total"])))
+            hoja.cell(fila, 1).number_format = '"$"#,##0.00'
+            hoja.cell(fila, 3).number_format = '"$"#,##0.00'
+            fila += 1
+        hoja.cell(fila, 1, "TOTAL GENERAL")
+        hoja.cell(fila, 2, datos["total_piezas"])
+        hoja.cell(fila, 3, float(Decimal(datos["total_importe"])))
+        hoja.cell(fila, 3).number_format = '"$"#,##0.00'
+        for c in hoja[fila][:3]:
+            c.font = Font(bold=True)
+            c.fill = PatternFill("solid", fgColor="F3E8D8")
+
+        for row in hoja.iter_rows(min_row=5, max_row=fila, min_col=1, max_col=4):
+            for c in row:
+                c.alignment = Alignment(vertical="center", wrap_text=True)
+                if c.row > 5 and c.row not in (fila,):
+                    c.border = Border(bottom=Side(style="hair", color="E7DED2"))
+        for col, width in {"A": 38, "B": 15, "C": 19, "D": 19}.items():
+            hoja.column_dimensions[col].width = width
+        hoja.freeze_panes = "A6"
+        hoja.sheet_properties.pageSetUpPr.fitToPage = True
+        hoja.page_setup.orientation = "landscape"
+        hoja.page_setup.paperSize = hoja.PAPERSIZE_A4
+        hoja.page_setup.fitToWidth = 1
+        hoja.page_setup.fitToHeight = 1
+        hoja.page_margins.left = 0.25
+        hoja.page_margins.right = 0.25
+        hoja.page_margins.top = 0.35
+        hoja.page_margins.bottom = 0.35
+        hoja.print_area = f"A1:D{fila}"
+        hoja.sheet_properties.pageSetUpPr.autoPageBreaks = False
+        salida = BytesIO()
+        libro.save(salida)
+        salida.seek(0)
+        nombre = f"cierre_diario_{panaderia_id}_{cierre['fecha']}.xlsx"
+        return StreamingResponse(
+            salida,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": f'attachment; filename="{nombre}"'},
+        )
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=503, detail="No se pudo generar el Excel del cierre.")
 
 
 @app.get("/api/historial")
