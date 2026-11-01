@@ -35,6 +35,19 @@ def _categoria(core, panaderia_id, categoria_id, allow_protected=False):
     return category
 
 
+
+def _tiene_historial_cerrado(core, product_id):
+    details = core.supabase.table("inventario_detalles").select("id,cierre_id").eq("producto_id", product_id).execute().data
+    if not details:
+        return False
+    closure_ids = list({int(d["cierre_id"]) for d in details if d.get("cierre_id") is not None})
+    closures = core.supabase.table("cierres_diarios").select("id,estado").in_("id", closure_ids).execute().data if closure_ids else []
+    status = {int(c["id"]): c["estado"] for c in closures}
+    historical = any(d.get("cierre_id") is None or status.get(int(d["cierre_id"])) != "abierto" for d in details)
+    if not historical:
+        core.supabase.table("inventario_detalles").delete().in_("id", [d["id"] for d in details]).execute()
+    return historical
+
 def _desactivar(core, product, protected_id):
     current_category = product.get("categoria_id")
     original = product.get("categoria_original_id")
