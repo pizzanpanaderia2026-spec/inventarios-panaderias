@@ -215,7 +215,35 @@
 .admin-confirmacion button{margin-right:6px}
 @media(max-width:480px){.admin-resumen{gap:7px}.admin-metrica{padding:10px}.admin-acciones{gap:6px}}
 </style>
-</head>
+<style>
+.catalogo-encabezado{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin:16px 0}
+.catalogo-menu-wrap{position:relative;flex:0 0 auto}
+.catalogo-tres-puntos{width:42px;height:42px;padding:0;background:#fff;color:#713f12;border:1px solid #e7ded2;font-size:25px;line-height:1}
+.catalogo-menu{position:absolute;top:46px;right:0;z-index:30;min-width:210px;background:#fff;border:1px solid #e7ded2;border-radius:10px;padding:5px;box-shadow:0 8px 24px #0002}
+.catalogo-menu button{display:block;width:100%;text-align:left;background:#fff;color:#292524;padding:11px;border-radius:7px}
+.catalogo-menu button:hover{background:#f5eee5}
+.catalogo-busqueda{margin:10px 0 16px}
+.catalogo-categorias{display:grid;gap:10px}
+.catalogo-categoria{border:1px solid #e7ded2;border-radius:12px;background:#fff;overflow:visible}
+.catalogo-categoria-cabecera{display:flex;align-items:center;gap:8px;padding:10px 12px;position:relative}
+.catalogo-categoria-abrir{display:flex;align-items:center;gap:12px;flex:1;min-width:0;text-align:left;background:transparent;color:#292524;padding:5px 0}
+.catalogo-icono-carpeta{width:40px;height:40px;border-radius:9px;background:#f5eee5;display:grid;place-items:center;color:#8a5a2b;font-size:22px;flex:0 0 40px}
+.catalogo-categoria-texto{display:flex;flex-direction:column;gap:4px;min-width:0}
+.catalogo-categoria-texto small,.catalogo-producto small{font-size:12px;color:#78716c}
+.catalogo-protegida{background:#eee7df;color:#625449;padding:5px 8px;border-radius:20px;font-size:11px}
+.catalogo-productos{padding:4px 14px 14px;border-top:1px solid #eee7df}
+.catalogo-producto{display:flex;align-items:center;gap:9px;padding:11px 0;border-bottom:1px solid #f0ebe5}
+.catalogo-producto-info{flex:1;min-width:0;display:flex;justify-content:space-between;align-items:center;gap:8px;text-align:left;background:transparent;color:#292524;padding:5px 0}
+.catalogo-producto-info strong{overflow-wrap:anywhere}
+.catalogo-producto-info small{white-space:nowrap}
+.catalogo-producto>button.secundario{padding:7px 10px;font-size:12px}
+.catalogo-acciones-seleccion{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding-top:14px}
+.catalogo-acciones-seleccion strong{width:100%}
+.catalogo-acciones-seleccion button{padding:9px 12px}
+.catalogo-formulario{border:1px solid #e7ded2;border-radius:12px;padding:16px;margin:16px 0;background:#fff}
+.boton-peligro{background:#991b1b!important;color:white!important}
+@media(max-width:520px){.catalogo-categoria-cabecera{padding:9px}.catalogo-productos{padding:4px 10px 12px}.catalogo-producto{gap:6px}.catalogo-producto>button.secundario{padding:7px;font-size:11px}}
+</style></head>
 
 <body>
   <header>
@@ -383,18 +411,26 @@
         </section>
         <section id="panelRegistro" class="panel panel-seccion oculto"><h3>Registro diario</h3><div class="campo"><label for="fechaRegistro">Fecha</label><input id="fechaRegistro" type="date"></div><div class="barra"><strong id="estadoRegistro">Día abierto</strong></div><div id="mensajeRegistro" class="mensaje oculto" role="alert"></div><div id="filasRegistro"></div><button id="botonGuardarRegistro" type="button">Guardar registro</button> <button id="botonCerrarDia" type="button">Cerrar día</button> <button id="botonReabrirDia" class="secundario" type="button">Reabrir día</button></section>
         <section id="panelProductos" class="panel panel-seccion oculto">
-        <h3>Agregar productos</h3>
-        <p class="nota">Agrega productos y su precio actual para esta panadería.</p>
-        <div id="mensajeProductos" class="mensaje oculto" role="alert"></div>
-        <form id="formProducto">
-          <div class="campo"><label for="nombreProducto">Nombre del producto</label><input id="nombreProducto" maxlength="120" required></div>
-          <div class="campo"><label for="precioProducto">Precio ($)</label><input id="precioProducto" type="number" min="0" step="0.01" required></div>
-          <button id="botonGuardarProducto" type="submit">Agregar producto</button>
-          <button id="botonCancelarEdicion" class="secundario oculto" type="button">Cancelar edición</button>
-        </form>
-        <div class="barra"><h3>Productos registrados</h3><button id="botonActualizarProductos" class="secundario" type="button">Actualizar</button></div>
-        <div id="listaProductos"></div>
-        <div class="panel"><p>Descarga cuando lo necesites una hoja con los productos registrados y sus precios por fecha. No se guarda automáticamente.</p><button id="botonListaPrecios" class="secundario" type="button">Descargar lista de productos (Excel)</button><div id="mensajeListaPrecios" class="mensaje oculto" role="status"></div></div>
+          <h3>Agregar productos</h3>
+          <p class="nota">Administra las categorías y los productos de esta panadería.</p>
+          <div id="mensajeProductos" class="mensaje oculto" role="alert"></div>
+          <div id="catalogoProductos"></div>
+          <form id="formCategoria" class="catalogo-formulario oculto">
+            <h4 id="tituloFormCategoria">Nueva categoría</h4>
+            <div class="campo"><label for="nombreCategoria">Nombre de la categoría</label><input id="nombreCategoria" maxlength="100" required></div>
+            <button type="submit">Guardar categoría</button>
+            <button id="botonCancelarCategoria" class="secundario" type="button">Cancelar</button>
+          </form>
+          <form id="formProducto" class="catalogo-formulario oculto">
+            <h4>Agregar producto</h4>
+            <div class="campo"><label for="nombreProducto">Nombre del producto</label><input id="nombreProducto" maxlength="120" required></div>
+            <div class="campo"><label for="precioProducto">Precio ($)</label><input id="precioProducto" type="number" min="0" step="0.01" required></div>
+            <div class="campo"><label for="categoriaProducto">Categoría</label><select id="categoriaProducto" required></select></div>
+            <button id="botonGuardarProducto" type="submit">Guardar producto</button>
+            <button id="botonCancelarEdicion" class="secundario" type="button">Cancelar</button>
+          </form>
+          <div class="panel"><p>Descarga cuando lo necesites una hoja con los productos registrados y sus precios por fecha. No se guarda automáticamente.</p><button id="botonListaPrecios" class="secundario" type="button">Descargar lista de productos (Excel)</button><div id="mensajeListaPrecios" class="mensaje oculto" role="status"></div></div>
+          <div class="barra"><span></span><button id="botonActualizarProductos" class="secundario" type="button">Actualizar catálogo</button></div>
         </section>
 
         <section id="panelHistorial" class="panel panel-seccion oculto">
@@ -482,8 +518,8 @@
   <!-- Cliente oficial de Supabase -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
-  <script src="/static/productos.js"></script>
-  <script src="/static/registro.js?v=busqueda-dinamica-20261031"></script>
+  <script src="/static/productos.js?v=categorias-20261101"></script>
+  <script src="/static/registro.js?v=busqueda-categorias-20261101"></script>
   <script src="/static/tablas.js?v=2"></script>
   <script src="/static/historial-inventarios.js?v=2"></script>
   <script>

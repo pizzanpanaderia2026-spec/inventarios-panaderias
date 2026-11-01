@@ -4,7 +4,7 @@
   const panel = document.getElementById("panelRegistro");
   if (!panel) return;
 
-  let token = null, bakery = null, catalogo = [], cierre = null;
+  let token = null, bakery = null, catalogo = [], categorias = [], cierre = null;
   let seleccionados = new Map();
   const fecha = document.getElementById("fechaRegistro");
   const filas = document.getElementById("filasRegistro");
@@ -85,10 +85,11 @@
 
   actualizarLimitesFecha();
 
-  window.iniciarRegistroDiario = async function (sesion, panaderia, productos) {
+  window.iniciarRegistroDiario = async function (sesion, panaderia, productos, categoriasIniciales) {
     token = sesion.access_token;
     bakery = panaderia;
     catalogo = productos || [];
+    categorias = categoriasIniciales || [];
     await cargar();
   };
 
@@ -123,8 +124,14 @@
       cierre = d.cierre;
       seleccionados = new Map();
       (d.lineas || []).forEach(linea => {
-        const producto = productoPorId(linea.producto_id);
-        if (producto) {
+        const productoBase = productoPorId(linea.producto_id);
+        if (productoBase) {
+          const producto = {
+            ...productoBase,
+            nombre: linea.producto_nombre || productoBase.nombre,
+            precio: linea.precio_unitario !== null && linea.precio_unitario !== undefined
+              ? linea.precio_unitario : productoBase.precio
+          };
           seleccionados.set(String(producto.id), {
             producto,
             cantidad: Number(linea.cantidad)
@@ -154,9 +161,11 @@
       return;
     }
 
+    const categoriasCoincidentes = categorias.filter(c => c.activa && !c.protegida && c.nombre.toLocaleLowerCase("es").includes(q));
+    const idsCategorias = new Set(categoriasCoincidentes.map(c => String(c.id)));
     const coincidencias = catalogo.filter(p =>
-      p.activo &&
-      p.nombre.toLocaleLowerCase("es").includes(q) &&
+      p.activo && p.categoria_activa !== false && !p.categoria_protegida &&
+      (p.nombre.toLocaleLowerCase("es").includes(q) || idsCategorias.has(String(p.categoria_id))) &&
       !seleccionados.has(String(p.id))
     );
 
@@ -176,7 +185,12 @@
         nombre.textContent = producto.nombre;
         const precio = document.createElement("span");
         precio.textContent = "$" + Number(producto.precio).toFixed(2);
-        opcion.append(nombre, precio);
+        const categoria = document.createElement("small");
+        categoria.textContent = producto.categoria_nombre || "";
+        categoria.style.cssText = "display:block;color:#78716c;font-size:12px";
+        const texto = document.createElement("span");
+        texto.append(nombre, categoria);
+        opcion.append(texto, precio);
         opcion.addEventListener("click", () => {
           inputBusqueda.value = producto.nombre;
           inputBusqueda.dataset.productoId = String(producto.id);
@@ -370,8 +384,9 @@
     }
   });
 
-  window.actualizarRegistroCatalogo = async function (productos) {
+  window.actualizarRegistroCatalogo = async function (productos, categoriasNuevas) {
     catalogo = productos || [];
+    categorias = categoriasNuevas || [];
     await cargar();
   };
 })();

@@ -505,7 +505,7 @@ def consultar_registro(
         datos_cierre = cierre.data[0]
         lineas = (
             supabase.table("inventario_detalles")
-            .select("id,producto_id,cantidad,precio_unitario")
+            .select("id,producto_id,cantidad,precio_unitario,producto_nombre")
             .eq("cierre_id", datos_cierre["id"]).execute()
         )
         return {"cierre": datos_cierre, "lineas": lineas.data}
@@ -1193,3 +1193,8 @@ def admin_cambiar_nombre(datos: NombreAdminCambio, authorization: str | None = H
         return {"actualizado": True, "nombre": nombre}
     except Exception:
         raise HTTPException(status_code=503, detail="No se pudo actualizar el nombre.")
+
+
+# API del catálogo con categorías por panadería.
+from catalogo import router as catalogo_router
+app.include_router(catalogo_router)
