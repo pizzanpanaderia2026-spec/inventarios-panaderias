@@ -505,7 +505,7 @@ def consultar_registro(
         datos_cierre = cierre.data[0]
         lineas = (
             supabase.table("inventario_detalles")
-            .select("id,producto_id,cantidad,precio_unitario")
+            .select("id,producto_id,cantidad,precio_unitario,producto_nombre")
             .eq("cierre_id", datos_cierre["id"]).execute()
         )
         return {"cierre": datos_cierre, "lineas": lineas.data}
