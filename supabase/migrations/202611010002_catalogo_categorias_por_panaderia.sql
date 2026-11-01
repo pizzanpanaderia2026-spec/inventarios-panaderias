@@ -81,7 +81,7 @@ join public.categorias_productos c
   on c.panaderia_id=p.id and lower(c.nombre)=lower(d.categoria)
 where not exists (
   select 1 from public.productos x
-  where x.panaderia_id=p.id and lower(x.nombre)=lower(unaccent(d.nombre))
+  where x.panaderia_id=p.id and lower(x.nombre)=lower(d.nombre)
 );
 
 -- La carpeta de desactivados es única, permanente y no puede modificarse.
