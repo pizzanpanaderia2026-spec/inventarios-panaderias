@@ -199,17 +199,17 @@
     catch(e){notice(e.message);}
   }
   async function reactivate(p){
-    const original=p.categoria_original_id;
-    let target=original;
-    if(!target){
-      const options=categories.filter(c=>c.activa&&!c.protegida);
-      const n=Number(prompt("Este producto ya no tiene categoría original. Elige el número de la nueva categoría:\n"+options.map((c,i)=>(i+1)+". "+c.nombre).join("\n")));
-      if(!Number.isInteger(n)||n<1||n>options.length)return;target=options[n-1].id;
-    }
-    try{await api("/api/catalogo/productos/"+p.id+"?panaderia_id="+bakery.id,{method:"PATCH",body:JSON.stringify({activo:true,categoria_id:target})});await load();notice("Producto reactivado.","exito");}
+    const options=categories.filter(c=>c.activa&&!c.protegida);
+    if(!options.length)return notice("Primero crea o reactiva una categoría para asignar el producto.");
+    const originalIndex=options.findIndex(c=>String(c.id)===String(p.categoria_original_id));
+    const defaultIndex=originalIndex>=0?originalIndex+1:1;
+    const promptText="Elige la categoría para reactivar el producto.\n"+options.map((c,i)=>(i+1)+". "+c.nombre+(i===originalIndex?" (original)":"")).join("\n");
+    const n=Number(prompt(promptText,String(defaultIndex)));
+    if(!Number.isInteger(n)||n<1||n>options.length)return;
+    const target=options[n-1].id;
+    try{await api("/api/catalogo/productos/"+p.id+"?panaderia_id="+bakery.id,{method:"PATCH",body:JSON.stringify({activo:true,categoria_id:target})});await load();notice("Producto reactivado en "+options[n-1].nombre+".","exito");}
     catch(e){notice(e.message);}
   }
-
   form.addEventListener("submit",async e=>{
     e.preventDefault();const name=nameInput.value.trim(),price=Number(priceInput.value),cat=Number(categoryInput.value);
     if(!name||!Number.isFinite(price)||price<0||!Number.isFinite(cat))return notice("Completa el nombre, precio y categoría.");
