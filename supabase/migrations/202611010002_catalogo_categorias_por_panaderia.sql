@@ -9,7 +9,7 @@ create table if not exists public.categorias_productos (
   actualizada_en timestamptz not null default now()
 );
 create unique index if not exists categorias_productos_nombre_unico
-on public.categorias_productos (panaderia_id, lower(unaccent(nombre)));
+on public.categorias_productos (panaderia_id, lower(nombre));
 alter table public.productos
   add column if not exists categoria_id bigint references public.categorias_productos(id) on delete set null,
   add column if not exists categoria_original_id bigint references public.categorias_productos(id) on delete set null;
@@ -32,7 +32,7 @@ where not exists (
 -- Catálogo inicial exclusivo de Pizzan. Rebanadas se omite hasta confirmar su precio.
 with pizzan as (
   select id from public.panaderias
-  where lower(unaccent(nombre)) = lower(unaccent('Pizzan'))
+  where lower(nombre) = lower('Pizzan')
   order by id limit 1
 ), iniciales(nombre) as (
   values
@@ -43,12 +43,12 @@ insert into public.categorias_productos(panaderia_id,nombre)
 select p.id,i.nombre from pizzan p cross join iniciales i
 where not exists (
   select 1 from public.categorias_productos c
-  where c.panaderia_id=p.id and lower(unaccent(c.nombre))=lower(unaccent(i.nombre))
+  where c.panaderia_id=p.id and lower(c.nombre)=lower(i.nombre)
 );
 
 with pizzan as (
   select id from public.panaderias
-  where lower(unaccent(nombre)) = lower(unaccent('Pizzan'))
+  where lower(nombre) = lower('Pizzan')
   order by id limit 1
 ), datos(categoria, nombre, precio) as (
   values
@@ -78,10 +78,10 @@ insert into public.productos(panaderia_id,nombre,precio,activo,categoria_id)
 select p.id,d.nombre,d.precio,true,c.id
 from pizzan p cross join datos d
 join public.categorias_productos c
-  on c.panaderia_id=p.id and lower(unaccent(c.nombre))=lower(unaccent(d.categoria))
+  on c.panaderia_id=p.id and lower(c.nombre)=lower(d.categoria)
 where not exists (
   select 1 from public.productos x
-  where x.panaderia_id=p.id and lower(unaccent(x.nombre))=lower(unaccent(d.nombre))
+  where x.panaderia_id=p.id and lower(x.nombre)=lower(unaccent(d.nombre))
 );
 
 -- La carpeta de desactivados es única, permanente y no puede modificarse.
@@ -97,7 +97,8 @@ begin
       raise exception 'La categoría Productos desactivados está protegida.';
     end if;
   end if;
-  return coalesce(new,old);
+  if tg_op='DELETE' then return old; end if;
+  return new;
 end;
 $$;
 drop trigger if exists proteger_categoria_desactivados on public.categorias_productos;
