@@ -124,8 +124,14 @@
       cierre = d.cierre;
       seleccionados = new Map();
       (d.lineas || []).forEach(linea => {
-        const producto = productoPorId(linea.producto_id);
-        if (producto) {
+        const productoBase = productoPorId(linea.producto_id);
+        if (productoBase) {
+          const producto = {
+            ...productoBase,
+            nombre: linea.producto_nombre || productoBase.nombre,
+            precio: linea.precio_unitario !== null && linea.precio_unitario !== undefined
+              ? linea.precio_unitario : productoBase.precio
+          };
           seleccionados.set(String(producto.id), {
             producto,
             cantidad: Number(linea.cantidad)
