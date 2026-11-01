@@ -384,6 +384,7 @@
       await api("/api/registro/cerrar?panaderia_id=" + bakery.id + "&fecha_registro=" + fecha.value, { method: "POST" });
       aviso("Día cerrado correctamente.", "exito");
       await cargar();
+      if (window.actualizarTablasDiarias) await window.actualizarTablasDiarias();
     } catch (e) {
       aviso(e.message);
     }
@@ -398,6 +399,7 @@
       });
       aviso("Registro reabierto. Los cambios quedarán sujetos a auditoría.", "exito");
       await cargar();
+      if (window.actualizarTablasDiarias) await window.actualizarTablasDiarias();
     } catch (e) {
       aviso(e.message);
     }
