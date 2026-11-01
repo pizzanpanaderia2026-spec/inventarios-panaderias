@@ -44,9 +44,12 @@ def _tiene_historial_cerrado(core, product_id):
     closures = core.supabase.table("cierres_diarios").select("id,estado").in_("id", closure_ids).execute().data if closure_ids else []
     status = {int(c["id"]): c["estado"] for c in closures}
     historical = any(d.get("cierre_id") is None or status.get(int(d["cierre_id"])) != "abierto" for d in details)
-    if not historical:
-        core.supabase.table("inventario_detalles").delete().in_("id", [d["id"] for d in details]).execute()
+    open_ids = [d["id"] for d in details if d.get("cierre_id") is not None and status.get(int(d["cierre_id"])) == "abierto"]
+    if open_ids:
+        # Retira las líneas provisionales de días que siguen abiertos, pero nunca toca cierres.
+        core.supabase.table("inventario_detalles").delete().in_("id", open_ids).execute()
     return historical
+
 
 def _desactivar(core, product, protected_id):
     current_category = product.get("categoria_id")
