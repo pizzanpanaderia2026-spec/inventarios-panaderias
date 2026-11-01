@@ -190,6 +190,8 @@ def crear_producto(data: ProductoNuevoCatalogo, authorization: str | None = Head
     if not category.get("activa"):
         raise HTTPException(status_code=409, detail="No puedes agregar productos a una categoría desactivada.")
     name = core.normalizar_nombre_producto(data.nombre)
+    if not name:
+        raise HTTPException(status_code=422, detail="Escribe un nombre de producto.")
     try:
         existing = core.supabase.table("productos").select("id,nombre,activo").eq("panaderia_id", data.panaderia_id).execute().data
         if any(core.clave_nombre_producto(x["nombre"]) == core.clave_nombre_producto(name) for x in existing):
@@ -213,6 +215,8 @@ def actualizar_producto_catalogo(producto_id: int, data: ProductoCambioCatalogo,
     changes = {}
     if data.nombre is not None:
         name = core.normalizar_nombre_producto(data.nombre)
+        if not name:
+            raise HTTPException(status_code=422, detail="Escribe un nombre de producto.")
         all_products = core.supabase.table("productos").select("id,nombre").eq("panaderia_id", panaderia_id).execute().data
         if any(int(x["id"]) != producto_id and core.clave_nombre_producto(x["nombre"]) == core.clave_nombre_producto(name) for x in all_products):
             raise HTTPException(status_code=409, detail="Ese nombre ya existe en esta panadería.")
