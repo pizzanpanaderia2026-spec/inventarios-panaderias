@@ -117,7 +117,7 @@
         dots.setAttribute("aria-label","Opciones de "+c.nombre);actions.append(dots);
         if(categoryMenuOpen===c.id){
           const menu=document.createElement("div");menu.className="catalogo-menu";
-          menu.append(makeButton("Seleccionar productos",()=>{openCategory=c.id;selectionMode=true;selected.clear();menuOpen=false;draw()}));
+          menu.append(makeButton("Seleccionar productos",()=>{openCategory=c.id;selectionMode=true;selected.clear();categoryMenuOpen=null;draw()}));
           menu.append(makeButton("Agregar producto",()=>showProductForm(null,c.id)));
           menu.append(makeButton("Editar categoría",()=>showCategoryForm(c)));
           menu.append(makeButton(c.activa?"Desactivar categoría":"Reactivar categoría",()=>toggleCategory(c)));
