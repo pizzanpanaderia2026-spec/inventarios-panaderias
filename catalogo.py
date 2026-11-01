@@ -36,7 +36,10 @@ def _categoria(core, panaderia_id, categoria_id, allow_protected=False):
 
 
 def _desactivar(core, product, protected_id):
-    original = product.get("categoria_original_id") or product.get("categoria_id")
+    current_category = product.get("categoria_id")
+    original = product.get("categoria_original_id")
+    if current_category != protected_id and not original:
+        original = current_category
     return core.supabase.table("productos").update({
         "activo": False,
         "categoria_original_id": original,
@@ -152,9 +155,12 @@ def eliminar_categoria(categoria_id: int, panaderia_id: int, authorization: str 
     category = _categoria(core, panaderia_id, categoria_id)
     try:
         products = core.supabase.table("productos").select("id,panaderia_id,categoria_id,categoria_original_id,activo").eq("panaderia_id", panaderia_id).eq("categoria_id", categoria_id).execute().data
-        # Al retirar la categoría, todos sus productos quedan inactivos y sin categoría.
+        protected = core.supabase.table("categorias_productos").select("id").eq("panaderia_id", panaderia_id).eq("protegida", True).limit(1).execute().data
+        if not protected:
+            raise HTTPException(status_code=503, detail="No existe la categoría protegida.")
+        # Pierden su categoría original, pero siguen localizables en la carpeta protegida.
         for product in products:
-            core.supabase.table("productos").update({"activo": False, "categoria_id": None, "categoria_original_id": None}).eq("id", product["id"]).execute()
+            core.supabase.table("productos").update({"activo": False, "categoria_id": protected[0]["id"], "categoria_original_id": None}).eq("id", product["id"]).execute()
         core.supabase.table("categorias_productos").delete().eq("id", categoria_id).eq("panaderia_id", panaderia_id).execute()
         core.supabase.table("auditoria_inventario").insert({"panaderia_id": panaderia_id, "usuario_id": str(user.id), "accion": "eliminar_categoria", "detalles": {"categoria_id": categoria_id, "nombre": category["nombre"], "productos_desactivados": len(products)}}).execute()
         return {"eliminada": True, "productos_desactivados": len(products)}
