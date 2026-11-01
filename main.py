@@ -1193,3 +1193,8 @@ def admin_cambiar_nombre(datos: NombreAdminCambio, authorization: str | None = H
         return {"actualizado": True, "nombre": nombre}
     except Exception:
         raise HTTPException(status_code=503, detail="No se pudo actualizar el nombre.")
+
+
+# API del catálogo con categorías por panadería.
+from catalogo import router as catalogo_router
+app.include_router(catalogo_router)
