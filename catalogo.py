@@ -84,8 +84,14 @@ def listar_catalogo(panaderia_id: int, authorization: str | None = Header(defaul
         counts = {}
         for p in products:
             counts[p.get("categoria_id")] = counts.get(p.get("categoria_id"), 0) + 1
+        category_map = {int(c["id"]): c for c in categories}
         for c in categories:
             c["productos_count"] = counts.get(c["id"], 0)
+        for p in products:
+            category = category_map.get(int(p["categoria_id"])) if p.get("categoria_id") is not None else None
+            p["categoria_nombre"] = category.get("nombre") if category else None
+            p["categoria_activa"] = bool(category and category.get("activa"))
+            p["categoria_protegida"] = bool(category and category.get("protegida"))
         return {"categorias": categories, "productos": products, "es_admin": bool(profile.get("es_admin_principal") or profile.get("rol") == "admin")}
     except HTTPException:
         raise
