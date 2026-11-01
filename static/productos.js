@@ -237,11 +237,12 @@
     if(!row)return;
     if(row.querySelector(".catalogo-reactivar-selector"))return;
     const originalIndex=options.findIndex(c=>String(c.id)===String(p.categoria_original_id));
-    const picker=document.createElement("div");picker.className="catalogo-reactivar-selector";picker.style.cssText="display:flex;gap:8px;flex-wrap:wrap;width:100%;padding:8px 0";
-    const select=document.createElement("select");select.style.cssText="flex:1;min-width:180px;padding:9px;border:1px solid #cfc5b8;border-radius:8px";
+    const picker=document.createElement("div");picker.className="catalogo-reactivar-selector";
+    picker.style.cssText="display:flex;gap:8px;flex-wrap:wrap;align-items:center;width:100%;max-width:100%;min-width:0;box-sizing:border-box;padding:8px 0";
+    const select=document.createElement("select");select.style.cssText="flex:1 1 100%;width:100%;min-width:0;max-width:100%;box-sizing:border-box;padding:9px;border:1px solid #cfc5b8;border-radius:8px";
     options.forEach((c,i)=>{const o=document.createElement("option");o.value=c.id;o.textContent=c.nombre+(i===originalIndex?" (original)":"");if(i===originalIndex)o.selected=true;select.append(o)});
     picker.append(select,makeButton("Confirmar",()=>confirmarReactivacion(p,Number(select.value))),makeButton("Cancelar",()=>picker.remove()));
-    row.append(picker);
+    row.insertAdjacentElement("afterend",picker);
   }
   async function confirmarReactivacion(p,categoryId){
     try{await api("/api/catalogo/productos/"+p.id+"?panaderia_id="+bakery.id,{method:"PATCH",body:JSON.stringify({activo:true,categoria_id:categoryId})});await load();notice("Producto reactivado.","exito");}
