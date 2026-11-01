@@ -32,7 +32,7 @@ where not exists (
 -- Catálogo inicial exclusivo de Pizzan. Rebanadas se omite hasta confirmar su precio.
 with pizzan as (
   select id from public.panaderias
-  where lower(nombre) = lower('Pizzan')
+  where lower(nombre) like '%pizzan%'
   order by id limit 1
 ), iniciales(nombre) as (
   values
