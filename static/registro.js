@@ -10,6 +10,27 @@
   const filas = document.getElementById("filasRegistro");
   const mensaje = document.getElementById("mensajeRegistro");
 
+  // Resumen visual del registro: se actualiza sin alterar los datos del servidor.
+  const resumen = document.createElement("div");
+  resumen.className = "panel";
+  resumen.style.cssText = "display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-top:14px";
+  const totalPiezas = document.createElement("div");
+  const etiquetaPiezas = document.createElement("p");
+  etiquetaPiezas.className = "nota";
+  etiquetaPiezas.textContent = "Total de piezas";
+  const valorPiezas = document.createElement("strong");
+  valorPiezas.style.cssText = "display:block;font-size:1.5rem;color:#713f12";
+  const totalImporte = document.createElement("div");
+  const etiquetaImporte = document.createElement("p");
+  etiquetaImporte.className = "nota";
+  etiquetaImporte.textContent = "Importe total";
+  const valorImporte = document.createElement("strong");
+  valorImporte.style.cssText = "display:block;font-size:1.5rem;color:#713f12";
+  totalPiezas.append(etiquetaPiezas, valorPiezas);
+  totalImporte.append(etiquetaImporte, valorImporte);
+  resumen.append(totalPiezas, totalImporte);
+  filas.after(resumen);
+
   // Controles visuales de captura: no crean ni modifican reglas del servidor.
   const busqueda = document.createElement("div");
   busqueda.className = "campo";
@@ -204,7 +225,23 @@
     aviso("Producto agregado al registro.", "exito");
   });
 
+  function actualizarResumen() {
+    let piezas = 0;
+    let importe = 0;
+    seleccionados.forEach(({ producto, cantidad }) => {
+      const cantidadValida = Number(cantidad) || 0;
+      piezas += cantidadValida;
+      importe += Number(producto.precio || 0) * cantidadValida;
+    });
+    valorPiezas.textContent = piezas.toLocaleString("es-MX");
+    valorImporte.textContent = importe.toLocaleString("es-MX", {
+      style: "currency",
+      currency: "MXN"
+    });
+  }
+
   function dibujar() {
+    actualizarResumen();
     filas.replaceChildren();
     const activos = catalogo.filter(p => p.activo);
     if (!activos.length) {
@@ -252,6 +289,7 @@
         if (Number.isInteger(n) && n >= 0) {
           seleccionados.set(id, { producto, cantidad: n });
           subtotal.textContent = "Subtotal: $" + (Number(producto.precio) * n).toFixed(2);
+          actualizarResumen();
         } else {
           input.value = String(cantidad);
           aviso("La cantidad debe ser un número entero de cero o más.");
