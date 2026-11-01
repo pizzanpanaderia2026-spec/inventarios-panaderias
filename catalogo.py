@@ -268,8 +268,7 @@ def accion_multiple_productos(data: AccionProductos, authorization: str | None =
         if data.accion == "eliminar":
             eliminados, desactivados = 0, 0
             for p in products:
-                uses = core.supabase.table("inventario_detalles").select("id").eq("producto_id", p["id"]).limit(1).execute().data
-                if uses:
+                if _tiene_historial_cerrado(core, p["id"]):
                     protected = core.supabase.table("categorias_productos").select("id").eq("panaderia_id", data.panaderia_id).eq("protegida", True).limit(1).execute().data
                     _desactivar(core, p, protected[0]["id"])
                     desactivados += 1
@@ -291,9 +290,8 @@ def eliminar_producto_catalogo(producto_id: int, panaderia_id: int, authorizatio
     if not rows:
         raise HTTPException(status_code=404, detail="No se encontró el producto.")
     product = rows[0]
-    uses = core.supabase.table("inventario_detalles").select("id").eq("producto_id", producto_id).limit(1).execute().data
     try:
-        if uses:
+        if _tiene_historial_cerrado(core, producto_id):
             protected = core.supabase.table("categorias_productos").select("id").eq("panaderia_id", panaderia_id).eq("protegida", True).limit(1).execute().data
             _desactivar(core, product, protected[0]["id"])
             return {"accion": "desactivado"}
