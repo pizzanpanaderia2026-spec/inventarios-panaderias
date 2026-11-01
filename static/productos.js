@@ -172,12 +172,13 @@
     catch(e){notice(e.message);}
   }
   async function deleteCategory(c){
-    if(!confirm("¿Eliminar la categoría "+c.nombre+"? Sus productos quedarán desactivados y sin categoría; el historial se conservará."))return;
+    if(!confirm("¿Eliminar la categoría "+c.nombre+"? Sus productos quedarán desactivados y sin categoría original; el historial se conservará."))return;
     try{const r=await api("/api/catalogo/categorias/"+c.id+"?panaderia_id="+bakery.id,{method:"DELETE"});notice("Categoría eliminada. "+r.productos_desactivados+" productos quedaron desactivados y sin categoría.","exito");categoryMenuOpen=null;openCategory=null;await load();}
     catch(e){notice(e.message);}
   }
   async function bulkAction(action){
     if(!selected.size)return notice("Selecciona al menos un producto.");
+    if(action==="desactivar"&&!confirm("¿Desactivar los productos seleccionados? Se moverán a Productos desactivados."))return;
     let categoryId=null;
     if(action==="mover"){
       const options=categories.filter(c=>c.activa&&!c.protegida);
