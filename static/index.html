@@ -472,14 +472,14 @@
             <div class="barra"><h4>Configuración de archivado</h4><button id="adminArchivadoVolver" class="secundario" type="button">Volver a Administración</button></div>
             <p>Elige el día del mes en que se preparará el archivado de inventarios.</p>
             <div class="campo"><label for="adminDiaArchivado">Día mensual de archivado</label>
-              <select id="adminDiaArchivado" disabled>
+              <select id="adminDiaArchivado">
                 <option value="1">Día 1</option><option value="2">Día 2</option><option value="3">Día 3</option><option value="4">Día 4</option><option value="5">Día 5</option><option value="6">Día 6</option><option value="7">Día 7</option><option value="8">Día 8</option><option value="9">Día 9</option><option value="10">Día 10</option><option value="11">Día 11</option><option value="12">Día 12</option><option value="13">Día 13</option><option value="14">Día 14</option><option value="15" selected>Día 15</option><option value="16">Día 16</option><option value="17">Día 17</option><option value="18">Día 18</option><option value="19">Día 19</option><option value="20">Día 20</option><option value="21">Día 21</option><option value="22">Día 22</option><option value="23">Día 23</option><option value="24">Día 24</option><option value="25">Día 25</option><option value="26">Día 26</option><option value="27">Día 27</option><option value="28">Día 28</option><option value="29">Día 29</option><option value="30">Día 30</option><option value="31">Día 31</option>
               </select>
             </div>
             <div class="admin-usuario">
               <strong>Google Drive</strong>
-              <p>Sin conectar. El archivado automático estará disponible cuando se configure la conexión.</p>
-              <span class="nota">Por ahora esta pantalla es visual; no se guarda ninguna configuración ni se mueve o elimina información.</span>
+              <p id="adminDriveEstado">Comprobando conexión con Google Drive...</p>
+              <p id="adminArchivadoEstado" class="nota" role="status">Consultando el estado del archivado...</p>
             </div>
             <h4>Reglas de conservación</h4>
             <ul>
@@ -488,7 +488,7 @@
               <li>Si el respaldo falla, los datos se conservan para reintentar; no se borra nada sin respaldo confirmado.</li>
               <li>Los periodos archivados no se modificarán retroactivamente al cambiar el día mensual.</li>
             </ul>
-            <button id="adminArchivadoGuardar" type="button" disabled>Guardar configuración (próximamente)</button>
+            <button id="adminArchivadoGuardar" type="button">Guardar configuración</button>
           </div>
           <div id="adminVistaUsuarios" class="oculto">
             <div class="barra"><h4>Usuarios</h4><button id="adminVolverInicio" class="secundario" type="button">Volver</button></div>
@@ -1002,6 +1002,36 @@
     function adminMensaje(texto, tipo = "error") {
       mostrarMensaje(document.getElementById("adminMensaje"), texto, tipo);
     }
+    async function adminCargarArchivadoConfig() {
+      const selector = document.getElementById("adminDiaArchivado");
+      const boton = document.getElementById("adminArchivadoGuardar");
+      const driveEstado = document.getElementById("adminDriveEstado");
+      const estado = document.getElementById("adminArchivadoEstado");
+      selector.disabled = true;
+      boton.disabled = true;
+      estado.textContent = "Consultando el estado del archivado...";
+      try {
+        const config = await adminFetch("/api/admin/archivado/configuracion");
+        selector.value = String(config.dia_mes);
+        selector.disabled = false;
+        const periodo = "Periodo actual: " + config.periodo_inicio + " al " + config.periodo_fin + ".";
+        estado.textContent = config.ultimo_error
+          ? "ERROR DE ARCHIVADO: " + config.ultimo_error
+          : periodo;
+        estado.className = config.ultimo_error ? "mensaje error" : "nota";
+        try {
+          const drive = await adminFetch("/api/admin/drive/estado");
+          driveEstado.textContent = drive.mensaje + " Carpeta: " + drive.carpeta + ".";
+        } catch (errorDrive) {
+          driveEstado.textContent = errorDrive.message || "No se pudo comprobar Google Drive.";
+        }
+        boton.disabled = false;
+      } catch (error) {
+        estado.textContent = error.message || "No se pudo consultar la configuración.";
+        estado.className = "mensaje error";
+        driveEstado.textContent = "No se pudo comprobar la conexión con Google Drive.";
+      }
+    }
     function adminVista(vista) {
       document.getElementById("adminVistaUsuarios").classList.toggle("oculto", vista !== "usuarios");
       document.getElementById("adminVistaArchivado").classList.toggle("oculto", vista !== "archivado");
@@ -1104,7 +1134,31 @@
     document.getElementById("botonAdministracion").addEventListener("click", () => { if (esAdministrador()) adminCargar(); });
     document.getElementById("adminVerUsuarios").addEventListener("click", adminCargar);
     document.getElementById("adminAgregarUsuario").addEventListener("click", () => adminAbrirAgregar().catch(e => adminMensaje(e.message)));
-    document.getElementById("adminConfiguracionArchivado").addEventListener("click", () => adminVista("archivado"));
+    document.getElementById("adminConfiguracionArchivado").addEventListener("click", () => { adminVista("archivado"); adminCargarArchivadoConfig(); });
+    document.getElementById("adminArchivadoGuardar").addEventListener("click", async () => {
+      const boton = document.getElementById("adminArchivadoGuardar");
+      const estado = document.getElementById("adminArchivadoEstado");
+      boton.disabled = true;
+      try {
+        const config = await adminFetch("/api/admin/archivado/configuracion", {
+          method: "PATCH",
+          body: JSON.stringify({
+            dia_mes: Number(document.getElementById("adminDiaArchivado").value)
+          })
+        });
+        estado.className = config.ultimo_error ? "mensaje error" : "nota";
+        estado.textContent = config.ultimo_error
+          ? "ERROR DE ARCHIVADO: " + config.ultimo_error
+          : "Configuración guardada. Periodo actual: " + config.periodo_inicio + " al " + config.periodo_fin + ".";
+        adminMensaje("Configuración de archivado guardada.", "exito");
+      } catch (error) {
+        estado.className = "mensaje error";
+        estado.textContent = error.message || "No se pudo guardar la configuración.";
+      } finally {
+        boton.disabled = false;
+      }
+    });
+
     document.getElementById("adminArchivadoVolver").addEventListener("click", () => adminVista("inicio"));
     document.getElementById("adminVolverInicio").addEventListener("click", () => adminVista("inicio"));
     document.getElementById("adminCancelarUsuario").addEventListener("click", () => adminVista("usuarios"));
