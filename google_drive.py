@@ -182,14 +182,20 @@ def subir_y_verificar_excel(
         if existentes:
             archivo = existentes[0]
             contenido_existente = descargar_archivo_drive(archivo["id"])
-            if hashlib.sha256(contenido_existente).hexdigest() != sha256:
+            sha_existente = hashlib.sha256(contenido_existente).hexdigest()
+            sha_guardado = (archivo.get("appProperties") or {}).get("content_sha256")
+            if sha_guardado:
+                coincide = sha_existente == sha_guardado
+            else:
+                coincide = sha_existente == sha256
+            if not coincide:
                 raise GoogleDriveConfigurationError(
-                    "Ya existe un respaldo de este periodo con contenido diferente. No se modificó el archivo."
+                    "El archivo existente no superó la verificación de integridad. No se modificó."
                 )
             return {
                 "id": archivo["id"],
                 "nombre": archivo["name"],
-                "sha256": sha256,
+                "sha256": sha_existente,
                 "bytes": len(contenido_existente),
                 "verificado": True,
                 "reutilizado": True,
