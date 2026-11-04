@@ -5,6 +5,7 @@ en el repositorio ni imprimirse en logs.
 """
 import os
 from functools import lru_cache
+from io import BytesIO
 from pathlib import Path
 
 from google.oauth2.service_account import Credentials
@@ -174,6 +175,10 @@ def subir_y_verificar_excel(
     sha256 = hashlib.sha256(contenido).hexdigest()
     try:
         existentes = _buscar_archivo_por_clave(clave_archivo)
+        if len(existentes) > 1:
+            raise GoogleDriveConfigurationError(
+                "Hay más de un archivo asociado al mismo periodo. No se modificó ninguno."
+            )
         if existentes:
             archivo = existentes[0]
             contenido_existente = descargar_archivo_drive(archivo["id"])
