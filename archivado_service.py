@@ -437,12 +437,23 @@ def ejecutar_archivado(supabase) -> dict:
 
 def obtener_estado_archivado(supabase) -> dict:
     config = obtener_configuracion_archivado(supabase)
+    ultimo_error = config.get("ultimo_error")
+    ultima_ejecucion = config.get("ultima_ejecucion")
+    if not ultimo_error and ultima_ejecucion:
+        try:
+            ultima = datetime.fromisoformat(str(ultima_ejecucion))
+            if datetime.now(ZONA_HORARIA) - ultima > timedelta(hours=36):
+                ultimo_error = (
+                    "No se ha confirmado una ejecución automática del archivado en las últimas 36 horas."
+                )
+        except (TypeError, ValueError):
+            ultimo_error = "No se pudo comprobar la fecha de la última ejecución automática."
     return {
         "dia_mes": config["dia_mes"],
         "periodo_inicio": config["periodo_inicio"],
         "periodo_fin": config["periodo_fin"],
-        "ultima_ejecucion": config.get("ultima_ejecucion"),
-        "ultimo_error": config.get("ultimo_error"),
+        "ultima_ejecucion": ultima_ejecucion,
+        "ultimo_error": ultimo_error,
         "ultimo_error_en": config.get("ultimo_error_en"),
     }
 
