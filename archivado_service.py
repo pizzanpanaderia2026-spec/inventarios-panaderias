@@ -513,3 +513,32 @@ def obtener_archivo_para_fecha(supabase, panaderia_id: int, fecha: date) -> dict
                 "periodo_fin": fin.isoformat(),
             }
     raise LookupError("Todavía no hay un archivo histórico para esa fecha.")
+
+
+def listar_archivos_historicos(supabase, panaderia_id: int) -> list[dict]:
+    eventos = (
+        supabase.table("auditoria_inventario")
+        .select("detalles,creado_en")
+        .eq("panaderia_id", panaderia_id)
+        .eq("accion", "respaldo_periodo")
+        .order("creado_en", desc=True)
+        .limit(1000)
+        .execute()
+    ).data
+    salida = []
+    vistos = set()
+    for evento in eventos:
+        detalles = evento.get("detalles") or {}
+        clave = detalles.get("archive_key")
+        if not clave or clave in vistos:
+            continue
+        vistos.add(clave)
+        if detalles.get("estado") != "verificado":
+            continue
+        salida.append({
+            "periodo_inicio": detalles.get("periodo_inicio"),
+            "periodo_fin": detalles.get("periodo_fin"),
+            "nombre": detalles.get("drive_file_name") or "Inventario histórico.xlsx",
+            "verificado_en": detalles.get("verificado_en"),
+        })
+    return salida
