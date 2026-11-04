@@ -11,6 +11,13 @@ from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from fastapi.staticfiles import StaticFiles
 from supabase import create_client
 from google_drive import GoogleDriveConfigurationError, verificar_carpeta_respaldo
+from archivado_service import (
+    ejecutar_archivado,
+    guardar_dia_archivado,
+    obtener_archivo_para_fecha,
+    obtener_estado_archivado,
+)
+import secrets
 
 
 app = FastAPI(
@@ -1450,3 +1457,90 @@ def estado_google_drive(
         }
     except GoogleDriveConfigurationError as exc:
         raise HTTPException(status_code=503, detail=str(exc))
+
+
+class ConfiguracionArchivadoCambio(BaseModel):
+    dia_mes: int = Field(ge=1, le=31)
+
+
+@app.get("/api/admin/archivado/configuracion")
+def admin_obtener_configuracion_archivado(
+    authorization: str | None = Header(default=None),
+):
+    exigir_admin_principal(authorization)
+    try:
+        return obtener_estado_archivado(supabase)
+    except Exception:
+        raise HTTPException(
+            status_code=503,
+            detail="No se pudo consultar la configuración de archivado.",
+        )
+
+
+@app.patch("/api/admin/archivado/configuracion")
+def admin_guardar_configuracion_archivado(
+    datos: ConfiguracionArchivadoCambio,
+    authorization: str | None = Header(default=None),
+):
+    usuario, _ = exigir_admin_principal(authorization)
+    try:
+        guardar_dia_archivado(supabase, datos.dia_mes, str(usuario.id))
+        return obtener_estado_archivado(supabase)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    except Exception:
+        raise HTTPException(
+            status_code=503,
+            detail="No se pudo guardar la configuración de archivado.",
+        )
+
+
+@app.post("/api/internal/archivado/ejecutar")
+def ejecutar_archivado_programado(
+    x_archive_token: str | None = Header(default=None, alias="X-Archive-Token"),
+):
+    """Punto de entrada del programador nocturno; no requiere sesión de usuario."""
+    esperado = os.environ.get("ARCHIVE_JOB_TOKEN", "")
+    if not esperado:
+        raise HTTPException(
+            status_code=503,
+            detail="El programador de archivado todavía no está configurado.",
+        )
+    if not x_archive_token or not secrets.compare_digest(x_archive_token, esperado):
+        raise HTTPException(status_code=401, detail="No autorizado.")
+    try:
+        return ejecutar_archivado(supabase)
+    except Exception:
+        raise HTTPException(
+            status_code=503,
+            detail="El archivado no terminó. Los registros se conservaron para reintentar.",
+        )
+
+
+@app.get("/api/historial/archivo")
+def descargar_archivo_historico(
+    panaderia_id: int,
+    fecha: date,
+    authorization: str | None = Header(default=None),
+):
+    usuario = obtener_usuario_autenticado(authorization)
+    perfil = obtener_perfil(str(usuario.id))
+    comprobar_acceso_panaderia(str(usuario.id), perfil, panaderia_id)
+    try:
+        archivo = obtener_archivo_para_fecha(supabase, panaderia_id, fecha)
+        return StreamingResponse(
+            BytesIO(archivo["bytes"]),
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={
+                "Content-Disposition": f'attachment; filename="{archivo["nombre"]}"'
+            },
+        )
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except GoogleDriveConfigurationError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+    except Exception:
+        raise HTTPException(
+            status_code=503,
+            detail="No se pudo descargar el archivo histórico.",
+        )
