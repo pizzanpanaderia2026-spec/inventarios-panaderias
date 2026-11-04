@@ -374,7 +374,6 @@ def ejecutar_archivado(supabase) -> dict:
     locales = (
         supabase.table("panaderias")
         .select("id,nombre,activa")
-        .eq("activa", True)
         .order("id")
         .execute()
     ).data
