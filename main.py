@@ -10,6 +10,7 @@ from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from fastapi.staticfiles import StaticFiles
 from supabase import create_client
+from google_drive import GoogleDriveConfigurationError, verificar_carpeta_respaldo
 
 
 app = FastAPI(
@@ -1425,3 +1426,27 @@ def admin_cambiar_nombre(datos: NombreAdminCambio, authorization: str | None = H
 # API del catálogo con categorías por panadería.
 from catalogo import router as catalogo_router
 app.include_router(catalogo_router)
+
+
+@app.get("/api/admin/drive/estado")
+def estado_google_drive(
+    authorization: str | None = Header(default=None),
+):
+    """Verifica el acceso del administrador principal a la carpeta de respaldos."""
+    usuario = obtener_usuario_autenticado(authorization)
+    perfil = obtener_perfil(str(usuario.id))
+    if not es_admin_principal(perfil):
+        raise HTTPException(
+            status_code=403,
+            detail="Solo la administradora principal puede verificar Google Drive.",
+        )
+
+    try:
+        carpeta = verificar_carpeta_respaldo()
+        return {
+            "conectado": True,
+            "carpeta": carpeta["nombre"],
+            "mensaje": "La conexión con Google Drive funciona.",
+        }
+    except GoogleDriveConfigurationError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
