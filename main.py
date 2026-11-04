@@ -16,6 +16,7 @@ from archivado_service import (
     guardar_dia_archivado,
     obtener_archivo_para_fecha,
     obtener_estado_archivado,
+    listar_archivos_historicos,
 )
 import secrets
 
@@ -1514,6 +1515,23 @@ def ejecutar_archivado_programado(
         raise HTTPException(
             status_code=503,
             detail="El archivado no terminó. Los registros se conservaron para reintentar.",
+        )
+
+
+@app.get("/api/historial/archivos")
+def listar_archivos_historicos_endpoint(
+    panaderia_id: int,
+    authorization: str | None = Header(default=None),
+):
+    usuario = obtener_usuario_autenticado(authorization)
+    perfil = obtener_perfil(str(usuario.id))
+    comprobar_acceso_panaderia(str(usuario.id), perfil, panaderia_id)
+    try:
+        return {"archivos": listar_archivos_historicos(supabase, panaderia_id)}
+    except Exception:
+        raise HTTPException(
+            status_code=503,
+            detail="No se pudo consultar la lista de archivos históricos.",
         )
 
 
