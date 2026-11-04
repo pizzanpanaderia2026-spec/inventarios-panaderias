@@ -73,27 +73,19 @@ def obtener_configuracion_archivado(supabase, hoy: date | None = None) -> dict:
         }
 
     inicio, fin = periodo_inicial(hoy, DIA_ARCHIVADO_INICIAL)
-    primer_detalle = (
-        supabase.table("inventario_detalles")
-        .select("cierre_id")
-        .order("registrado_en")
+    primer_cierre = (
+        supabase.table("cierres_diarios")
+        .select("fecha")
+        .order("fecha")
         .limit(1)
         .execute()
     ).data
-    if primer_detalle and primer_detalle[0].get("cierre_id"):
-        cierre = (
-            supabase.table("cierres_diarios")
-            .select("fecha")
-            .eq("id", primer_detalle[0]["cierre_id"])
-            .limit(1)
-            .execute()
-        ).data
-        if cierre:
-            inicio, fin = periodo_que_contiene(
-                _fecha(cierre[0]["fecha"]),
-                DIA_ARCHIVADO_INICIAL,
-                -1,
-            )
+    if primer_cierre:
+        inicio, fin = periodo_que_contiene(
+            _fecha(primer_cierre[0]["fecha"]),
+            DIA_ARCHIVADO_INICIAL,
+            -1,
+        )
 
     config = {
         "dia_mes": DIA_ARCHIVADO_INICIAL,
