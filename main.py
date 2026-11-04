@@ -1281,7 +1281,9 @@ def admin_listar_usuarios(authorization: str | None = Header(default=None)):
                     lista = getattr(datos_lote, "users", None) if datos_lote is not None else None
                 lista = lista or []
             for u in lista:
-                auth_users[str(u.id)] = u
+                uid_auth = u.get("id") if isinstance(u, dict) else getattr(u, "id", None)
+                if uid_auth:
+                    auth_users[str(uid_auth)] = u
             if len(lista) < 100:
                 break
             pagina += 1
@@ -1290,9 +1292,24 @@ def admin_listar_usuarios(authorization: str | None = Header(default=None)):
             uid = str(p["id"])
             au = auth_users.get(uid)
             if not au:
+                # Respaldo individual para distintas respuestas de Supabase Auth.
+                try:
+                    detalle = supabase.auth.admin.get_user_by_id(uid)
+                    if isinstance(detalle, dict):
+                        au = detalle.get("user") or (detalle.get("data") or {}).get("user")
+                    else:
+                        au = getattr(detalle, "user", None)
+                        if au is None:
+                            datos_detalle = getattr(detalle, "data", None)
+                            au = getattr(datos_detalle, "user", None) if datos_detalle is not None else None
+                        if au is None and getattr(detalle, "id", None):
+                            au = detalle
+                except Exception:
+                    au = None
+            if not au:
                 continue
-            meta = getattr(au, "user_metadata", {}) or {}
-            correo = getattr(au, "email", None) or ""
+            meta = (au.get("user_metadata") if isinstance(au, dict) else getattr(au, "user_metadata", None)) or {}
+            correo = (au.get("email") if isinstance(au, dict) else getattr(au, "email", None)) or ""
             if meta.get("pizzan_cuenta_tecnica") is True:
                 continue
             es_admin = bool(p.get("es_admin_principal"))
