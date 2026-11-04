@@ -34,9 +34,8 @@ def _fecha(valor) -> date:
 
 
 def _insertar_evento_configuracion(supabase, config: dict, usuario_id: str | None = None):
-    panaderia_id = int(config["panaderia_config_id"])
-    detalles = {
-        "version": 1,
+    payload = {
+        "id": 1,
         "dia_mes": int(config["dia_mes"]),
         "periodo_inicio": config["periodo_inicio"],
         "periodo_fin": config["periodo_fin"],
@@ -44,50 +43,34 @@ def _insertar_evento_configuracion(supabase, config: dict, usuario_id: str | Non
         "ultima_ejecucion": config.get("ultima_ejecucion"),
         "ultimo_error": config.get("ultimo_error"),
         "ultimo_error_en": config.get("ultimo_error_en"),
-    }
-    payload = {
-        "panaderia_id": panaderia_id,
-        "accion": "configuracion_archivado",
-        "detalles": detalles,
+        "actualizado_en": datetime.now(ZONA_HORARIA).isoformat(),
     }
     if usuario_id:
-        payload["usuario_id"] = usuario_id
-    supabase.table("auditoria_inventario").insert(payload).execute()
-
-
+        payload["actualizado_por"] = usuario_id
+    supabase.table("configuracion_archivado").upsert(
+        payload, on_conflict="id"
+    ).execute()
 def obtener_configuracion_archivado(supabase, hoy: date | None = None) -> dict:
     hoy = hoy or fecha_local()
     filas = (
-        supabase.table("auditoria_inventario")
-        .select("panaderia_id,detalles,creado_en")
-        .eq("accion", "configuracion_archivado")
-        .order("creado_en", desc=True)
+        supabase.table("configuracion_archivado")
+        .select("id,dia_mes,periodo_inicio,periodo_fin,desplazamiento_fin,ultima_ejecucion,ultimo_error,ultimo_error_en")
+        .eq("id", 1)
         .limit(1)
         .execute()
     ).data
 
     if filas:
-        detalles = filas[0].get("detalles") or {}
+        fila = filas[0]
         return {
-            "panaderia_config_id": int(filas[0]["panaderia_id"]),
-            "dia_mes": int(detalles.get("dia_mes", DIA_ARCHIVADO_INICIAL)),
-            "periodo_inicio": str(detalles["periodo_inicio"]),
-            "periodo_fin": str(detalles["periodo_fin"]),
-            "desplazamiento_fin": int(detalles.get("desplazamiento_fin", -1)),
-            "ultima_ejecucion": detalles.get("ultima_ejecucion"),
-            "ultimo_error": detalles.get("ultimo_error"),
-            "ultimo_error_en": detalles.get("ultimo_error_en"),
+            "dia_mes": int(fila["dia_mes"]),
+            "periodo_inicio": str(fila["periodo_inicio"]),
+            "periodo_fin": str(fila["periodo_fin"]),
+            "desplazamiento_fin": int(fila.get("desplazamiento_fin", -1)),
+            "ultima_ejecucion": fila.get("ultima_ejecucion"),
+            "ultimo_error": fila.get("ultimo_error"),
+            "ultimo_error_en": fila.get("ultimo_error_en"),
         }
-
-    locales = (
-        supabase.table("panaderias")
-        .select("id,nombre")
-        .eq("activa", True)
-        .order("id")
-        .execute()
-    ).data
-    if not locales:
-        raise RuntimeError("No hay locales activos para inicializar el archivado.")
 
     inicio, fin = periodo_inicial(hoy, DIA_ARCHIVADO_INICIAL)
     primer_detalle = (
@@ -97,7 +80,7 @@ def obtener_configuracion_archivado(supabase, hoy: date | None = None) -> dict:
         .limit(1)
         .execute()
     ).data
-    if primer_detalle:
+    if primer_detalle and primer_detalle[0].get("cierre_id"):
         cierre = (
             supabase.table("cierres_diarios")
             .select("fecha")
@@ -113,7 +96,6 @@ def obtener_configuracion_archivado(supabase, hoy: date | None = None) -> dict:
             )
 
     config = {
-        "panaderia_config_id": int(locales[0]["id"]),
         "dia_mes": DIA_ARCHIVADO_INICIAL,
         "periodo_inicio": inicio.isoformat(),
         "periodo_fin": fin.isoformat(),
@@ -124,8 +106,6 @@ def obtener_configuracion_archivado(supabase, hoy: date | None = None) -> dict:
     }
     _insertar_evento_configuracion(supabase, config)
     return config
-
-
 def guardar_dia_archivado(supabase, nuevo_dia: int, usuario_id: str) -> dict:
     if not isinstance(nuevo_dia, int) or not 1 <= nuevo_dia <= 31:
         raise ValueError("El día mensual debe estar entre 1 y 31.")
@@ -156,30 +136,12 @@ def _registrar_error_configuracion(supabase, config: dict, mensaje: str):
     config["ultimo_error"] = mensaje[:1000]
     config["ultimo_error_en"] = datetime.now(ZONA_HORARIA).isoformat()
     _insertar_evento_configuracion(supabase, config)
-
-
 def _actualizar_configuracion_ejecucion(supabase, config: dict):
     config = dict(config)
     config["ultima_ejecucion"] = datetime.now(ZONA_HORARIA).isoformat()
     config["ultimo_error"] = None
     config["ultimo_error_en"] = None
     _insertar_evento_configuracion(supabase, config)
-
-
-def _verificar_archivo_existente(archivo: dict | None, detalles: dict) -> bytes:
-    if not archivo or archivo.get("id") != detalles.get("drive_file_id"):
-        raise GoogleDriveConfigurationError(
-            "No se encontró el archivo histórico verificado en Google Drive. Se conservarán los registros."
-        )
-    contenido = descargar_archivo_drive(archivo["id"])
-    esperado = detalles.get("sha256")
-    if not esperado or hashlib.sha256(contenido).hexdigest() != esperado:
-        raise GoogleDriveConfigurationError(
-            "El archivo histórico no superó la verificación de integridad. Se conservarán los registros."
-        )
-    return contenido
-
-
 def _clave_archivo(panaderia_id: int, inicio: date, fin: date) -> str:
     return f"{panaderia_id}|{inicio.isoformat()}|{fin.isoformat()}"
 
@@ -193,12 +155,10 @@ def _nombre_archivo(inicio: date, fin: date) -> str:
 
 def _ultimo_evento_archivo(supabase, panaderia_id: int, clave: str):
     filas = (
-        supabase.table("auditoria_inventario")
-        .select("detalles,creado_en")
+        supabase.table("archivos_archivados")
+        .select("*")
         .eq("panaderia_id", panaderia_id)
-        .eq("accion", "respaldo_periodo")
-        .contains("detalles", {"archive_key": clave})
-        .order("creado_en", desc=True)
+        .eq("archive_key", clave)
         .limit(1)
         .execute()
     ).data
@@ -215,29 +175,32 @@ def _registrar_evento_archivo(
     archivo: dict | None = None,
     error: str | None = None,
 ):
-    detalles = {
-        "archive_key": clave,
+    existente = _ultimo_evento_archivo(supabase, panaderia_id, clave)
+    payload = {
+        "panaderia_id": panaderia_id,
         "periodo_inicio": inicio.isoformat(),
         "periodo_fin": fin.isoformat(),
+        "archive_key": clave,
         "estado": estado,
+        "intentos": int((existente or {}).get("intentos", 0)) + 1,
+        "ultimo_error": error[:1000] if error else None,
+        "actualizado_en": datetime.now(ZONA_HORARIA).isoformat(),
     }
     if archivo:
-        detalles.update({
+        payload.update({
             "drive_file_id": archivo["id"],
             "drive_file_name": archivo["nombre"],
             "sha256": archivo["sha256"],
-            "bytes": archivo["bytes"],
+            "tamano_bytes": archivo["bytes"],
             "verificado_en": datetime.now(ZONA_HORARIA).isoformat(),
+            "ultimo_error": None,
         })
-    if error:
-        detalles["error"] = error[:1000]
-    supabase.table("auditoria_inventario").insert({
-        "panaderia_id": panaderia_id,
-        "accion": "respaldo_periodo",
-        "detalles": detalles,
-    }).execute()
-
-
+    if existente:
+        supabase.table("archivos_archivados").update(payload).eq(
+            "id", existente["id"]
+        ).execute()
+    else:
+        supabase.table("archivos_archivados").insert(payload).execute()
 def _obtener_dias_periodo(supabase, panaderia_id: int, inicio: date, fin: date) -> list[dict]:
     cierres = (
         supabase.table("cierres_diarios")
@@ -375,25 +338,20 @@ def _limpiar_periodos_verificados(supabase, locales: list[dict], hoy: date) -> i
     for local in locales:
         local_id = int(local["id"])
         eventos = (
-            supabase.table("auditoria_inventario")
-            .select("detalles,creado_en")
+            supabase.table("archivos_archivados")
+            .select("*")
             .eq("panaderia_id", local_id)
-            .eq("accion", "respaldo_periodo")
-            .order("creado_en", desc=True)
+            .eq("estado", "verificado")
+            .order("periodo_inicio", desc=True)
             .limit(1000)
             .execute()
         ).data
-        vistos = set()
-        for evento in eventos:
-            detalles = evento.get("detalles") or {}
-            clave = detalles.get("archive_key")
-            if not clave or clave in vistos or detalles.get("estado") != "verificado":
-                continue
-            vistos.add(clave)
+        for detalles in eventos:
             inicio = _fecha(detalles["periodo_inicio"])
             fin = _fecha(detalles["periodo_fin"])
             if inicio >= limite:
                 continue
+            clave = detalles["archive_key"]
             archivo = obtener_archivo_archivado(clave)
             _verificar_archivo_existente(archivo, detalles)
 
@@ -418,8 +376,6 @@ def _limpiar_periodos_verificados(supabase, locales: list[dict], hoy: date) -> i
             supabase.table("cierres_diarios").delete().in_("id", ids).execute()
             eliminados += len(ids)
     return eliminados
-
-
 def ejecutar_archivado(supabase) -> dict:
     """Procesa periodos pendientes en orden; nunca avanza si un local falla."""
     hoy = fecha_local()
@@ -488,39 +444,51 @@ def obtener_estado_archivado(supabase) -> dict:
 
 
 def obtener_archivo_para_fecha(supabase, panaderia_id: int, fecha: date) -> dict:
-    eventos = (
-        supabase.table("auditoria_inventario")
-        .select("detalles,creado_en")
+    filas = (
+        supabase.table("archivos_archivados")
+        .select("*")
         .eq("panaderia_id", panaderia_id)
-        .eq("accion", "respaldo_periodo")
-        .order("creado_en", desc=True)
+        .eq("estado", "verificado")
+        .lte("periodo_inicio", fecha.isoformat())
+        .gte("periodo_fin", fecha.isoformat())
+        .order("periodo_inicio", desc=True)
+        .limit(1)
+        .execute()
+    ).data
+    if not filas:
+        raise LookupError("Todavía no hay un archivo histórico para esa fecha.")
+    detalles = filas[0]
+    clave = detalles["archive_key"]
+    archivo = obtener_archivo_archivado(clave)
+    contenido = _verificar_archivo_existente(archivo, detalles)
+    return {
+        "id": archivo["id"],
+        "nombre": detalles.get("drive_file_name") or archivo["name"],
+        "bytes": contenido,
+        "periodo_inicio": str(detalles["periodo_inicio"]),
+        "periodo_fin": str(detalles["periodo_fin"]),
+    }
+
+
+def listar_archivos_historicos(supabase, panaderia_id: int) -> list[dict]:
+    eventos = (
+        supabase.table("archivos_archivados")
+        .select("periodo_inicio,periodo_fin,drive_file_name,verificado_en")
+        .eq("panaderia_id", panaderia_id)
+        .eq("estado", "verificado")
+        .order("periodo_inicio", desc=True)
         .limit(1000)
         .execute()
     ).data
-    vistos = set()
-    for evento in eventos:
-        detalles = evento.get("detalles") or {}
-        clave = detalles.get("archive_key")
-        if not clave or clave in vistos:
-            continue
-        vistos.add(clave)
-        if detalles.get("estado") != "verificado":
-            continue
-        inicio = _fecha(detalles["periodo_inicio"])
-        fin = _fecha(detalles["periodo_fin"])
-        if inicio <= fecha <= fin:
-            archivo = obtener_archivo_archivado(clave)
-            contenido = _verificar_archivo_existente(archivo, detalles)
-            return {
-                "id": archivo["id"],
-                "nombre": detalles.get("drive_file_name") or archivo["name"],
-                "bytes": contenido,
-                "periodo_inicio": inicio.isoformat(),
-                "periodo_fin": fin.isoformat(),
-            }
-    raise LookupError("Todavía no hay un archivo histórico para esa fecha.")
-
-
+    return [
+        {
+            "periodo_inicio": str(evento["periodo_inicio"]),
+            "periodo_fin": str(evento["periodo_fin"]),
+            "nombre": evento.get("drive_file_name") or "Inventario histórico.xlsx",
+            "verificado_en": evento.get("verificado_en"),
+        }
+        for evento in eventos
+    ]
 def listar_archivos_historicos(supabase, panaderia_id: int) -> list[dict]:
     eventos = (
         supabase.table("auditoria_inventario")
