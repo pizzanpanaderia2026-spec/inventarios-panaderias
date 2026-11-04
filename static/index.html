@@ -1028,9 +1028,12 @@
         selector.value = String(config.dia_mes);
         selector.disabled = false;
         const periodo = "Periodo actual: " + config.periodo_inicio + " al " + config.periodo_fin + ".";
+        const ultima = config.ultima_ejecucion
+          ? " Última ejecución automática: " + new Date(config.ultima_ejecucion).toLocaleString("es-MX") + "."
+          : " La ejecución automática aún no se ha activado.";
         estado.textContent = config.ultimo_error
           ? "ERROR DE ARCHIVADO: " + config.ultimo_error
-          : periodo;
+          : periodo + ultima;
         estado.className = config.ultimo_error ? "mensaje error" : "nota";
         try {
           const drive = await adminFetch("/api/admin/drive/estado");
