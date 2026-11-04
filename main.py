@@ -1265,7 +1265,21 @@ def admin_listar_usuarios(authorization: str | None = Header(default=None)):
         pagina = 1
         while pagina <= 20:
             lote = supabase.auth.admin.list_users(page=pagina, per_page=100)
-            lista = getattr(lote, "users", None) or getattr(getattr(lote, "data", None), "users", None) or []
+            # supabase-py puede devolver directamente una lista de usuarios;
+            # otras versiones devuelven un objeto con .users o .data.users.
+            if isinstance(lote, list):
+                lista = lote
+            elif isinstance(lote, dict):
+                datos_lote = lote.get("data") or {}
+                lista = lote.get("users") or (
+                    datos_lote.get("users", []) if isinstance(datos_lote, dict) else []
+                )
+            else:
+                lista = getattr(lote, "users", None)
+                if lista is None:
+                    datos_lote = getattr(lote, "data", None)
+                    lista = getattr(datos_lote, "users", None) if datos_lote is not None else None
+                lista = lista or []
             for u in lista:
                 auth_users[str(u.id)] = u
             if len(lista) < 100:
