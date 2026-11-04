@@ -33,7 +33,7 @@ def crear_excel_periodo(
     Cada hoja diaria contiene únicamente el nombre de la cuenta, la fecha y
     las dos tablas existentes en la página Tablas de la aplicación.
     """
-    dias_ordenados = sorted(dias, key=lambda item: _fecha_cierre(item["cierre"]))
+    dias_ordenados = sorted(\n        (dia for dia in dias if dia.get("lineas")),\n        key=lambda item: _fecha_cierre(item["cierre"]),\n    )
     productos = {}
     precios = {}
     total_piezas = 0
