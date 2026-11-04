@@ -76,7 +76,7 @@ def crear_excel_periodo(
     resumen.append(["RESUMEN POR PAN"])
     resumen.append(["Producto", "Cantidad", "Importe"])
 
-    for item in sorted(productos.values(), key=lambda valor: valor["nombre"].casefold()):
+    for item in productos.values():
         resumen.append([item["nombre"], item["cantidad"], float(item["importe"])])
 
     resumen.append([])
