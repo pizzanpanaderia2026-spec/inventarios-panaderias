@@ -34,6 +34,7 @@ jobs:
           node --check static/productos.js
           node --check static/registro.js
           node --check static/tablas.js
+          node --check static/historial-inventarios.js
       - name: Verificar archivos de interfaz
         run: |
           test -s static/index.html
