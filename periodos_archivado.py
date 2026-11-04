@@ -71,3 +71,32 @@ def siguiente_periodo(
     if fin < inicio:
         raise ValueError("El siguiente periodo tiene un rango inválido.")
     return inicio, fin
+
+
+def periodo_que_contiene(fecha: date, dia: int, desplazamiento_fin: int) -> tuple[date, date]:
+    """Obtiene el ciclo al que pertenece una fecha para el desplazamiento vigente."""
+    ocurrencia_mes = fecha_del_dia(fecha.year, fecha.month, dia)
+    if desplazamiento_fin == -1:
+        if ocurrencia_mes <= fecha:
+            inicio = ocurrencia_mes
+        else:
+            year, month = fecha.year, fecha.month - 1
+            if month == 0:
+                year, month = year - 1, 12
+            inicio = fecha_del_dia(year, month, dia)
+        fin = siguiente_ocurrencia(inicio, dia) - timedelta(days=1)
+        return inicio, fin
+
+    if ocurrencia_mes <= fecha:
+        limite_anterior = ocurrencia_mes
+    else:
+        year, month = fecha.year, fecha.month - 1
+        if month == 0:
+            year, month = year - 1, 12
+        limite_anterior = fecha_del_dia(year, month, dia)
+
+    year, month = limite_anterior.year, limite_anterior.month - 1
+    if month == 0:
+        year, month = year - 1, 12
+    limite_previo = fecha_del_dia(year, month, dia)
+    return limite_previo + timedelta(days=1), limite_anterior
