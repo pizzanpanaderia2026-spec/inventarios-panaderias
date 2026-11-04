@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - release/backend-supabase-render
+      - integracion-google-drive
   pull_request:
     branches:
       - main
