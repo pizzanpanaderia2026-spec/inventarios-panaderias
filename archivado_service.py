@@ -148,13 +148,13 @@ def _nombre_archivo(inicio: date, fin: date) -> str:
 def _verificar_archivo_existente(archivo: dict | None, detalles: dict) -> bytes:
     if not archivo or archivo.get("id") != detalles.get("drive_file_id"):
         raise GoogleDriveConfigurationError(
-            "No se encontró el archivo histórico verificado en Google Drive. Se conservarán los registros."
+            "No se encontró el archivo histórico verificado en Google Drive. Se detuvo la limpieza de datos pendientes."
         )
     contenido = descargar_archivo_drive(archivo["id"])
     esperado = detalles.get("sha256")
     if not esperado or hashlib.sha256(contenido).hexdigest() != esperado:
         raise GoogleDriveConfigurationError(
-            "El archivo histórico no superó la verificación de integridad. Se conservarán los registros."
+            "El archivo histórico no superó la verificación de integridad. Se detuvo la limpieza de datos pendientes."
         )
     return contenido
 
