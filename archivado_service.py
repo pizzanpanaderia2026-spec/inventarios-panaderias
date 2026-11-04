@@ -302,10 +302,9 @@ def _archivar_local(supabase, local: dict, inicio: date, fin: date) -> dict:
     clave = _clave_archivo(local_id, inicio, fin)
     evento = _ultimo_evento_archivo(supabase, local_id, clave)
 
-    if evento and (evento.get("detalles") or {}).get("estado") == "verificado":
-        detalles_evento = evento.get("detalles") or {}
+    if evento and evento.get("estado") == "verificado":
         archivo_existente = obtener_archivo_archivado(clave)
-        _verificar_archivo_existente(archivo_existente, detalles_evento)
+        _verificar_archivo_existente(archivo_existente, evento)
         return {"panaderia_id": local_id, "estado": "ya_verificado"}
 
     try:
@@ -489,30 +488,3 @@ def listar_archivos_historicos(supabase, panaderia_id: int) -> list[dict]:
         }
         for evento in eventos
     ]
-def listar_archivos_historicos(supabase, panaderia_id: int) -> list[dict]:
-    eventos = (
-        supabase.table("auditoria_inventario")
-        .select("detalles,creado_en")
-        .eq("panaderia_id", panaderia_id)
-        .eq("accion", "respaldo_periodo")
-        .order("creado_en", desc=True)
-        .limit(1000)
-        .execute()
-    ).data
-    salida = []
-    vistos = set()
-    for evento in eventos:
-        detalles = evento.get("detalles") or {}
-        clave = detalles.get("archive_key")
-        if not clave or clave in vistos:
-            continue
-        vistos.add(clave)
-        if detalles.get("estado") != "verificado":
-            continue
-        salida.append({
-            "periodo_inicio": detalles.get("periodo_inicio"),
-            "periodo_fin": detalles.get("periodo_fin"),
-            "nombre": detalles.get("drive_file_name") or "Inventario histórico.xlsx",
-            "verificado_en": detalles.get("verificado_en"),
-        })
-    return salida
