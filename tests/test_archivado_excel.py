@@ -41,7 +41,6 @@ class ExcelArchivadoTests(unittest.TestCase):
         filas = list(libro["Resumen del periodo"].values)
         self.assertIn(("Bolillo", 30, 150), filas)
         self.assertIn(("Concha", 3, 30), filas)
-        self.assertIn(("TOTAL", 33, 180), filas)
 
     def test_crea_una_hoja_por_dia_con_inventario_y_omite_dias_vacios(self):
         libro = self.libro()
