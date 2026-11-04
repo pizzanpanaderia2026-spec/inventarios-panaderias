@@ -39,6 +39,10 @@ jobs:
       - name: Verificar archivos de interfaz
         run: |
           test -s static/index.html
+          test -s archivado_excel.py
+          test -s archivado_service.py
+          test -s periodos_archivado.py
+          test -s supabase/migrations/20261104093801_archivado_mensual_google_drive.sql
           test -s static/productos.js
           test -s static/registro.js
           test -s static/tablas.js
@@ -49,3 +53,4 @@ jobs:
           done
           grep -Fq 'revoke execute on function public.rls_auto_enable() from public, anon, authenticated;' supabase/migrations/202610260003_restringir_funcion_rls_auto_enable.sql
           grep -Fq 'revoke all privileges on table public.cierres_diarios from anon, authenticated;' supabase/migrations/202610260007_restringir_acceso_directo_cierres.sql
+          grep -Fq 'alter table public.archivos_archivados enable row level security;' supabase/migrations/20261104093801_archivado_mensual_google_drive.sql
