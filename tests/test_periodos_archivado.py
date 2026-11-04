@@ -56,5 +56,17 @@ class PeriodosArchivadoTests(unittest.TestCase):
         self.assertEqual((inicio, fin), (date(2026, 11, 15), date(2026, 12, 10)))
 
 
+    def test_identifica_periodo_historico(self):
+        from periodos_archivado import periodo_que_contiene
+        self.assertEqual(
+            periodo_que_contiene(date(2026, 10, 20), 15, -1),
+            (date(2026, 10, 15), date(2026, 11, 14)),
+        )
+        self.assertEqual(
+            periodo_que_contiene(date(2026, 11, 17), 17, 0),
+            (date(2026, 10, 18), date(2026, 11, 17)),
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
