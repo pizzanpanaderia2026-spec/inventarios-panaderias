@@ -3,3 +3,5 @@ uvicorn[standard]
 supabase
 PyJWT[crypto]
 openpyxl
+google-api-python-client
+google-auth
