@@ -79,8 +79,6 @@ def crear_excel_periodo(
     for item in sorted(productos.values(), key=lambda valor: valor["nombre"].casefold()):
         resumen.append([item["nombre"], item["cantidad"], float(item["importe"])])
 
-    fila_total_pan = 6 + len(productos)
-    resumen.append(["TOTAL", total_piezas, float(total_importe)])
     resumen.append([])
     fila_seccion_precio = resumen.max_row + 1
     resumen.append(["RESUMEN POR PRECIO"])
@@ -93,14 +91,14 @@ def crear_excel_periodo(
     fila_total_precio = resumen.max_row + 1
     resumen.append(["TOTAL", total_piezas, float(total_importe)])
 
-    for fila in (4, 5, fila_total_pan, fila_seccion_precio, fila_encabezado_precio, fila_total_precio):
+    for fila in (4, 5, fila_seccion_precio, fila_encabezado_precio, fila_total_precio):
         for celda in resumen[fila]:
             celda.font = Font(bold=True)
     for fila in resumen.iter_rows():
         for celda in fila:
             if celda.value is not None:
                 celda.alignment = Alignment(vertical="center")
-    for fila in range(6, fila_total_pan + 1):
+    for fila in range(6, 6 + len(productos)):
         resumen.cell(fila, 3).number_format = '"$"#,##0.00'
     for fila in range(fila_encabezado_precio + 1, fila_total_precio + 1):
         resumen.cell(fila, 1).number_format = '"$"#,##0.00'
