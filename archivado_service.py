@@ -291,7 +291,7 @@ def _obtener_dias_periodo(supabase, panaderia_id: int, inicio: date, fin: date) 
         nombre_cuenta = (
             nombres_usuario.get(usuario_id)
             or cierre.get("cerrado_por_nombre")
-            or "Usuario"
+            or ""
         )
         salida.append({
             "cierre": {
