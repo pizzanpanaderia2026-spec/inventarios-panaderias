@@ -145,6 +145,20 @@ def _nombre_archivo(inicio: date, fin: date) -> str:
     )
 
 
+def _verificar_archivo_existente(archivo: dict | None, detalles: dict) -> bytes:
+    if not archivo or archivo.get("id") != detalles.get("drive_file_id"):
+        raise GoogleDriveConfigurationError(
+            "No se encontró el archivo histórico verificado en Google Drive. Se conservarán los registros."
+        )
+    contenido = descargar_archivo_drive(archivo["id"])
+    esperado = detalles.get("sha256")
+    if not esperado or hashlib.sha256(contenido).hexdigest() != esperado:
+        raise GoogleDriveConfigurationError(
+            "El archivo histórico no superó la verificación de integridad. Se conservarán los registros."
+        )
+    return contenido
+
+
 def _ultimo_evento_archivo(supabase, panaderia_id: int, clave: str):
     filas = (
         supabase.table("archivos_archivados")
