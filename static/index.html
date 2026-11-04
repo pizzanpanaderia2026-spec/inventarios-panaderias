@@ -403,6 +403,7 @@
           <button class="boton-seccion" type="button" data-seccion="panelTablas">Tablas</button>
           <button class="boton-seccion" type="button" data-seccion="panelProductos">Agregar productos</button>
           <button class="boton-seccion" type="button" data-seccion="panelHistorial">Historial de inventarios</button>
+          <button class="boton-seccion" type="button" data-seccion="panelArchivosHistoricos">Archivos históricos</button>
           <button id="botonAdministracion" class="boton-seccion oculto" type="button" data-seccion="panelAdministracion">Administración</button>
         </nav>
 
@@ -455,6 +456,12 @@
             <div id="mensajeResumenPeriodo" class="mensaje oculto" role="status"></div>
           </div>
           <div id="mensajeHistorial" class="mensaje oculto" role="status"></div>
+        </section>
+        <section id="panelArchivosHistoricos" class="panel panel-seccion oculto">
+          <h3>Archivos históricos</h3>
+          <p class="nota">Aquí puedes consultar y descargar los Excel respaldados en Google Drive para este local.</p>
+          <div id="listaArchivosHistoricos"></div>
+          <div id="archivosHistoricosMensaje" class="mensaje oculto" role="status"></div>
         </section>
         <section id="panelAdministracion" class="panel panel-seccion oculto">
           <div class="admin-encabezado"><h3>Administración</h3></div>
@@ -776,7 +783,7 @@
     }
 
     function mostrarSeccion(idSeccion) {
-      const secciones = ["panelRegistro", "panelTablas", "panelProductos", "panelHistorial", "panelAdministracion"];
+      const secciones = ["panelRegistro", "panelTablas", "panelProductos", "panelHistorial", "panelArchivosHistoricos", "panelAdministracion"];
       secciones.forEach(id => {
         const panel = document.getElementById(id);
         if (!panel) return;
@@ -796,6 +803,9 @@
       boton.addEventListener("click", () => {
         if (boton.id === "botonAdministracion" && !esAdministrador()) return;
         mostrarSeccion(boton.dataset.seccion);
+        if (boton.dataset.seccion === "panelArchivosHistoricos" && window.cargarArchivosHistoricos) {
+          window.cargarArchivosHistoricos();
+        }
       });
     });
 
@@ -851,6 +861,9 @@
 
         if (window.iniciarTablasHistorial) {
           window.iniciarTablasHistorial(sesionActual, autorizada);
+        }
+        if (window.iniciarHistorialInventarios) {
+          window.iniciarHistorialInventarios(sesionActual, autorizada);
         }
         if (window.iniciarRegistroDiario) {
           await window.iniciarRegistroDiario(
