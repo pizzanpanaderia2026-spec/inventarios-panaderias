@@ -22,7 +22,7 @@ from periodos_archivado import (
 
 ZONA_HORARIA = ZoneInfo("America/Mexico_City")
 DIA_ARCHIVADO_INICIAL = 15
-MAX_PERIODOS_POR_EJECUCION = 24
+MAX_PERIODOS_POR_EJECUCION = 12
 
 
 def fecha_local() -> date:
