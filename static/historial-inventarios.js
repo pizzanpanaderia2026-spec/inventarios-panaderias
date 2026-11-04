@@ -193,7 +193,6 @@
   window.iniciarHistorialInventarios = function(sesion, local) {
     token = sesion && sesion.access_token;
     panaderia = local;
-    return cargarArchivosHistoricos();
   };
   window.cargarArchivosHistoricos = cargarArchivosHistoricos;
 
