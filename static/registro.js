@@ -379,14 +379,30 @@
   });
 
   document.getElementById("botonCerrarDia").addEventListener("click", async () => {
-    if (!confirm("¿Cerrar el día? Revisa las cantidades antes de continuar.")) return;
+    if (!confirm("¿Cerrar el día? Se guardarán automáticamente las cantidades capturadas antes de cerrar.")) return;
+    const botonCerrar = document.getElementById("botonCerrarDia");
+    botonCerrar.disabled = true;
     try {
+      // Primero persistir el contenido actual de la captura. Si falla, no cerrar el día.
+      const lineas = [...seleccionados.values()].map(x => ({
+        producto_id: Number(x.producto.id),
+        cantidad: Number(x.cantidad)
+      }));
+      if (lineas.some(x => !Number.isInteger(x.cantidad) || x.cantidad < 0)) {
+        throw new Error("Las cantidades deben ser números enteros de cero o más.");
+      }
+      await api("/api/registro", {
+        method: "PUT",
+        body: JSON.stringify({ panaderia_id: bakery.id, fecha: fecha.value, lineas })
+      });
       await api("/api/registro/cerrar?panaderia_id=" + bakery.id + "&fecha_registro=" + fecha.value, { method: "POST" });
-      aviso("Día cerrado correctamente.", "exito");
+      aviso("Registro guardado y día cerrado correctamente.", "exito");
       await cargar();
       if (window.actualizarTablasDiarias) await window.actualizarTablasDiarias();
     } catch (e) {
-      aviso(e.message);
+      aviso("No se cerró el día. " + e.message);
+    } finally {
+      botonCerrar.disabled = !!(cierre && cierre.estado === "cerrado");
     }
   });
 
