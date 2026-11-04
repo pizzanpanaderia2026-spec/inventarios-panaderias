@@ -1,5 +1,6 @@
 """Servicio de archivado mensual con verificación en Drive y limpieza segura."""
 from datetime import date, datetime, timedelta
+import hashlib
 from decimal import Decimal
 from zoneinfo import ZoneInfo
 
@@ -165,6 +166,20 @@ def _actualizar_configuracion_ejecucion(supabase, config: dict):
     _insertar_evento_configuracion(supabase, config)
 
 
+def _verificar_archivo_existente(archivo: dict | None, detalles: dict) -> bytes:
+    if not archivo or archivo.get("id") != detalles.get("drive_file_id"):
+        raise GoogleDriveConfigurationError(
+            "No se encontró el archivo histórico verificado en Google Drive. Se conservarán los registros."
+        )
+    contenido = descargar_archivo_drive(archivo["id"])
+    esperado = detalles.get("sha256")
+    if not esperado or hashlib.sha256(contenido).hexdigest() != esperado:
+        raise GoogleDriveConfigurationError(
+            "El archivo histórico no superó la verificación de integridad. Se conservarán los registros."
+        )
+    return contenido
+
+
 def _clave_archivo(panaderia_id: int, inicio: date, fin: date) -> str:
     return f"{panaderia_id}|{inicio.isoformat()}|{fin.isoformat()}"
 
@@ -325,12 +340,9 @@ def _archivar_local(supabase, local: dict, inicio: date, fin: date) -> dict:
     evento = _ultimo_evento_archivo(supabase, local_id, clave)
 
     if evento and (evento.get("detalles") or {}).get("estado") == "verificado":
+        detalles_evento = evento.get("detalles") or {}
         archivo_existente = obtener_archivo_archivado(clave)
-        esperado = (evento.get("detalles") or {}).get("drive_file_id")
-        if not archivo_existente or archivo_existente.get("id") != esperado:
-            raise GoogleDriveConfigurationError(
-                f"No se encontró en Drive el respaldo ya verificado de {local['nombre']} para este periodo. No se eliminarán datos."
-            )
+        _verificar_archivo_existente(archivo_existente, detalles_evento)
         return {"panaderia_id": local_id, "estado": "ya_verificado"}
 
     try:
@@ -383,10 +395,7 @@ def _limpiar_periodos_verificados(supabase, locales: list[dict], hoy: date) -> i
             if inicio >= limite:
                 continue
             archivo = obtener_archivo_archivado(clave)
-            if not archivo or archivo.get("id") != detalles.get("drive_file_id"):
-                raise GoogleDriveConfigurationError(
-                    f"No se pudo comprobar el archivo histórico de {local['nombre']}. Se conservarán los inventarios en Supabase."
-                )
+            _verificar_archivo_existente(archivo, detalles)
 
             cierres = (
                 supabase.table("cierres_diarios")
@@ -501,14 +510,11 @@ def obtener_archivo_para_fecha(supabase, panaderia_id: int, fecha: date) -> dict
         fin = _fecha(detalles["periodo_fin"])
         if inicio <= fecha <= fin:
             archivo = obtener_archivo_archivado(clave)
-            if not archivo or archivo.get("id") != detalles.get("drive_file_id"):
-                raise GoogleDriveConfigurationError(
-                    "El archivo histórico no está disponible en Google Drive."
-                )
+            contenido = _verificar_archivo_existente(archivo, detalles)
             return {
                 "id": archivo["id"],
                 "nombre": detalles.get("drive_file_name") or archivo["name"],
-                "bytes": descargar_archivo_drive(archivo["id"]),
+                "bytes": contenido,
                 "periodo_inicio": inicio.isoformat(),
                 "periodo_fin": fin.isoformat(),
             }
