@@ -4,10 +4,20 @@
   const title = document.getElementById("histMesTitulo");
   const out = document.getElementById("historialResultado");
   const msg = document.getElementById("mensajeHistorial");
+  const listaArchivos = document.getElementById("listaArchivosHistoricos");
+  const msgArchivos = document.getElementById("archivosHistoricosMensaje");
   let shown = new Date();
   let selected = "";
+  let token = null;
+  let panaderia = null;
   const pad = n => String(n).padStart(2, "0");
   const iso = d => d.getFullYear() + "-" + pad(d.getMonth()+1) + "-" + pad(d.getDate());
+
+  function aviso(elemento, texto, tipo) {
+    if (!elemento) return;
+    elemento.textContent = texto;
+    elemento.className = "mensaje " + (tipo || "error");
+  }
 
   function table(heads) {
     const wrap = document.createElement("div");
@@ -38,6 +48,41 @@
     out.appendChild(wrap);
   }
 
+  async function descargarExcelArchivo(fecha, mensajeDestino = msg) {
+    if (!token || !panaderia) {
+      aviso(mensajeDestino, "Selecciona primero un local autorizado.", "error");
+      return;
+    }
+    try {
+      const params = new URLSearchParams({
+        panaderia_id: String(panaderia.id),
+        fecha: fecha
+      });
+      const response = await fetch("/api/historial/archivo?" + params.toString(), {
+        headers: { Authorization: "Bearer " + token }
+      });
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.detail || "No se pudo descargar el archivo histórico.");
+      }
+      const blob = await response.blob();
+      const disposition = response.headers.get("Content-Disposition") || "";
+      const match = disposition.match(/filename="([^"]+)"/i);
+      const filename = match ? match[1] : "inventario_historico_" + fecha + ".xlsx";
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      aviso(mensajeDestino, "Excel histórico descargado correctamente.", "exito");
+    } catch (error) {
+      aviso(mensajeDestino, error.message || "No se pudo descargar el archivo histórico.", "error");
+    }
+  }
+
   function choose(value) {
     selected = value;
     draw();
@@ -51,11 +96,8 @@
     if (age > 30) {
       const button = document.createElement("button");
       button.type = "button";
-      button.textContent = "Descargar inventario";
-      button.addEventListener("click", () => {
-        msg.textContent = "El enlace del archivo en Google Drive se conectará en el siguiente paso.";
-        msg.className = "mensaje";
-      });
+      button.textContent = "Descargar Excel del periodo";
+      button.addEventListener("click", () => descargarExcelArchivo(value));
       out.appendChild(button);
       return;
     }
@@ -71,7 +113,7 @@
     button.type = "button";
     button.textContent = "Descargar inventario";
     button.addEventListener("click", () => {
-      msg.textContent = "La descarga del inventario se conectará en el siguiente paso.";
+      msg.textContent = "La descarga del inventario reciente se realiza desde las tablas del día.";
       msg.className = "mensaje";
     });
     out.appendChild(button);
@@ -107,6 +149,53 @@
       root.appendChild(button);
     }
   }
+
+  async function cargarArchivosHistoricos() {
+    if (!listaArchivos || !token || !panaderia) return;
+    listaArchivos.replaceChildren();
+    if (msgArchivos) msgArchivos.className = "mensaje oculto";
+    try {
+      const params = new URLSearchParams({panaderia_id: String(panaderia.id)});
+      const response = await fetch("/api/historial/archivos?" + params.toString(), {
+        headers: { Authorization: "Bearer " + token }
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.detail || "No se pudieron consultar los archivos históricos.");
+      const archivos = data.archivos || [];
+      if (!archivos.length) {
+        const vacio = document.createElement("p");
+        vacio.className = "nota";
+        vacio.textContent = "Todavía no hay archivos históricos respaldados para este local.";
+        listaArchivos.appendChild(vacio);
+        return;
+      }
+      archivos.forEach(archivo => {
+        const card = document.createElement("div");
+        card.className = "panel";
+        card.style.marginBottom = "10px";
+        const periodo = document.createElement("strong");
+        periodo.textContent = archivo.periodo_inicio + " al " + archivo.periodo_fin;
+        const nombre = document.createElement("p");
+        nombre.className = "nota";
+        nombre.textContent = archivo.nombre;
+        const boton = document.createElement("button");
+        boton.type = "button";
+        boton.textContent = "Descargar Excel";
+        boton.addEventListener("click", () => descargarExcelArchivo(archivo.periodo_inicio, msgArchivos));
+        card.append(periodo, nombre, boton);
+        listaArchivos.appendChild(card);
+      });
+    } catch (error) {
+      aviso(msgArchivos, error.message || "No se pudieron consultar los archivos históricos.", "error");
+    }
+  }
+
+  window.iniciarHistorialInventarios = function(sesion, local) {
+    token = sesion && sesion.access_token;
+    panaderia = local;
+    return cargarArchivosHistoricos();
+  };
+  window.cargarArchivosHistoricos = cargarArchivosHistoricos;
 
   document.getElementById("histMesAnterior").addEventListener("click", () => {
     shown = new Date(shown.getFullYear(), shown.getMonth()-1, 1);
