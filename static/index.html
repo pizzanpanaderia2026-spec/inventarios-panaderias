@@ -1148,7 +1148,13 @@
           document.getElementById("adminRespaldoBarra").style.width = porcentaje + "%";
           document.getElementById("adminRespaldoEtapa").textContent = estado.error || estado.etapa || (estado.estado === "completado" ? "Todos los archivos fueron verificados." : "Preparando inventarios…");
         }
-        ayuda.textContent = estado.estado === "error" ? (estado.error || "Los inventarios se conservan para reintentar.") : "El respaldo se ejecuta en segundo plano. Puedes seguir usando la aplicación.";
+        ayuda.textContent = estado.estado === "error"
+          ? (estado.error || "Los inventarios se conservan para reintentar.")
+          : activo
+            ? "Puedes seguir usando la aplicación mientras el respaldo se ejecuta en segundo plano."
+            : estado.estado === "completado"
+              ? "Los archivos quedaron verificados. Los inventarios originales se conservan en la aplicación."
+              : "El próximo respaldo se iniciará automáticamente en la fecha configurada.";
         detalles.hidden = estado.estado !== "completado" && estado.estado !== "error";
         actualizado.textContent = estado.actualizado_en ? "Actualizado: " + new Date(estado.actualizado_en).toLocaleString("es-MX") : "";
       } catch (e) {
