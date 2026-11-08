@@ -64,6 +64,8 @@ async def _optimizar_foto(file: UploadFile | None) -> bytes | None:
         with Image.open(BytesIO(raw)) as source:
             if source.format not in {"JPEG", "PNG", "WEBP", "GIF", "BMP", "TIFF"}:
                 raise HTTPException(status_code=415, detail="Usa una imagen JPG, PNG o WEBP.")
+            if source.width * source.height > 40_000_000:
+                raise HTTPException(status_code=413, detail="La resolución de la imagen es demasiado grande.")
             if getattr(source, "is_animated", False):
                 source.seek(0)
             image = ImageOps.exif_transpose(source).convert("RGB")
@@ -73,6 +75,8 @@ async def _optimizar_foto(file: UploadFile | None) -> bytes | None:
             return output.getvalue()
     except HTTPException:
         raise
+    except Image.DecompressionBombError:
+        raise HTTPException(status_code=413, detail="La resolución de la imagen es demasiado grande.")
     except (UnidentifiedImageError, OSError, ValueError):
         raise HTTPException(status_code=415, detail="El archivo seleccionado no es una imagen válida.")
 
@@ -94,6 +98,7 @@ def _copiar_catalogo(core, source_id: int, target_id: int):
         .eq("panaderia_id", source_id).order("id").execute().data or []
     )
     category_map = {}
+    has_protected = any(bool(category.get("protegida")) for category in source_categories)
     for category in source_categories:
         inserted = core.supabase.table("categorias_productos").insert({
             "panaderia_id": target_id,
@@ -102,6 +107,14 @@ def _copiar_catalogo(core, source_id: int, target_id: int):
             "protegida": bool(category.get("protegida", False)),
         }).execute().data[0]
         category_map[int(category["id"])] = int(inserted["id"])
+    if not has_protected:
+        protected = core.supabase.table("categorias_productos").insert({
+            "panaderia_id": target_id,
+            "nombre": "Productos desactivados",
+            "activa": True,
+            "protegida": True,
+        }).execute().data[0]
+        category_map[-1] = int(protected["id"])
 
     source_products = (
         core.supabase.table("productos").select("*")
@@ -176,6 +189,7 @@ async def crear_panaderia(
         if local_id:
             try:
                 core.supabase.table("productos").delete().eq("panaderia_id", local_id).execute()
+                core.supabase.table("auditoria_inventario").delete().eq("panaderia_id", local_id).execute()
                 core.supabase.table("categorias_productos").delete().eq("panaderia_id", local_id).execute()
                 core.supabase.table("panaderias").delete().eq("id", local_id).execute()
             except Exception:
@@ -216,20 +230,24 @@ async def actualizar_foto_panaderia(
     new_key = f"panaderias/{panaderia_id}/fotos/{uuid.uuid4().hex}.webp"
     try:
         _subir_foto(new_key, image_bytes)
+        new_url = _foto_url(new_key)
         core.supabase.table("panaderias").update({"foto_key": new_key}).eq("id", panaderia_id).execute()
-        core.supabase.table("auditoria_inventario").insert({
-            "panaderia_id": panaderia_id,
-            "usuario_id": str(user.id),
-            "accion": "actualizar_foto_panaderia",
-            "detalles": {"formato": "webp", "tamano_bytes": len(image_bytes)},
-        }).execute()
+        try:
+            core.supabase.table("auditoria_inventario").insert({
+                "panaderia_id": panaderia_id,
+                "usuario_id": str(user.id),
+                "accion": "actualizar_foto_panaderia",
+                "detalles": {"formato": "webp", "tamano_bytes": len(image_bytes)},
+            }).execute()
+        except Exception:
+            pass
         if old_key:
             try:
                 client, bucket = _r2()
                 client.delete_object(Bucket=bucket, Key=old_key)
             except Exception:
                 pass
-        return {"actualizada": True, "foto_url": _foto_url(new_key)}
+        return {"actualizada": True, "foto_url": new_url}
     except HTTPException:
         raise
     except Exception:
