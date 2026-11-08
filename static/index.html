@@ -1162,14 +1162,29 @@
       try {
         const datos = await adminFetch("/api/admin/archivado/detalles");
         panel.replaceChildren();
-        const titulo = document.createElement("strong"); titulo.textContent = "Archivos respaldados"; panel.appendChild(titulo);
-        if (!datos.archivos.length) {
+        const titulo = document.createElement("strong"); titulo.textContent = "Fechas y archivos del respaldo"; panel.appendChild(titulo);
+        if (!datos.archivos.length && !datos.fechas.length) {
           const vacio = document.createElement("p"); vacio.className = "nota"; vacio.textContent = "Todavía no hay archivos archivados."; panel.appendChild(vacio);
-        } else {
+        }
+        (datos.fechas || []).forEach(local => {
+          const encabezado = document.createElement("p"); encabezado.className = "nota";
+          encabezado.style.fontWeight = "700";
+          encabezado.textContent = local.panaderia + " · " + (local.estado || "pendiente");
+          panel.appendChild(encabezado);
+          (local.fechas || []).forEach(item => {
+            const fila = document.createElement("p"); fila.className = "nota";
+            fila.style.margin = "3px 0 3px 12px";
+            fila.textContent = item.fecha + " · " + (item.estado === "verificado" ? "Verificado" : item.estado === "sin_registros" ? "Sin registros" : item.estado);
+            panel.appendChild(fila);
+          });
+        });
+        if (datos.archivos.length) {
+          const subtitulo = document.createElement("p"); subtitulo.className = "nota"; subtitulo.style.fontWeight = "700"; subtitulo.textContent = "Archivos guardados en R2"; panel.appendChild(subtitulo);
           datos.archivos.forEach(a => {
             const fila = document.createElement("p"); fila.className = "nota";
             const nombre = a.drive_file_name || ("Periodo " + a.periodo_inicio + " a " + a.periodo_fin);
-            fila.textContent = nombre + " · " + a.estado + (a.verificado_en ? " · Verificado " + new Date(a.verificado_en).toLocaleString("es-MX") : "");
+            const tamano = a.tamano_bytes ? " · " + (a.tamano_bytes / 1024).toFixed(1) + " KB" : "";
+            fila.textContent = nombre + " · " + a.estado + tamano + (a.verificado_en ? " · " + new Date(a.verificado_en).toLocaleString("es-MX") : "");
             panel.appendChild(fila);
           });
         }
