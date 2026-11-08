@@ -4,3 +4,5 @@ supabase
 PyJWT[crypto]
 openpyxl
 boto3>=1.35,<2
+Pillow>=10.4,<13
+python-multipart>=0.0.9,<1

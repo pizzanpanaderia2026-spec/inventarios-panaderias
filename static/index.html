@@ -141,13 +141,13 @@
     @media(max-width:520px){.calendario-dia{padding:8px 0;font-size:13px}.historial-calendario{padding:8px}}
 
     .tarjeta-panaderia { position: relative; border: 1px solid #e7ded2; border-radius: 12px; padding: 12px; background: #fff; }
-    .foto-tarjeta-panaderia { width: 100%; height: 130px; border-radius: 9px; border: 1px solid #e7ded2; background: #f5eee5; display: grid; place-items: center; overflow: hidden; color: #8b8177; margin-bottom: 10px; }
-    .foto-tarjeta-panaderia img { width: 100%; height: 100%; object-fit: cover; }
+    .foto-tarjeta-panaderia { width: 100%; min-height: 70px; max-height: 220px; height: auto; box-sizing: border-box; padding: 5px; border-radius: 9px; border: 1px solid #e7ded2; background: #f5eee5; display: grid; place-items: center; overflow: hidden; color: #8b8177; margin-bottom: 10px; }
+    .foto-tarjeta-panaderia img { display: block; width: auto; max-width: 100%; height: auto; max-height: 210px; object-fit: contain; }
     .boton-panaderia { width: 100%; min-height: 54px; font-size: 17px; font-weight: bold; }
     .boton-editar-foto { position: absolute; top: 18px; right: 18px; width: 38px; height: 38px; padding: 0; border-radius: 50%; display: grid; place-items: center; background: #fff; color: #713f12; border: 1px solid #e7ded2; box-shadow: 0 1px 5px #0002; font-size: 20px; }
     .boton-editar-foto:hover { background: #f3e8d8; }
-    .foto-detalle { width: 84px; height: 84px; flex: 0 0 84px; border-radius: 10px; border: 1px solid #e7ded2; background: #f5eee5; display: grid; place-items: center; overflow: hidden; color: #78716c; font-size: 12px; }
-    .foto-detalle img { width: 100%; height: 100%; object-fit: cover; }
+    .foto-detalle { width: auto; max-width: 180px; min-width: 84px; height: auto; min-height: 84px; max-height: 160px; flex: 0 1 auto; border-radius: 10px; border: 1px solid #e7ded2; background: #f5eee5; display: grid; place-items: center; overflow: hidden; color: #78716c; font-size: 12px; padding: 4px; box-sizing: border-box; }
+    .foto-detalle img { display: block; width: auto; height: auto; max-width: 100%; max-height: 150px; object-fit: contain; }
     .menu-locales-wrap { position: relative; flex: 0 0 auto; margin-left: auto; }
     .boton-menu-locales { width: 42px; height: 42px; padding: 0; display: inline-grid; place-items: center; font-size: 25px; line-height: 1; background: #fff; color: #713f12; border: 1px solid #e7ded2; }
     .menu-locales { position: absolute; top: 48px; right: 0; z-index: 10; width: min(210px, calc(100vw - 48px)); padding: 5px; background: #fff; border: 1px solid #e7ded2; border-radius: 10px; box-shadow: 0 8px 24px #0002; }
@@ -341,8 +341,10 @@
             <div class="campo">
               <label>Foto del local</label>
               <div class="zona-foto-local">
-                <strong>＋ Agregar foto</strong>
-                <p class="nota">La carga y el guardado de fotos se conectarán en el siguiente paso. También podrás cambiarla desde el lápiz en la tarjeta del local.</p>
+                <input id="fotoNuevoLocal" type="file" accept="image/*" hidden>
+                <button id="botonSeleccionarFotoLocal" class="secundario" type="button">＋ Agregar foto</button>
+                <img id="vistaPreviaFotoLocal" class="oculto" alt="Vista previa de la foto del local" style="display:block;max-width:100%;max-height:180px;width:auto;height:auto;object-fit:contain;margin:10px auto 0;border-radius:8px">
+                <p class="nota">La foto se optimiza automáticamente para ocupar menos espacio y conservar sus proporciones. También podrás cambiarla desde el lápiz de su tarjeta.</p>
               </div>
             </div>
             <div id="mensajeCrearLocal" class="mensaje oculto" role="status"></div>
@@ -355,23 +357,23 @@
             <h2 id="tituloEliminarLocal">Eliminar local</h2>
             <button id="volverListaDesdeEliminar" class="secundario" type="button">Volver a locales</button>
           </div>
-          <p>Selecciona el local que deseas retirar. Antes de permitir la eliminación, sus productos, historial y archivos de los últimos 30 días deberán quedar respaldados en Google Drive.</p>
+          <p>Selecciona el local que deseas retirar. Antes de permitir la eliminación, sus productos, historial y archivos deberán quedar respaldados y verificados en Cloudflare R2.</p>
           <div class="campo">
             <label for="localAEliminar">Local que deseas eliminar</label>
             <select id="localAEliminar" required>
               <option value="">Selecciona un local</option>
             </select>
           </div>
-          <h3>Respaldo obligatorio en Google Drive</h3>
+          <h3>Respaldo obligatorio en Cloudflare R2</h3>
           <div class="lista-respaldo">
             <label><input type="checkbox" disabled> <span><strong>Lista de productos</strong><br><span class="nota">Productos, nombres, precios y datos asociados al local.</span></span></label>
             <label><input type="checkbox" disabled> <span><strong>Historial de inventarios</strong><br><span class="nota">Registros y cierres históricos que deben conservarse.</span></span></label>
             <label><input type="checkbox" disabled> <span><strong>Archivos de los últimos 30 días</strong><br><span class="nota">Archivos asociados al local, con verificación de que se hayan guardado correctamente.</span></span></label>
           </div>
-          <div id="estadoRespaldoLocal" class="estado-respaldo" role="status"><strong>Estado del respaldo:</strong><p class="nota">Pendiente. La conexión con Google Drive aún no está implementada. La eliminación permanece bloqueada.</p></div>
+          <div id="estadoRespaldoLocal" class="estado-respaldo" role="status"><strong>Estado del respaldo:</strong><p class="nota">Pendiente. La eliminación permanece bloqueada hasta completar y verificar el respaldo integral del local en Cloudflare R2.</p></div>
           <div id="mensajeEliminarLocal" class="mensaje oculto" role="alert"></div>
           <button id="botonEliminarLocal" class="ancho boton-peligro" type="button" disabled>Eliminar local</button>
-          <p class="nota">Si falla el respaldo o no se puede verificar, el local no se eliminará. Esta protección se habilitará cuando el respaldo real en Drive esté conectado.</p>
+          <p class="nota">Si falla el respaldo o no se puede verificar, el local no se eliminará. Los datos originales se conservarán.</p>
         </section>
       </div>
     </section>
@@ -537,7 +539,7 @@
   <!-- Cliente oficial de Supabase -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
-  <script src="/static/productos.js?v=reactivar-movil-20261101-1"></script>
+  <script src="/static/productos.js?v=permisos-encargados-20261108-1"></script>
   <script src="/static/registro.js?v=autoguardado-cierre-20261104-1"></script>
   <script src="/static/tablas.js?v=ultimo-cierre-excel-20261101-1"></script>
   <script src="/static/historial-inventarios.js?v=3"></script>
@@ -657,6 +659,9 @@
       document.getElementById("opcionCrearLocal").onclick = () => {
         if (!esAdministrador()) return;
         document.getElementById("formCrearLocal").reset();
+        document.getElementById("fotoNuevoLocal").value = "";
+        document.getElementById("vistaPreviaFotoLocal").src = "";
+        document.getElementById("vistaPreviaFotoLocal").classList.add("oculto");
         ocultarMensaje(document.getElementById("mensajeCrearLocal"));
         mostrarVistaLocales("crear");
       };
@@ -667,17 +672,49 @@
       };
       document.getElementById("volverListaDesdeCrear").onclick = () => mostrarVistaLocales("lista");
       document.getElementById("volverListaDesdeEliminar").onclick = () => mostrarVistaLocales("lista");
-      document.getElementById("formCrearLocal").onsubmit = (evento) => {
+      const selectorFotoNueva = document.getElementById("fotoNuevoLocal");
+      document.getElementById("botonSeleccionarFotoLocal").onclick = () => {
+        if (esAdministrador()) selectorFotoNueva.click();
+      };
+      selectorFotoNueva.onchange = () => {
+        const archivo = selectorFotoNueva.files?.[0];
+        const vista = document.getElementById("vistaPreviaFotoLocal");
+        if (!archivo) { vista.src = ""; vista.classList.add("oculto"); return; }
+        vista.src = URL.createObjectURL(archivo);
+        vista.classList.remove("oculto");
+      };
+      document.getElementById("formCrearLocal").onsubmit = async (evento) => {
         evento.preventDefault();
         if (!esAdministrador()) return;
-        mostrarMensaje(document.getElementById("mensajeCrearLocal"),
-          "La creación real del local y la entrada directa al nuevo local se conectarán en el siguiente paso. No se guardó ningún cambio.",
-          "error");
+        const boton = document.getElementById("botonCrearLocal");
+        const mensaje = document.getElementById("mensajeCrearLocal");
+        const datos = new FormData();
+        datos.append("nombre", document.getElementById("nuevoNombreLocal").value.trim());
+        const origen = document.getElementById("localCopiarDatos").value;
+        if (origen) datos.append("copiar_de", origen);
+        if (selectorFotoNueva.files?.[0]) datos.append("foto", selectorFotoNueva.files[0]);
+        boton.disabled = true;
+        try {
+          const respuesta = await fetch("/api/admin/panaderias", {
+            method: "POST",
+            headers: { "Authorization": "Bearer " + sesionActual.access_token, "Accept": "application/json" },
+            body: datos
+          });
+          const resultado = await respuesta.json().catch(() => ({}));
+          if (!respuesta.ok) throw new Error(resultado.detail || "No se pudo crear el local.");
+          mostrarMensaje(mensaje, "Local creado correctamente.", "exito");
+          await cargarDatosUsuario(sesionActual);
+          mostrarVistaLocales("lista");
+        } catch (error) {
+          mostrarMensaje(mensaje, error.message || "No se pudo crear el local.", "error");
+        } finally {
+          boton.disabled = false;
+        }
       };
       document.getElementById("botonEliminarLocal").onclick = () => {
         if (!esAdministrador()) return;
         mostrarMensaje(document.getElementById("mensajeEliminarLocal"),
-          "La eliminación está bloqueada hasta que Google Drive esté conectado y se verifique el respaldo real de productos, historial y archivos de los últimos 30 días.",
+          "La eliminación está bloqueada hasta que el respaldo integral del local en Cloudflare R2 esté implementado y verificado.",
           "error");
       };
     }
@@ -734,13 +771,35 @@
           editar.textContent = "✎";
           editar.addEventListener("click", (evento) => {
             evento.stopPropagation();
-            const aviso = document.createElement("p");
-            aviso.className = "nota";
-            aviso.textContent = "La carga y el guardado de fotos se conectarán en el siguiente paso.";
-            const previo = tarjeta.querySelector(".aviso-foto");
-            if (previo) previo.remove();
-            aviso.className += " aviso-foto";
-            tarjeta.appendChild(aviso);
+            const selector = document.createElement("input");
+            selector.type = "file";
+            selector.accept = "image/*";
+            selector.hidden = true;
+            selector.addEventListener("change", async () => {
+              const archivo = selector.files?.[0];
+              if (!archivo) return;
+              editar.disabled = true;
+              try {
+                const datos = new FormData();
+                datos.append("foto", archivo);
+                const respuesta = await fetch("/api/admin/panaderias/" + encodeURIComponent(panaderia.id) + "/foto", {
+                  method: "PUT",
+                  headers: { "Authorization": "Bearer " + sesionActual.access_token, "Accept": "application/json" },
+                  body: datos
+                });
+                const resultado = await respuesta.json().catch(() => ({}));
+                if (!respuesta.ok) throw new Error(resultado.detail || "No se pudo actualizar la fotografía.");
+                panaderia.foto_url = resultado.foto_url;
+                dibujarPanaderias();
+                mostrarMensaje(document.getElementById("mensajePanaderias"), "Fotografía actualizada.", "exito");
+              } catch (error) {
+                mostrarMensaje(document.getElementById("mensajePanaderias"), error.message || "No se pudo actualizar la fotografía.", "error");
+              } finally {
+                editar.disabled = false;
+              }
+            });
+            tarjeta.appendChild(selector);
+            selector.click();
           });
           tarjeta.appendChild(editar);
         }

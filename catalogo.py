@@ -20,11 +20,6 @@ def _context(authorization, panaderia_id):
     return core, user, profile
 
 
-def _admin(profile):
-    if not (profile.get("es_admin_principal") or profile.get("rol") == "admin"):
-        raise HTTPException(status_code=403, detail="Solo el administrador puede eliminar categorías.")
-
-
 def _categoria(core, panaderia_id, categoria_id, allow_protected=False):
     rows = core.supabase.table("categorias_productos").select("*").eq("id", categoria_id).eq("panaderia_id", panaderia_id).limit(1).execute().data
     if not rows:
@@ -167,8 +162,7 @@ def cambiar_categoria(categoria_id: int, data: CategoriaCambio, panaderia_id: in
 
 @router.delete("/categorias/{categoria_id}")
 def eliminar_categoria(categoria_id: int, panaderia_id: int, authorization: str | None = Header(default=None)):
-    core, user, profile = _context(authorization, panaderia_id)
-    _admin(profile)
+    core, user, _profile = _context(authorization, panaderia_id)
     category = _categoria(core, panaderia_id, categoria_id)
     try:
         products = core.supabase.table("productos").select("id,panaderia_id,categoria_id,categoria_original_id,activo").eq("panaderia_id", panaderia_id).eq("categoria_id", categoria_id).execute().data

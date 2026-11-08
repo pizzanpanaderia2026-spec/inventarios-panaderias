@@ -165,6 +165,17 @@ def mi_perfil(
     }
 
 
+def _panaderias_con_fotografias(filas):
+    from locales import foto_url_para_clave
+    salida = []
+    for fila in filas or []:
+        item = dict(fila)
+        clave = item.pop("foto_key", None)
+        item["foto_url"] = foto_url_para_clave(clave)
+        salida.append(item)
+    return salida
+
+
 # Listar únicamente las panaderías autorizadas para el usuario
 @app.get("/api/panaderias")
 def listar_panaderias(
@@ -177,10 +188,10 @@ def listar_panaderias(
         if perfil["rol"] == "admin" and perfil["es_admin_principal"]:
             resultado = (
                 supabase.table("panaderias")
-                .select("id,nombre,activa")
+                .select("id,nombre,activa,foto_key")
                 .order("id")                .execute()
             )
-            return {"panaderias": resultado.data}
+            return {"panaderias": _panaderias_con_fotografias(resultado.data)}
 
         accesos = (
             supabase.table("accesos_panaderias")
@@ -199,13 +210,13 @@ def listar_panaderias(
 
         resultado = (
             supabase.table("panaderias")
-            .select("id,nombre,activa")
+            .select("id,nombre,activa,foto_key")
             .in_("id", ids)
             .order("id")
             .execute()
         )
 
-        return {"panaderias": resultado.data}
+        return {"panaderias": _panaderias_con_fotografias(resultado.data)}
 
     except HTTPException:
         raise
@@ -1433,3 +1444,7 @@ app.include_router(archivado_router)
 # Historial unificado: Supabase para datos activos y R2 para archivos verificados.
 from historial_archivos import router as historial_archivos_router
 app.include_router(historial_archivos_router)
+
+# Creación de locales y fotografías privadas en Cloudflare R2.
+from locales import router as locales_router
+app.include_router(locales_router)
