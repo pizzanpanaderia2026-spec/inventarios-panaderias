@@ -48,6 +48,10 @@ def _foto_url(key: str | None):
         raise HTTPException(status_code=503, detail="No se pudo preparar la fotografía del local.")
 
 
+def foto_url_para_clave(key: str | None):
+    return _foto_url(key)
+
+
 async def _optimizar_foto(file: UploadFile | None) -> bytes | None:
     if file is None or not file.filename:
         return None
