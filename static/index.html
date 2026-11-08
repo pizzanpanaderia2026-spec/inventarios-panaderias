@@ -477,9 +477,9 @@
               </select>
             </div>
             <div class="admin-usuario">
-              <strong>Google Drive</strong>
-              <p>Sin conectar. El archivado automático estará disponible cuando se configure la conexión.</p>
-              <span class="nota">Por ahora esta pantalla es visual; no se guarda ninguna configuración ni se mueve o elimina información.</span>
+              <strong>Cloudflare R2</strong>
+              <p>El almacenamiento privado de los inventarios históricos se comprobará al abrir esta sección.</p>
+              <span class="nota">Los inventarios no se eliminan de Supabase hasta verificar que el respaldo esté guardado y se pueda recuperar.</span>
             </div>
             <h4>Reglas de conservación</h4>
             <ul>
@@ -1107,7 +1107,16 @@
     document.getElementById("botonAdministracion").addEventListener("click", () => { if (esAdministrador()) adminCargar(); });
     document.getElementById("adminVerUsuarios").addEventListener("click", adminCargar);
     document.getElementById("adminAgregarUsuario").addEventListener("click", () => adminAbrirAgregar().catch(e => adminMensaje(e.message)));
-    document.getElementById("adminConfiguracionArchivado").addEventListener("click", () => adminVista("archivado"));
+    document.getElementById("adminConfiguracionArchivado").addEventListener("click", async () => {
+      adminVista("archivado");
+      adminMensaje("Comprobando conexión con Cloudflare R2…", "nota");
+      try {
+        const estado = await adminFetch("/api/admin/archivado/estado-r2");
+        adminMensaje(estado.mensaje || "Cloudflare R2 está conectado.", "exito");
+      } catch (e) {
+        adminMensaje(e.message || "No se pudo comprobar Cloudflare R2.");
+      }
+    });
     document.getElementById("adminArchivadoVolver").addEventListener("click", () => adminVista("inicio"));
     document.getElementById("adminVolverInicio").addEventListener("click", () => adminVista("inicio"));
     document.getElementById("adminCancelarUsuario").addEventListener("click", () => adminVista("usuarios"));
