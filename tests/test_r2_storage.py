@@ -1,5 +1,6 @@
 import os
 import unittest
+from io import BytesIO
 from unittest.mock import patch
 
 import r2_storage
@@ -24,6 +25,9 @@ class R2StorageTests(unittest.TestCase):
 
             def head_object(self, **kwargs):
                 return {"ContentLength": len(b"R2 connection check")}
+
+            def get_object(self, **kwargs):
+                return {"Body": BytesIO(b"R2 connection check")}
 
             def delete_object(self, **kwargs):
                 self.borrados.append(kwargs)

@@ -58,7 +58,11 @@ def comprobar_conexion_r2() -> dict:
         subido = True
         metadata = cliente.head_object(Bucket=bucket, Key=key)
         if int(metadata.get("ContentLength", -1)) != len(contenido):
-            raise RuntimeError("La verificación del objeto de prueba no coincidió.")
+            raise RuntimeError("El tamaño del objeto de prueba no coincidió.")
+        objeto = cliente.get_object(Bucket=bucket, Key=key)
+        lectura = objeto["Body"].read()
+        if lectura != contenido:
+            raise RuntimeError("El contenido leído del objeto de prueba no coincidió.")
         cliente.delete_object(Bucket=bucket, Key=key)
         subido = False
         return {
