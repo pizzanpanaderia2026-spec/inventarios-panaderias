@@ -7,14 +7,17 @@ Formato de los Excel archivados:
 """
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime, timezone, timedelta
 from decimal import Decimal
+import hashlib
+import os
 from io import BytesIO
 from typing import Any
 
 from fastapi import APIRouter, Header, HTTPException
 from fastapi.responses import StreamingResponse
 from openpyxl import Workbook, load_workbook
+from openpyxl.styles import Font
 
 router = APIRouter()
 MAX_DIAS = 31
@@ -152,6 +155,64 @@ def _leer_archivos_r2(panaderia_id: int, desde: date, hasta: date) -> dict[str, 
     return encontrados
 
 
+def _subir_archivo_verificado(panaderia_id: int, desde: date, hasta: date, historial: list[dict]) -> dict:
+    from main import supabase
+    from r2_storage import crear_cliente_r2
+
+    if not historial:
+        raise HTTPException(status_code=404, detail="No hay inventarios cerrados para respaldar en este periodo.")
+    salida = _crear_libro(historial)
+    contenido = salida.getvalue()
+    digest = hashlib.sha256(contenido).hexdigest()
+    nombre = f"historial_{desde.isoformat()}_{hasta.isoformat()}.xlsx"
+    key = f"panaderias/{panaderia_id}/{desde.year}/{nombre}"
+    cliente = crear_cliente_r2()
+    bucket = os.environ["R2_BUCKET_NAME"]
+    subido = False
+    try:
+        cliente.put_object(Bucket=bucket, Key=key, Body=contenido, ContentType=XLSX_MIME)
+        subido = True
+        head = cliente.head_object(Bucket=bucket, Key=key)
+        if int(head.get("ContentLength", -1)) != len(contenido):
+            raise RuntimeError("El tamaño del respaldo no coincide.")
+        descargado = cliente.get_object(Bucket=bucket, Key=key)["Body"].read()
+        if hashlib.sha256(descargado).hexdigest() != digest:
+            raise RuntimeError("La verificación SHA-256 del respaldo no coincide.")
+        ahora = datetime.now(timezone.utc).isoformat()
+        registro = {
+            "panaderia_id": panaderia_id,
+            "periodo_inicio": desde.isoformat(),
+            "periodo_fin": hasta.isoformat(),
+            "archive_key": key,
+            "estado": "verificado",
+            "drive_file_name": nombre,
+            "sha256": digest,
+            "tamano_bytes": len(contenido),
+            "verificado_en": ahora,
+            "actualizado_en": ahora,
+            "ultimo_error": None,
+        }
+        existente = (
+            supabase.table("archivos_archivados").select("id")
+            .eq("panaderia_id", panaderia_id)
+            .eq("periodo_inicio", desde.isoformat())
+            .eq("periodo_fin", hasta.isoformat())
+            .limit(1).execute()
+        ).data or []
+        if existente:
+            supabase.table("archivos_archivados").update(registro).eq("id", existente[0]["id"]).execute()
+        else:
+            supabase.table("archivos_archivados").insert(registro).execute()
+        return {"guardado": True, "verificado": True, "archivo": nombre, "tamano_bytes": len(contenido)}
+    except Exception:
+        if subido:
+            try:
+                cliente.delete_object(Bucket=bucket, Key=key)
+            except Exception:
+                pass
+        raise
+
+
 def _leer_supabase(panaderia_id: int, desde: date, hasta: date) -> dict[str, dict]:
     from main import supabase
 
@@ -260,7 +321,7 @@ def _crear_libro(historial: list[dict]) -> BytesIO:
     for row in resumen.iter_rows():
         for cell in row:
             if cell.value is not None and (cell.row in (1, 3, 4, resumen.max_row - len(por_precio) - 1, resumen.max_row - len(por_precio)) or str(cell.value).upper() == "TOTAL GENERAL"):
-                cell.font = cell.font.copy(bold=True)
+                cell.font = Font(bold=True)
     for col, width in {"A": 34, "B": 18, "C": 20}.items():
         resumen.column_dimensions[col].width = width
     for row in range(5, resumen.max_row + 1):
