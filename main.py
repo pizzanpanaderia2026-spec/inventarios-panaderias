@@ -210,13 +210,13 @@ def listar_panaderias(
 
         resultado = (
             supabase.table("panaderias")
-            .select("id,nombre,activa")
+            .select("id,nombre,activa,foto_key")
             .in_("id", ids)
             .order("id")
             .execute()
         )
 
-        return {"panaderias": resultado.data}
+        return {"panaderias": _panaderias_con_fotografias(resultado.data)}
 
     except HTTPException:
         raise
