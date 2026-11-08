@@ -657,6 +657,9 @@
       document.getElementById("opcionCrearLocal").onclick = () => {
         if (!esAdministrador()) return;
         document.getElementById("formCrearLocal").reset();
+        document.getElementById("fotoNuevoLocal").value = "";
+        document.getElementById("vistaPreviaFotoLocal").src = "";
+        document.getElementById("vistaPreviaFotoLocal").classList.add("oculto");
         ocultarMensaje(document.getElementById("mensajeCrearLocal"));
         mostrarVistaLocales("crear");
       };
@@ -667,12 +670,44 @@
       };
       document.getElementById("volverListaDesdeCrear").onclick = () => mostrarVistaLocales("lista");
       document.getElementById("volverListaDesdeEliminar").onclick = () => mostrarVistaLocales("lista");
-      document.getElementById("formCrearLocal").onsubmit = (evento) => {
+      const selectorFotoNueva = document.getElementById("fotoNuevoLocal");
+      document.getElementById("botonSeleccionarFotoLocal").onclick = () => {
+        if (esAdministrador()) selectorFotoNueva.click();
+      };
+      selectorFotoNueva.onchange = () => {
+        const archivo = selectorFotoNueva.files?.[0];
+        const vista = document.getElementById("vistaPreviaFotoLocal");
+        if (!archivo) { vista.src = ""; vista.classList.add("oculto"); return; }
+        vista.src = URL.createObjectURL(archivo);
+        vista.classList.remove("oculto");
+      };
+      document.getElementById("formCrearLocal").onsubmit = async (evento) => {
         evento.preventDefault();
         if (!esAdministrador()) return;
-        mostrarMensaje(document.getElementById("mensajeCrearLocal"),
-          "La creación real del local y la entrada directa al nuevo local se conectarán en el siguiente paso. No se guardó ningún cambio.",
-          "error");
+        const boton = document.getElementById("botonCrearLocal");
+        const mensaje = document.getElementById("mensajeCrearLocal");
+        const datos = new FormData();
+        datos.append("nombre", document.getElementById("nuevoNombreLocal").value.trim());
+        const origen = document.getElementById("localCopiarDatos").value;
+        if (origen) datos.append("copiar_de", origen);
+        if (selectorFotoNueva.files?.[0]) datos.append("foto", selectorFotoNueva.files[0]);
+        boton.disabled = true;
+        try {
+          const respuesta = await fetch("/api/admin/panaderias", {
+            method: "POST",
+            headers: { "Authorization": "Bearer " + sesionActual.access_token, "Accept": "application/json" },
+            body: datos
+          });
+          const resultado = await respuesta.json().catch(() => ({}));
+          if (!respuesta.ok) throw new Error(resultado.detail || "No se pudo crear el local.");
+          mostrarMensaje(mensaje, "Local creado correctamente.", "exito");
+          await cargarDatosUsuario(sesionActual);
+          mostrarVistaLocales("lista");
+        } catch (error) {
+          mostrarMensaje(mensaje, error.message || "No se pudo crear el local.", "error");
+        } finally {
+          boton.disabled = false;
+        }
       };
       document.getElementById("botonEliminarLocal").onclick = () => {
         if (!esAdministrador()) return;
@@ -734,13 +769,35 @@
           editar.textContent = "✎";
           editar.addEventListener("click", (evento) => {
             evento.stopPropagation();
-            const aviso = document.createElement("p");
-            aviso.className = "nota";
-            aviso.textContent = "La carga y el guardado de fotos se conectarán en el siguiente paso.";
-            const previo = tarjeta.querySelector(".aviso-foto");
-            if (previo) previo.remove();
-            aviso.className += " aviso-foto";
-            tarjeta.appendChild(aviso);
+            const selector = document.createElement("input");
+            selector.type = "file";
+            selector.accept = "image/*";
+            selector.hidden = true;
+            selector.addEventListener("change", async () => {
+              const archivo = selector.files?.[0];
+              if (!archivo) return;
+              editar.disabled = true;
+              try {
+                const datos = new FormData();
+                datos.append("foto", archivo);
+                const respuesta = await fetch("/api/admin/panaderias/" + encodeURIComponent(panaderia.id) + "/foto", {
+                  method: "PUT",
+                  headers: { "Authorization": "Bearer " + sesionActual.access_token, "Accept": "application/json" },
+                  body: datos
+                });
+                const resultado = await respuesta.json().catch(() => ({}));
+                if (!respuesta.ok) throw new Error(resultado.detail || "No se pudo actualizar la fotografía.");
+                panaderia.foto_url = resultado.foto_url;
+                dibujarPanaderias();
+                mostrarMensaje(document.getElementById("mensajePanaderias"), "Fotografía actualizada.", "exito");
+              } catch (error) {
+                mostrarMensaje(document.getElementById("mensajePanaderias"), error.message || "No se pudo actualizar la fotografía.", "error");
+              } finally {
+                editar.disabled = false;
+              }
+            });
+            tarjeta.appendChild(selector);
+            selector.click();
           });
           tarjeta.appendChild(editar);
         }
