@@ -341,8 +341,10 @@
             <div class="campo">
               <label>Foto del local</label>
               <div class="zona-foto-local">
-                <strong>＋ Agregar foto</strong>
-                <p class="nota">La carga y el guardado de fotos se conectarán en el siguiente paso. También podrás cambiarla desde el lápiz en la tarjeta del local.</p>
+                <input id="fotoNuevoLocal" type="file" accept="image/*" hidden>
+                <button id="botonSeleccionarFotoLocal" class="secundario" type="button">＋ Agregar foto</button>
+                <img id="vistaPreviaFotoLocal" class="oculto" alt="Vista previa de la foto del local" style="display:block;max-width:100%;max-height:180px;width:auto;height:auto;object-fit:contain;margin:10px auto 0;border-radius:8px">
+                <p class="nota">La foto se optimiza automáticamente para ocupar menos espacio y conservar sus proporciones. También podrás cambiarla desde el lápiz de su tarjeta.</p>
               </div>
             </div>
             <div id="mensajeCrearLocal" class="mensaje oculto" role="status"></div>
