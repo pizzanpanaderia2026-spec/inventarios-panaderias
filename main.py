@@ -1429,3 +1429,7 @@ app.include_router(catalogo_router)
 # Archivado privado en Cloudflare R2 (sin modificar la interfaz).
 from archivado import router as archivado_router
 app.include_router(archivado_router)
+
+# Historial unificado: Supabase para datos activos y R2 para archivos verificados.
+from historial_archivos import router as historial_archivos_router
+app.include_router(historial_archivos_router)
