@@ -1425,3 +1425,7 @@ def admin_cambiar_nombre(datos: NombreAdminCambio, authorization: str | None = H
 # API del catálogo con categorías por panadería.
 from catalogo import router as catalogo_router
 app.include_router(catalogo_router)
+
+# Archivado privado en Cloudflare R2 (sin modificar la interfaz).
+from archivado import router as archivado_router
+app.include_router(archivado_router)
