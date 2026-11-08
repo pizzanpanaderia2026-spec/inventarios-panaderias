@@ -155,7 +155,7 @@ def _leer_archivos_r2(panaderia_id: int, desde: date, hasta: date) -> dict[str, 
     return encontrados
 
 
-def _subir_archivo_verificado(panaderia_id: int, desde: date, hasta: date, historial: list[dict]) -> dict:
+def _subir_archivo_verificado(panaderia_id: int, desde: date, hasta: date, historial: list[dict], on_uploaded=None) -> dict:
     from main import supabase
     from r2_storage import crear_cliente_r2
 
@@ -172,6 +172,8 @@ def _subir_archivo_verificado(panaderia_id: int, desde: date, hasta: date, histo
     try:
         cliente.put_object(Bucket=bucket, Key=key, Body=contenido, ContentType=XLSX_MIME)
         subido = True
+        if on_uploaded:
+            on_uploaded()
         head = cliente.head_object(Bucket=bucket, Key=key)
         if int(head.get("ContentLength", -1)) != len(contenido):
             raise RuntimeError("El tamaño del respaldo no coincide.")
