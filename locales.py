@@ -49,7 +49,11 @@ def _foto_url(key: str | None):
 
 
 def foto_url_para_clave(key: str | None):
-    return _foto_url(key)
+    try:
+        return _foto_url(key)
+    except HTTPException:
+        # Una falla temporal de R2 no debe impedir abrir la lista de locales.
+        return None
 
 
 async def _optimizar_foto(file: UploadFile | None) -> bytes | None:
@@ -205,6 +209,7 @@ async def crear_panaderia(
         if local_id:
             try:
                 core.supabase.table("productos").delete().eq("panaderia_id", local_id).execute()
+                core.supabase.table("auditoria_inventario").delete().eq("panaderia_id", local_id).execute()
                 core.supabase.table("categorias_productos").delete().eq("panaderia_id", local_id).execute()
                 core.supabase.table("panaderias").delete().eq("id", local_id).execute()
             except Exception:
