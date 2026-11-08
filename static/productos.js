@@ -2,7 +2,7 @@
 (function () {
   const root = document.getElementById("catalogoProductos");
   if (!root) return;
-  let token = null, bakery = null, categories = [], products = [], isAdmin = false;
+  let token = null, bakery = null, categories = [], products = [];
   let openCategory = null, globalMenuOpen = false, categoryMenuOpen = null, selectionMode = false, selected = new Set(), editingProduct = null, editingCategory = null;
   const message = document.getElementById("mensajeProductos");
   const form = document.getElementById("formProducto");
@@ -81,7 +81,7 @@
     root.textContent="Cargando catálogo...";
     try {
       const data=await api("/api/catalogo?panaderia_id="+encodeURIComponent(bakery.id));
-      categories=data.categorias||[];products=data.productos||[];isAdmin=!!data.es_admin;
+      categories=data.categorias||[];products=data.productos||[];
       draw();
       if(window.actualizarRegistroCatalogo) await window.actualizarRegistroCatalogo(products,categories);
       return { productos: products, categorias: categories };
