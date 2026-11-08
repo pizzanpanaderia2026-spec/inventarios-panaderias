@@ -145,7 +145,7 @@
           menu.append(makeButton("Agregar producto",()=>showProductForm(null,c.id)));
           menu.append(makeButton("Editar categoría",()=>showCategoryForm(c)));
           menu.append(makeButton(c.activa?"Desactivar categoría":"Reactivar categoría",()=>toggleCategory(c)));
-          if(isAdmin)menu.append(makeButton("Eliminar categoría",()=>deleteCategory(c),"boton-peligro"));
+          menu.append(makeButton("Eliminar categoría",()=>deleteCategory(c),"boton-peligro"));
           actions.append(menu);
         }
         head.append(actions);
