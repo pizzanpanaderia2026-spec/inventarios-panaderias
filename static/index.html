@@ -439,7 +439,7 @@
 
         <section id="panelHistorial" class="panel panel-seccion oculto">
           <h3>Historial de inventarios</h3>
-          <p class="nota">Selecciona una fecha del calendario. Las fechas recientes muestran las tablas; las anteriores quedan disponibles para descargar su archivo.</p>
+          <p class="nota">Selecciona una fecha del calendario para consultar o descargar su inventario histórico.</p>
           <div class="historial-calendario">
             <div class="barra"><button id="histMesAnterior" class="secundario" type="button" aria-label="Mes anterior">‹</button><strong id="histMesTitulo"></strong><button id="histMesSiguiente" class="secundario" type="button" aria-label="Mes siguiente">›</button></div>
             <div id="histCalendario" class="calendario-grid"></div>
@@ -447,7 +447,7 @@
           </div>
           <div id="historialResultado" class="historial-resultado"><p class="nota">Selecciona una fecha para ver su inventario.</p></div>
                     <div class="panel" style="margin-top:18px">
-            <h4>Resumen de un periodo (últimos 30 días)</h4>
+            <h4>Resumen de un periodo (hasta 31 días)</h4>
             <p class="nota">Une los registros de varias fechas para saber cuántas conchas, bolillos u otros productos se registraron en el periodo elegido.</p>
             <div class="campo"><label for="resumenDesde">Desde</label><input id="resumenDesde" type="date"></div>
             <div class="campo"><label for="resumenHasta">Hasta</label><input id="resumenHasta" type="date"></div>
@@ -525,7 +525,7 @@
   <script src="/static/productos.js?v=reactivar-movil-20261101-1"></script>
   <script src="/static/registro.js?v=autoguardado-cierre-20261104-1"></script>
   <script src="/static/tablas.js?v=ultimo-cierre-excel-20261101-1"></script>
-  <script src="/static/historial-inventarios.js?v=2"></script>
+  <script src="/static/historial-inventarios.js?v=3"></script>
   <script>
     // CONFIGURACIÓN DE SUPABASE
     const SUPABASE_URL = "https://fjthttvprmjrfmmsnxer.supabase.co";
@@ -852,6 +852,9 @@
         if (window.iniciarTablasHistorial) {
           window.iniciarTablasHistorial(sesionActual, autorizada);
         }
+        if (window.iniciarHistorialInventarios) {
+          window.iniciarHistorialInventarios(sesionActual, autorizada);
+        }
         if (window.iniciarRegistroDiario) {
           await window.iniciarRegistroDiario(
             sesionActual, autorizada, catalogo.productos, catalogo.categorias
@@ -1144,18 +1147,32 @@
       const msg = document.getElementById("mensajeResumenPeriodo");
       if (!desde || !hasta) { mostrarMensaje(msg, "Selecciona las dos fechas."); return; }
       if (desde > hasta) { mostrarMensaje(msg, "La fecha inicial debe ser anterior a la final."); return; }
-      if ((Date.parse(hasta+"T00:00:00Z")-Date.parse(desde+"T00:00:00Z"))/86400000 > 29) { mostrarMensaje(msg, "El periodo máximo es de 30 días."); return; }
-      const boton = document.getElementById("botonResumenPeriodo"); boton.disabled = true;
+      const dias = (Date.parse(hasta + "T00:00:00Z") - Date.parse(desde + "T00:00:00Z")) / 86400000 + 1;
+      if (dias > 31) { mostrarMensaje(msg, "El periodo máximo es de 31 días contando ambas fechas."); return; }
+      const boton = document.getElementById("botonResumenPeriodo");
+      boton.disabled = true;
       try {
-        const url = "/api/inventario/resumen/excel?panaderia_id=" + encodeURIComponent(panaderiaSeleccionada.id) + "&desde=" + encodeURIComponent(desde) + "&hasta=" + encodeURIComponent(hasta);
-        const resp = await fetch(url, {headers:{"Authorization":"Bearer "+sesionActual.access_token}});
-        const data = await resp.json().catch(()=>({}));
-        if (!resp.ok) throw new Error(data.detail || "No se pudo crear el resumen.");
-        const blob = await resp.blob(); const href = URL.createObjectURL(blob);
-        const a = document.createElement("a"); a.href=href; a.download="resumen_inventario_"+desde+"_"+hasta+".xlsx"; a.click(); URL.revokeObjectURL(href);
-        mostrarMensaje(msg, "Se descargó el resumen del periodo.", "exito");
-      } catch(e) { mostrarMensaje(msg, e.message || "Error al descargar."); }
-      finally { boton.disabled = false; }
+        const url = "/api/historial/periodo/excel?panaderia_id=" + encodeURIComponent(panaderiaSeleccionada.id) + "&desde=" + encodeURIComponent(desde) + "&hasta=" + encodeURIComponent(hasta);
+        const resp = await fetch(url, {headers:{"Authorization":"Bearer " + sesionActual.access_token}});
+        if (!resp.ok) {
+          const data = await resp.json().catch(() => ({}));
+          throw new Error(data.detail || "No se pudo crear el resumen.");
+        }
+        const blob = await resp.blob();
+        const href = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = href;
+        a.download = "historial_" + desde + "_" + hasta + ".xlsx";
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(href);
+        mostrarMensaje(msg, "Se descargó el Excel del periodo.", "exito");
+      } catch(e) {
+        mostrarMensaje(msg, e.message || "Error al descargar.");
+      } finally {
+        boton.disabled = false;
+      }
     });
 
     // Al abrir la página, revisar si ya existe una sesión.
