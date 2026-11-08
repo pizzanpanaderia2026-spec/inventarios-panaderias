@@ -1150,6 +1150,32 @@
       } catch(e) { adminMensaje(e.message); }
     });
 
+    // Al elegir "Desde", completar "Hasta" con el máximo de 31 días inclusivos.
+    const resumenDesde = document.getElementById("resumenDesde");
+    const resumenHasta = document.getElementById("resumenHasta");
+    function fechaLocalISO() {
+      const hoy = new Date();
+      return hoy.getFullYear() + "-" + String(hoy.getMonth() + 1).padStart(2, "0") + "-" + String(hoy.getDate()).padStart(2, "0");
+    }
+    resumenDesde.max = fechaLocalISO();
+    resumenHasta.max = fechaLocalISO();
+    resumenDesde.addEventListener("change", () => {
+      const desde = resumenDesde.value;
+      if (!desde) {
+        resumenHasta.value = "";
+        resumenHasta.min = "";
+        resumenHasta.max = fechaLocalISO();
+        return;
+      }
+      const limite = new Date(desde + "T00:00:00Z");
+      limite.setUTCDate(limite.getUTCDate() + 30);
+      const maximo31Dias = limite.toISOString().slice(0, 10);
+      const hoy = fechaLocalISO();
+      resumenHasta.min = desde;
+      resumenHasta.max = maximo31Dias < hoy ? maximo31Dias : hoy;
+      resumenHasta.value = resumenHasta.max;
+    });
+
     document.getElementById("botonResumenPeriodo").addEventListener("click", async () => {
       const desde = document.getElementById("resumenDesde").value;
       const hasta = document.getElementById("resumenHasta").value;
