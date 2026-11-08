@@ -472,7 +472,7 @@
             <div class="barra"><h4>Configuración de archivado</h4><button id="adminArchivadoVolver" class="secundario" type="button">Volver a Administración</button></div>
             <p>Elige el día del mes en que se preparará el archivado de inventarios.</p>
             <div class="campo"><label for="adminDiaArchivado">Día mensual de archivado</label>
-              <select id="adminDiaArchivado" disabled>
+              <select id="adminDiaArchivado">
                 <option value="1">Día 1</option><option value="2">Día 2</option><option value="3">Día 3</option><option value="4">Día 4</option><option value="5">Día 5</option><option value="6">Día 6</option><option value="7">Día 7</option><option value="8">Día 8</option><option value="9">Día 9</option><option value="10">Día 10</option><option value="11">Día 11</option><option value="12">Día 12</option><option value="13">Día 13</option><option value="14">Día 14</option><option value="15" selected>Día 15</option><option value="16">Día 16</option><option value="17">Día 17</option><option value="18">Día 18</option><option value="19">Día 19</option><option value="20">Día 20</option><option value="21">Día 21</option><option value="22">Día 22</option><option value="23">Día 23</option><option value="24">Día 24</option><option value="25">Día 25</option><option value="26">Día 26</option><option value="27">Día 27</option><option value="28">Día 28</option><option value="29">Día 29</option><option value="30">Día 30</option><option value="31">Día 31</option>
               </select>
             </div>
@@ -481,14 +481,29 @@
               <p>El almacenamiento privado de los inventarios históricos se comprobará al abrir esta sección.</p>
               <span class="nota">Los inventarios no se eliminan de Supabase hasta verificar que el respaldo esté guardado y se pueda recuperar.</span>
             </div>
+            <div class="admin-usuario" id="adminEstadoRespaldo" aria-live="polite">
+              <div class="barra"><strong>Estado del respaldo</strong><span id="adminRespaldoEtiqueta" class="nota">En espera</span></div>
+              <p id="adminRespaldoTitulo">No hay respaldos en ejecución.</p>
+              <div id="adminRespaldoProgreso" class="oculto">
+                <div class="barra"><strong id="adminRespaldoPorcentaje">0%</strong><span id="adminRespaldoConteo" class="nota">0 de 0 fechas</span></div>
+                <div style="height:9px;background:#eee7df;border-radius:20px;overflow:hidden"><div id="adminRespaldoBarra" style="height:9px;width:0%;background:#16a34a;border-radius:20px;transition:width .3s"></div></div>
+                <p id="adminRespaldoEtapa" class="nota">Preparando inventarios…</p>
+              </div>
+              <p id="adminRespaldoAyuda" class="nota">El respaldo se ejecutará automáticamente en segundo plano. Puedes seguir usando la aplicación.</p>
+              <div class="barra">
+                <span id="adminRespaldoActualizado" class="nota"></span>
+                <button id="adminRespaldoDetallesBoton" class="secundario" type="button" style="padding:6px 10px;font-size:13px" hidden>Ver detalles</button>
+              </div>
+              <div id="adminDetallesRespaldo" class="oculto" style="margin-top:10px"></div>
+            </div>
             <h4>Reglas de conservación</h4>
             <ul>
               <li>Los inventarios de los últimos 30 días permanecen disponibles en la aplicación.</li>
-              <li>Los inventarios antiguos solo se retirarán de la zona activa después de verificar su respaldo en Drive.</li>
+              <li>Los inventarios antiguos solo se retirarán de la zona activa después de verificar su respaldo en Cloudflare R2 y contar con autorización para eliminarlos.</li>
               <li>Si el respaldo falla, los datos se conservan para reintentar; no se borra nada sin respaldo confirmado.</li>
               <li>Los periodos archivados no se modificarán retroactivamente al cambiar el día mensual.</li>
             </ul>
-            <button id="adminArchivadoGuardar" type="button" disabled>Guardar configuración (próximamente)</button>
+            <button id="adminArchivadoGuardar" type="button">Guardar configuración</button>
           </div>
           <div id="adminVistaUsuarios" class="oculto">
             <div class="barra"><h4>Usuarios</h4><button id="adminVolverInicio" class="secundario" type="button">Volver</button></div>
@@ -1107,6 +1122,71 @@
     document.getElementById("botonAdministracion").addEventListener("click", () => { if (esAdministrador()) adminCargar(); });
     document.getElementById("adminVerUsuarios").addEventListener("click", adminCargar);
     document.getElementById("adminAgregarUsuario").addEventListener("click", () => adminAbrirAgregar().catch(e => adminMensaje(e.message)));
+    let adminArchivadoPolling = null;
+    async function adminCargarArchivado() {
+      try {
+        const [config, estado] = await Promise.all([
+          adminFetch("/api/admin/archivado/configuracion"),
+          adminFetch("/api/admin/archivado/estado")
+        ]);
+        document.getElementById("adminDiaArchivado").value = String(config.dia_mes || 15);
+        const etiqueta = document.getElementById("adminRespaldoEtiqueta");
+        const titulo = document.getElementById("adminRespaldoTitulo");
+        const progreso = document.getElementById("adminRespaldoProgreso");
+        const ayuda = document.getElementById("adminRespaldoAyuda");
+        const detalles = document.getElementById("adminRespaldoDetallesBoton");
+        const actualizado = document.getElementById("adminRespaldoActualizado");
+        const activo = ["preparando","subiendo","verificando"].includes(estado.estado);
+        etiqueta.textContent = activo ? "En proceso" : estado.estado === "completado" ? "Completado" : estado.estado === "error" ? "Error" : "En espera";
+        etiqueta.style.color = activo ? "#1d4ed8" : estado.estado === "completado" ? "#15803d" : estado.estado === "error" ? "#b91c1c" : "#78716c";
+        titulo.textContent = activo ? "Respaldando inventarios…" : estado.estado === "completado" ? "Respaldo verificado correctamente." : estado.estado === "error" ? "No se pudo completar el respaldo." : "No hay respaldos en ejecución.";
+        progreso.classList.toggle("oculto", !activo && estado.estado !== "completado" && estado.estado !== "error");
+        if (progreso.classList.contains("oculto") === false) {
+          const porcentaje = Number(estado.progreso || 0);
+          document.getElementById("adminRespaldoPorcentaje").textContent = porcentaje + "%";
+          document.getElementById("adminRespaldoConteo").textContent = (estado.fechas_completadas || 0) + " de " + (estado.fechas_total || 0) + " fechas con registros";
+          document.getElementById("adminRespaldoBarra").style.width = porcentaje + "%";
+          document.getElementById("adminRespaldoEtapa").textContent = estado.error || estado.etapa || (estado.estado === "completado" ? "Todos los archivos fueron verificados." : "Preparando inventarios…");
+        }
+        ayuda.textContent = estado.estado === "error" ? (estado.error || "Los inventarios se conservan para reintentar.") : "El respaldo se ejecuta en segundo plano. Puedes seguir usando la aplicación.";
+        detalles.hidden = estado.estado !== "completado" && estado.estado !== "error";
+        actualizado.textContent = estado.actualizado_en ? "Actualizado: " + new Date(estado.actualizado_en).toLocaleString("es-MX") : "";
+      } catch (e) {
+        document.getElementById("adminRespaldoTitulo").textContent = "No se pudo consultar el estado del respaldo.";
+        document.getElementById("adminRespaldoAyuda").textContent = e.message || "Intenta actualizar esta sección.";
+      }
+    }
+    document.getElementById("adminRespaldoDetallesBoton").addEventListener("click", async () => {
+      const panel = document.getElementById("adminDetallesRespaldo");
+      if (!panel.classList.contains("oculto")) { panel.classList.add("oculto"); return; }
+      try {
+        const datos = await adminFetch("/api/admin/archivado/detalles");
+        panel.replaceChildren();
+        const titulo = document.createElement("strong"); titulo.textContent = "Archivos respaldados"; panel.appendChild(titulo);
+        if (!datos.archivos.length) {
+          const vacio = document.createElement("p"); vacio.className = "nota"; vacio.textContent = "Todavía no hay archivos archivados."; panel.appendChild(vacio);
+        } else {
+          datos.archivos.forEach(a => {
+            const fila = document.createElement("p"); fila.className = "nota";
+            const nombre = a.drive_file_name || ("Periodo " + a.periodo_inicio + " a " + a.periodo_fin);
+            fila.textContent = nombre + " · " + a.estado + (a.verificado_en ? " · Verificado " + new Date(a.verificado_en).toLocaleString("es-MX") : "");
+            panel.appendChild(fila);
+          });
+        }
+        panel.classList.remove("oculto");
+      } catch(e) { adminMensaje(e.message); }
+    });
+    document.getElementById("adminArchivadoGuardar").addEventListener("click", async () => {
+      const boton = document.getElementById("adminArchivadoGuardar");
+      boton.disabled = true;
+      try {
+        const dia_mes = Number(document.getElementById("adminDiaArchivado").value);
+        await adminFetch("/api/admin/archivado/configuracion", {method:"PUT", body:JSON.stringify({dia_mes})});
+        adminMensaje("Configuración guardada.", "exito");
+        await adminCargarArchivado();
+      } catch(e) { adminMensaje(e.message); }
+      finally { boton.disabled = false; }
+    });
     document.getElementById("adminConfiguracionArchivado").addEventListener("click", async () => {
       adminVista("archivado");
       adminMensaje("Comprobando conexión con Cloudflare R2…", "nota");
@@ -1116,6 +1196,11 @@
       } catch (e) {
         adminMensaje(e.message || "No se pudo comprobar Cloudflare R2.");
       }
+      await adminCargarArchivado();
+      if (adminArchivadoPolling) clearInterval(adminArchivadoPolling);
+      adminArchivadoPolling = setInterval(() => {
+        if (!document.getElementById("adminVistaArchivado").classList.contains("oculto")) adminCargarArchivado();
+      }, 5000);
     });
     document.getElementById("adminArchivadoVolver").addEventListener("click", () => adminVista("inicio"));
     document.getElementById("adminVolverInicio").addEventListener("click", () => adminVista("inicio"));
