@@ -82,10 +82,23 @@ def _actualizar_ejecucion(ejecucion_id: str, cambios: dict):
 
 
 def _hay_ejecucion_activa() -> bool:
-    filas = _tabla("archivado_ejecuciones").select("id").in_(
+    filas = _tabla("archivado_ejecuciones").select("id,actualizado_en").in_(
         "estado", ["preparando", "subiendo", "verificando"]
-    ).limit(1).execute().data or []
-    return bool(filas)
+    ).limit(10).execute().data or []
+    ahora = datetime.now(timezone.utc)
+    activa = False
+    for fila in filas:
+        marca = datetime.fromisoformat(str(fila["actualizado_en"]).replace("Z", "+00:00"))
+        if marca < ahora - timedelta(hours=6):
+            _actualizar_ejecucion(str(fila["id"]), {
+                "estado": "error",
+                "error": "El proceso se interrumpió antes de terminar. Se volverá a intentar sin eliminar los inventarios originales.",
+                "etapa": "Ejecución interrumpida; pendiente de reintento.",
+                "terminado_en": ahora.isoformat(),
+            })
+        else:
+            activa = True
+    return activa
 
 
 def _procesar_respaldo(ejecucion_id: str, periodo_inicio: str, periodo_fin: str):
@@ -318,7 +331,13 @@ def admin_detalles_archivado(authorization: str | None = Header(default=None)):
         filas = _tabla("archivos_archivados").select(
             "panaderia_id,periodo_inicio,periodo_fin,estado,drive_file_name,tamano_bytes,sha256,verificado_en,ultimo_error,intentos"
         ).order("periodo_fin", desc=True).limit(50).execute().data or []
-        return {"archivos": filas}
+        ejecuciones = _tabla("archivado_ejecuciones").select(
+            "estado,detalle,periodo_inicio,periodo_fin,terminado_en"
+        ).order("iniciado_en", desc=True).limit(1).execute().data or []
+        return {
+            "archivos": filas,
+            "fechas": ejecuciones[0].get("detalle", []) if ejecuciones else [],
+        }
     except HTTPException:
         raise
     except Exception:
