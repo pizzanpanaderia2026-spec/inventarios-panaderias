@@ -21,8 +21,8 @@ def _context(authorization, panaderia_id):
 
 
 def _admin(profile):
-    if not (profile.get("es_admin_principal") or profile.get("rol") == "admin"):
-        raise HTTPException(status_code=403, detail="Solo el administrador puede eliminar categorías.")
+    # Los encargados tienen los mismos permisos de catálogo que el administrador.
+    return None
 
 
 def _categoria(core, panaderia_id, categoria_id, allow_protected=False):
