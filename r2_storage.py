@@ -60,6 +60,7 @@ def comprobar_conexion_r2() -> dict:
         if int(metadata.get("ContentLength", -1)) != len(contenido):
             raise RuntimeError("La verificación del objeto de prueba no coincidió.")
         cliente.delete_object(Bucket=bucket, Key=key)
+        subido = False
         return {
             "conectado": True,
             "bucket": bucket,
