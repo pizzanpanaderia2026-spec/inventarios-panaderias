@@ -34,16 +34,11 @@ def _mes_siguiente(anio: int, mes: int) -> tuple[int, int]:
 
 
 def _periodo_inicial(dia: int, hoy: date) -> tuple[str, str]:
-    """Devuelve el periodo mensual vigente, respetando el último día de meses cortos."""
-    ancla_mes = _ancla(hoy.year, hoy.month, dia)
-    if hoy <= ancla_mes:
-        anio_sig, mes_sig = _mes_siguiente(hoy.year, hoy.month)
-        inicio = _ancla(*((hoy.year - 1, 12) if hoy.month == 1 else (hoy.year, hoy.month - 1)), dia)
-        fin = _ancla(anio_sig, mes_sig, dia) - timedelta(days=1)
-    else:
-        anio_sig, mes_sig = _mes_siguiente(hoy.year, hoy.month)
-        inicio = ancla_mes
-        fin = _ancla(anio_sig, mes_sig, dia) - timedelta(days=1)
+    """Periodo que cierra en la próxima frontera mensual o que acaba de cerrar."""
+    ancla_actual = _ancla(hoy.year, hoy.month, dia)
+    anio_previo, mes_previo = (hoy.year - 1, 12) if hoy.month == 1 else (hoy.year, hoy.month - 1)
+    inicio = _ancla(anio_previo, mes_previo, dia)
+    fin = ancla_actual - timedelta(days=1)
     return inicio.isoformat(), fin.isoformat()
 
 
