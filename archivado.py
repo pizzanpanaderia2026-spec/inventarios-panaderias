@@ -1,16 +1,19 @@
-"""Configuración y estado del archivado privado en Cloudflare R2."""
+"""Configuración y ejecución automática de respaldos privados en Cloudflare R2."""
 from __future__ import annotations
 
 from calendar import monthrange
-from datetime import date, timedelta
-from typing import Literal
+from datetime import date, datetime, timedelta, timezone
+import hmac
+import os
+from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, Header, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Header, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from r2_storage import R2ConfigurationError, comprobar_conexion_r2
 
 router = APIRouter()
+TZ_LOCAL = ZoneInfo("America/Mexico_City")
 
 
 def _admin(authorization: str | None):
@@ -34,7 +37,7 @@ def _mes_siguiente(anio: int, mes: int) -> tuple[int, int]:
 
 
 def _periodo_inicial(dia: int, hoy: date) -> tuple[str, str]:
-    """Periodo que cierra en la próxima frontera mensual o que acaba de cerrar."""
+    """Periodo que cierra en la frontera mensual actual, ajustando meses cortos."""
     ancla_actual = _ancla(hoy.year, hoy.month, dia)
     anio_previo, mes_previo = (hoy.year - 1, 12) if hoy.month == 1 else (hoy.year, hoy.month - 1)
     inicio = _ancla(anio_previo, mes_previo, dia)
@@ -42,8 +45,168 @@ def _periodo_inicial(dia: int, hoy: date) -> tuple[str, str]:
     return inicio.isoformat(), fin.isoformat()
 
 
+def _siguiente_periodo(fin_actual: date, dia: int) -> tuple[str, str]:
+    inicio = fin_actual + timedelta(days=1)
+    anio_sig, mes_sig = _mes_siguiente(inicio.year, inicio.month)
+    fin = _ancla(anio_sig, mes_sig, dia) - timedelta(days=1)
+    return inicio.isoformat(), fin.isoformat()
+
+
+def _dividir_periodo(inicio: date, fin: date):
+    cursor = inicio
+    while cursor <= fin:
+        cierre = min(fin, cursor + timedelta(days=30))
+        yield cursor, cierre
+        cursor = cierre + timedelta(days=1)
+
+
 class ConfiguracionArchivado(BaseModel):
     dia_mes: int = Field(ge=1, le=31)
+
+
+def _crear_ejecucion(periodo_inicio: str, periodo_fin: str) -> dict:
+    return _tabla("archivado_ejecuciones").insert({
+        "estado": "preparando",
+        "periodo_inicio": periodo_inicio,
+        "periodo_fin": periodo_fin,
+        "fechas_total": 0,
+        "fechas_completadas": 0,
+        "etapa": "Localizando inventarios con registros.",
+        "detalle": [],
+    }).execute().data[0]
+
+
+def _actualizar_ejecucion(ejecucion_id: str, cambios: dict):
+    cambios["actualizado_en"] = datetime.now(timezone.utc).isoformat()
+    _tabla("archivado_ejecuciones").update(cambios).eq("id", ejecucion_id).execute()
+
+
+def _hay_ejecucion_activa() -> bool:
+    filas = _tabla("archivado_ejecuciones").select("id").in_(
+        "estado", ["preparando", "subiendo", "verificando"]
+    ).limit(1).execute().data or []
+    return bool(filas)
+
+
+def _procesar_respaldo(ejecucion_id: str, periodo_inicio: str, periodo_fin: str):
+    """Trabaja fuera de la petición web y persiste cada avance para que la UI lo consulte."""
+    from main import supabase
+    from historial_archivos import _leer_supabase, _subir_archivo_verificado
+
+    inicio = date.fromisoformat(periodo_inicio)
+    fin = date.fromisoformat(periodo_fin)
+    detalles = []
+    total_fechas = 0
+    completadas = 0
+    try:
+        panaderias = (
+            supabase.table("panaderias").select("id,nombre")
+            .eq("activa", True).order("id").execute().data or []
+        )
+        preparados = []
+        for panaderia in panaderias:
+            pid = int(panaderia["id"])
+            datos = _leer_supabase(pid, inicio, fin)
+            fechas = sorted(datos.keys())
+            total_fechas += len(fechas)
+            preparados.append((panaderia, datos, fechas))
+            detalles.append({
+                "panaderia_id": pid,
+                "panaderia": panaderia.get("nombre") or f"Panadería {pid}",
+                "estado": "pendiente" if fechas else "sin_registros",
+                "fechas": [{"fecha": f, "estado": "pendiente" if fechas else "sin_registros"} for f in fechas],
+            })
+        _actualizar_ejecucion(ejecucion_id, {
+            "estado": "subiendo",
+            "fechas_total": total_fechas,
+            "fechas_completadas": 0,
+            "etapa": "Subiendo los archivos de cada panadería.",
+            "detalle": detalles,
+        })
+        for indice, (panaderia, datos, fechas) in enumerate(preparados):
+            if not fechas:
+                continue
+            pid = int(panaderia["id"])
+            for chunk_inicio, chunk_fin in _dividir_periodo(inicio, fin):
+                historial = [datos[f] for f in fechas if chunk_inicio.isoformat() <= f <= chunk_fin.isoformat()]
+                if not historial:
+                    continue
+                _actualizar_ejecucion(ejecucion_id, {
+                    "estado": "subiendo",
+                    "etapa": f"Subiendo respaldo de {panaderia.get('nombre') or 'la panadería'}.",
+                    "detalle": detalles,
+                })
+                def al_subir():
+                    _actualizar_ejecucion(ejecucion_id, {
+                        "estado": "verificando",
+                        "etapa": f"Verificando el archivo de {panaderia.get('nombre') or 'la panadería'}.",
+                    })
+                _subir_archivo_verificado(pid, chunk_inicio, chunk_fin, historial, on_uploaded=al_subir)
+                completadas += len(historial)
+                for detalle in detalles:
+                    if detalle["panaderia_id"] == pid:
+                        for fecha_info in detalle["fechas"]:
+                            if chunk_inicio.isoformat() <= fecha_info["fecha"] <= chunk_fin.isoformat():
+                                fecha_info["estado"] = "verificado"
+                        detalle["estado"] = "verificado" if all(x["estado"] == "verificado" for x in detalle["fechas"]) else "en_proceso"
+                _actualizar_ejecucion(ejecucion_id, {
+                    "estado": "subiendo",
+                    "fechas_completadas": completadas,
+                    "etapa": "Archivo guardado y verificado.",
+                    "detalle": detalles,
+                })
+        config = _tabla("configuracion_archivado").select("dia_mes").eq("id", 1).limit(1).execute().data or []
+        dia = int(config[0]["dia_mes"]) if config else 15
+        siguiente_inicio, siguiente_fin = _siguiente_periodo(fin, dia)
+        _tabla("configuracion_archivado").update({
+            "periodo_inicio": siguiente_inicio,
+            "periodo_fin": siguiente_fin,
+            "ultima_ejecucion": datetime.now(timezone.utc).isoformat(),
+            "ultimo_error": None,
+            "ultimo_error_en": None,
+        }).eq("id", 1).execute()
+        _actualizar_ejecucion(ejecucion_id, {
+            "estado": "completado",
+            "fechas_total": total_fechas,
+            "fechas_completadas": total_fechas,
+            "etapa": "Todos los archivos quedaron guardados y verificados.",
+            "detalle": detalles,
+            "terminado_en": datetime.now(timezone.utc).isoformat(),
+            "error": None,
+        })
+    except Exception as error:
+        mensaje = str(error)[:700]
+        try:
+            _actualizar_ejecucion(ejecucion_id, {
+                "estado": "error",
+                "fechas_total": total_fechas,
+                "fechas_completadas": completadas,
+                "etapa": "El respaldo se detuvo. Los inventarios originales se conservaron.",
+                "detalle": detalles,
+                "error": mensaje,
+                "terminado_en": datetime.now(timezone.utc).isoformat(),
+            })
+            _tabla("configuracion_archivado").update({
+                "ultimo_error": mensaje,
+                "ultimo_error_en": datetime.now(timezone.utc).isoformat(),
+            }).eq("id", 1).execute()
+        except Exception:
+            pass
+
+
+def _iniciar_respaldo(background_tasks: BackgroundTasks) -> dict:
+    if _hay_ejecucion_activa():
+        return {"iniciado": False, "mensaje": "Ya hay un respaldo en ejecución."}
+    config = _tabla("configuracion_archivado").select(
+        "periodo_inicio,periodo_fin"
+    ).eq("id", 1).limit(1).execute().data or []
+    if not config:
+        return {"iniciado": False, "mensaje": "Primero guarda la configuración de archivado."}
+    inicio = config[0]["periodo_inicio"]
+    fin = config[0]["periodo_fin"]
+    ejecucion = _crear_ejecucion(inicio, fin)
+    background_tasks.add_task(_procesar_respaldo, str(ejecucion["id"]), inicio, fin)
+    return {"iniciado": True, "ejecucion_id": str(ejecucion["id"])}
 
 
 @router.get("/api/admin/archivado/estado-r2")
@@ -79,6 +242,7 @@ def admin_obtener_configuracion(authorization: str | None = Header(default=None)
 @router.put("/api/admin/archivado/configuracion")
 def admin_guardar_configuracion(
     datos: ConfiguracionArchivado,
+    background_tasks: BackgroundTasks,
     authorization: str | None = Header(default=None),
 ):
     usuario, _perfil = _admin(authorization)
@@ -87,28 +251,38 @@ def admin_guardar_configuracion(
         existente = tabla.select(
             "id,dia_mes,periodo_inicio,periodo_fin,desplazamiento_fin"
         ).eq("id", 1).limit(1).execute().data or []
-        ahora = date.today()
+        hoy = datetime.now(TZ_LOCAL).date()
+        ancla = _ancla(hoy.year, hoy.month, datos.dia_mes)
         if existente:
-            # No reescribe periodos ya iniciados: únicamente cambia el día de las
-            # siguientes fronteras. El proceso de recuperación resolverá el tramo pendiente.
-            periodo_inicio = existente[0]["periodo_inicio"]
-            periodo_fin = existente[0]["periodo_fin"]
+            periodo_inicio = date.fromisoformat(str(existente[0]["periodo_inicio"]))
+            periodo_fin = ancla - timedelta(days=1)
+            if periodo_fin < periodo_inicio:
+                anio_sig, mes_sig = _mes_siguiente(hoy.year, hoy.month)
+                periodo_fin = _ancla(anio_sig, mes_sig, datos.dia_mes) - timedelta(days=1)
+            periodo_inicio_texto = periodo_inicio.isoformat()
+            periodo_fin_texto = periodo_fin.isoformat()
             desplazamiento = existente[0].get("desplazamiento_fin", -1)
         else:
-            periodo_inicio, periodo_fin = _periodo_inicial(datos.dia_mes, ahora)
+            periodo_inicio_texto, periodo_fin_texto = _periodo_inicial(datos.dia_mes, hoy)
+            periodo_fin = date.fromisoformat(periodo_fin_texto)
             desplazamiento = -1
         fila = {
             "id": 1,
             "dia_mes": datos.dia_mes,
-            "periodo_inicio": periodo_inicio,
-            "periodo_fin": periodo_fin,
+            "periodo_inicio": periodo_inicio_texto,
+            "periodo_fin": periodo_fin_texto,
             "desplazamiento_fin": desplazamiento,
             "actualizado_por": str(usuario.id),
         }
         tabla.upsert(fila, on_conflict="id").execute()
+        iniciado = False
+        if periodo_fin < hoy:
+            resultado = _iniciar_respaldo(background_tasks)
+            iniciado = bool(resultado.get("iniciado"))
         return {
             "guardado": True,
             "dia_mes": datos.dia_mes,
+            "respaldo_iniciado": iniciado,
             "mensaje": "Configuración guardada. Los periodos anteriores se conservan.",
         }
     except HTTPException:
@@ -149,3 +323,29 @@ def admin_detalles_archivado(authorization: str | None = Header(default=None)):
         raise
     except Exception:
         raise HTTPException(status_code=503, detail="No se pudieron consultar los detalles de los respaldos.")
+
+
+@router.post("/api/internal/archivado/ejecutar")
+def ejecutar_archivado_programado(
+    background_tasks: BackgroundTasks,
+    request: Request,
+):
+    esperado = os.environ.get("ARCHIVADO_CRON_SECRET", "")
+    recibido = request.headers.get("x-archivado-secret", "")
+    if not esperado or not recibido or not hmac.compare_digest(esperado, recibido):
+        raise HTTPException(status_code=401, detail="No autorizado.")
+    try:
+        config = _tabla("configuracion_archivado").select(
+            "dia_mes,periodo_fin"
+        ).eq("id", 1).limit(1).execute().data or []
+        if not config:
+            return {"iniciado": False, "mensaje": "Configuración aún no creada."}
+        hoy = datetime.now(TZ_LOCAL).date()
+        fin = date.fromisoformat(str(config[0]["periodo_fin"]))
+        if hoy <= fin:
+            return {"iniciado": False, "mensaje": "Todavía no corresponde respaldar este periodo."}
+        return _iniciar_respaldo(background_tasks)
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=503, detail="No se pudo iniciar el respaldo programado.")
