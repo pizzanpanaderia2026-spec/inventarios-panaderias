@@ -141,6 +141,22 @@
     return datos;
   }
 
+  function formatearFechaHora(valor) {
+    if (!valor) return "—";
+    const partes = new Intl.DateTimeFormat("es-MX", {
+      timeZone: "America/Mexico_City",
+      day: "2-digit",
+      month: "2-digit",
+      year: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23"
+    }).formatToParts(new Date(valor));
+    const obtener = tipo => partes.find(parte => parte.type === tipo)?.value || "";
+    return obtener("day") + "/" + obtener("month") + "/" + obtener("year") +
+      " " + obtener("hour") + ":" + obtener("minute");
+  }
+
   function crearCelda(fila, valor) {
     const celda = document.createElement("td");
     celda.textContent = valor == null || valor === "" ? "—" : String(valor);
@@ -159,10 +175,9 @@
     }
 
     const envoltura = document.createElement("div");
-    envoltura.style.overflowX = "auto";
+    envoltura.className = "produccion-tabla-scroll";
     const table = document.createElement("table");
-    table.className = "tabla";
-    table.style.width = "100%";
+    table.className = "tabla produccion-tabla";
     const thead = document.createElement("thead");
     const encabezado = document.createElement("tr");
     ["Pan", "Cantidad", "Observaciones", "Registró", "Fecha y hora", "Acciones"].forEach(t => {
@@ -179,17 +194,34 @@
       crearCelda(fila, Number(registro.cantidad).toLocaleString("es-MX"));
       crearCelda(fila, registro.observaciones || "—");
       crearCelda(fila, registro.usuario_nombre || "Usuario");
-      crearCelda(fila, registro.registrado_en
-        ? new Date(registro.registrado_en).toLocaleString("es-MX")
-        : "—");
+      crearCelda(fila, formatearFechaHora(registro.registrado_en));
       const acciones = document.createElement("td");
+      acciones.className = "produccion-acciones";
       if (registro.editable) {
         const editar = document.createElement("button");
         editar.type = "button";
         editar.className = "secundario";
         editar.textContent = "Editar";
         editar.addEventListener("click", () => mostrarEdicion(fila, registro));
-        acciones.appendChild(editar);
+
+        const eliminar = document.createElement("button");
+        eliminar.type = "button";
+        eliminar.className = "boton-peligro";
+        eliminar.textContent = "Eliminar";
+        eliminar.addEventListener("click", async () => {
+          const confirmar = window.confirm("¿Deseas eliminar este registro de producción? Esta acción no se puede deshacer.");
+          if (!confirmar) return;
+          eliminar.disabled = true;
+          try {
+            await api("/api/produccion/" + encodeURIComponent(registro.id), { method: "DELETE" });
+            aviso("Registro eliminado correctamente.", "exito");
+            await cargar();
+          } catch (error) {
+            aviso(error.message);
+            eliminar.disabled = false;
+          }
+        });
+        acciones.append(editar, eliminar);
       } else {
         const soloLectura = document.createElement("span");
         soloLectura.className = "nota";
@@ -230,7 +262,7 @@
       fila.appendChild(td);
     });
     crearCelda(fila, registro.usuario_nombre || "Usuario");
-    crearCelda(fila, registro.registrado_en ? new Date(registro.registrado_en).toLocaleString("es-MX") : "—");
+    crearCelda(fila, formatearFechaHora(registro.registrado_en));
 
     const acciones = document.createElement("td");
     const guardar = document.createElement("button");
