@@ -406,6 +406,7 @@
           <button class="boton-seccion" type="button" data-seccion="panelProductos">Agregar productos</button>
           <button class="boton-seccion" type="button" data-seccion="panelHistorial">Historial de inventarios</button>
           <button id="botonAdministracion" class="boton-seccion oculto" type="button" data-seccion="panelAdministracion">Administración</button>
+          <button id="botonProduccion" class="boton-seccion" type="button" data-seccion="panelProduccion">Producción</button>
         </nav>
 
         <section id="panelTablas" class="panel panel-seccion oculto">
@@ -414,6 +415,10 @@
           <h4>Tabla B · Resumen por precio</h4><div id="tablaResumen"></div>
           <button id="botonDescargarExcel" type="button">Descargar tablas del día</button>
           <div id="mensajeTablas" class="mensaje oculto" role="status"></div>
+        </section>
+        <section id="panelProduccion" class="panel panel-seccion oculto">
+          <h3>Producción</h3>
+          <p class="nota">Aquí se agregará el registro y la consulta de producción diaria.</p>
         </section>
         <section id="panelRegistro" class="panel panel-seccion oculto"><h3>Registro diario</h3><div class="campo"><label for="fechaRegistro">Fecha</label><input id="fechaRegistro" type="date"></div><div class="barra"><strong id="estadoRegistro">Día abierto</strong></div><div id="mensajeRegistro" class="mensaje oculto" role="alert"></div><div id="filasRegistro"></div><button id="botonGuardarRegistro" type="button">Guardar registro</button> <button id="botonCerrarDia" type="button">Cerrar día</button> <button id="botonReabrirDia" class="secundario" type="button">Reabrir día</button></section>
         <section id="panelProductos" class="panel panel-seccion oculto">
@@ -850,7 +855,7 @@
     }
 
     function mostrarSeccion(idSeccion) {
-      const secciones = ["panelRegistro", "panelTablas", "panelProductos", "panelHistorial", "panelAdministracion"];
+      const secciones = ["panelRegistro", "panelTablas", "panelProductos", "panelHistorial", "panelAdministracion", "panelProduccion"];
       secciones.forEach(id => {
         const panel = document.getElementById(id);
         if (!panel) return;
