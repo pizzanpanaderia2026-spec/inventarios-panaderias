@@ -1647,6 +1647,7 @@ def eliminar_registro_produccion(
             supabase.table("produccion_registros")
             .delete()
             .eq("id", registro_id)
+            .select("id")
             .execute().data
         )
         if not eliminado:
