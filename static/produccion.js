@@ -15,6 +15,17 @@
   let token = null;
   let bakery = null;
   let cargando = false;
+  let catalogo = [];
+  let categorias = [];
+  let capturaHabilitada = false;
+  const campoCantidad = cantidad.closest(".campo");
+  campoCantidad.classList.add("oculto");
+  const sugerencias = document.createElement("div");
+  sugerencias.className = "oculto";
+  sugerencias.style.cssText = "border:1px solid #cfc5b8;border-radius:8px;overflow:hidden;margin-top:-8px;margin-bottom:14px;background:#fff";
+  pan.closest(".campo").after(sugerencias);
+  pan.autocomplete = "off";
+  pan.placeholder = "Escribe el nombre del pan";
 
   function fechaLocal(d = new Date()) {
     return d.getFullYear() + "-" +
@@ -38,6 +49,79 @@
     mensaje.textContent = "";
     mensaje.className = "mensaje oculto";
   }
+
+  function actualizarBotonAgregar() {
+    const n = Number(cantidad.value);
+    botonAgregar.disabled = !capturaHabilitada ||
+      !pan.dataset.nombreSeleccionado ||
+      !Number.isInteger(n) || n < 0 || cantidad.value.trim() === "";
+  }
+
+  function activarCaptura(nombre, producto = null) {
+    pan.value = nombre;
+    pan.dataset.nombreSeleccionado = nombre;
+    pan.dataset.productoId = producto ? String(producto.id) : "";
+    sugerencias.classList.add("oculto");
+    campoCantidad.classList.remove("oculto");
+    cantidad.value = "";
+    actualizarBotonAgregar();
+    cantidad.focus();
+  }
+
+  function dibujarSugerencias() {
+    sugerencias.replaceChildren();
+    const q = pan.value.trim().toLocaleLowerCase("es");
+    delete pan.dataset.nombreSeleccionado;
+    delete pan.dataset.productoId;
+    campoCantidad.classList.add("oculto");
+    actualizarBotonAgregar();
+    if (!q) {
+      sugerencias.classList.add("oculto");
+      return;
+    }
+
+    const categoriasCoincidentes = categorias.filter(c =>
+      c.activa && !c.protegida && c.nombre.toLocaleLowerCase("es").includes(q)
+    );
+    const idsCategorias = new Set(categoriasCoincidentes.map(c => String(c.id)));
+    const coincidencias = catalogo.filter(p =>
+      p.activo && p.categoria_activa !== false && !p.categoria_protegida &&
+      (p.nombre.toLocaleLowerCase("es").includes(q) || idsCategorias.has(String(p.categoria_id)))
+    );
+
+    if (coincidencias.length) {
+      coincidencias.forEach(producto => {
+        const opcion = document.createElement("button");
+        opcion.type = "button";
+        opcion.className = "secundario ancho";
+        opcion.style.cssText = "display:flex;justify-content:space-between;align-items:center;border-radius:0;border-bottom:1px solid #eee7df;text-align:left";
+        const nombre = document.createElement("strong");
+        nombre.textContent = producto.nombre;
+        const precio = document.createElement("span");
+        precio.textContent = "$" + Number(producto.precio).toFixed(2);
+        const categoria = document.createElement("small");
+        categoria.textContent = producto.categoria_nombre || "";
+        categoria.style.cssText = "display:block;color:#78716c;font-size:12px";
+        const texto = document.createElement("span");
+        texto.append(nombre, categoria);
+        opcion.append(texto, precio);
+        opcion.addEventListener("click", () => activarCaptura(producto.nombre, producto));
+        sugerencias.appendChild(opcion);
+      });
+    }
+
+    const libre = document.createElement("button");
+    libre.type = "button";
+    libre.className = "secundario ancho";
+    libre.style.cssText = "display:block;width:100%;border-radius:0;text-align:left";
+    libre.textContent = "Usar nombre libre: " + pan.value.trim();
+    libre.addEventListener("click", () => activarCaptura(pan.value.trim()));
+    sugerencias.appendChild(libre);
+    sugerencias.classList.remove("oculto");
+  }
+
+  pan.addEventListener("input", dibujarSugerencias);
+  cantidad.addEventListener("input", actualizarBotonAgregar);
 
   async function api(ruta, opciones = {}) {
     const respuesta = await fetch(ruta, {
@@ -203,8 +287,9 @@
       const registros = datos.registros || [];
       construirTabla(registros);
       const permiteAgregar = puedeAgregarEnFecha(fecha.value);
+      capturaHabilitada = permiteAgregar;
       document.getElementById("formularioProduccion").classList.toggle("oculto", !permiteAgregar);
-      botonAgregar.disabled = !permiteAgregar;
+      actualizarBotonAgregar();
       botonExcel.disabled = false;
       if (registros.length) {
         estado.textContent = registros.length + (registros.length === 1 ? " registro encontrado." : " registros encontrados.") +
@@ -228,6 +313,15 @@
     bakery = panaderia;
     fecha.max = fechaLocal();
     if (!fecha.value) fecha.value = fechaLocal();
+    try {
+      const datosCatalogo = await api("/api/catalogo?panaderia_id=" + encodeURIComponent(bakery.id));
+      catalogo = datosCatalogo.productos || [];
+      categorias = datosCatalogo.categorias || [];
+    } catch (error) {
+      catalogo = [];
+      categorias = [];
+      aviso("No se pudieron cargar las sugerencias del catálogo: " + error.message);
+    }
     await cargar();
   };
 
@@ -241,9 +335,9 @@
   });
 
   botonAgregar.addEventListener("click", async () => {
-    const nombre = pan.value.trim();
+    const nombre = pan.dataset.nombreSeleccionado || "";
     const n = Number(cantidad.value);
-    if (!nombre) { aviso("Escribe el nombre del pan."); pan.focus(); return; }
+    if (!nombre) { aviso("Selecciona una sugerencia o confirma el nombre libre."); pan.focus(); return; }
     if (!Number.isInteger(n) || n < 0 || cantidad.value.trim() === "") {
       aviso("La cantidad debe ser un número entero de cero o más.");
       cantidad.focus();
@@ -262,8 +356,13 @@
         })
       });
       pan.value = "";
+      delete pan.dataset.nombreSeleccionado;
+      delete pan.dataset.productoId;
+      sugerencias.classList.add("oculto");
+      campoCantidad.classList.add("oculto");
       cantidad.value = "";
       observaciones.value = "";
+      actualizarBotonAgregar();
       aviso("Producción agregada correctamente.", "exito");
       await cargar();
     } catch (error) {
