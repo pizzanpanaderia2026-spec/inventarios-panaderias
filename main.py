@@ -803,6 +803,7 @@ def consultar_tablas_ultimo_cierre(
 ):
     usuario = obtener_usuario_autenticado(authorization)
     perfil = obtener_perfil(str(usuario.id))
+    comprobar_acceso_panaderia(str(usuario.id), perfil, panaderia_id)
     try:
         datos = obtener_datos_ultimo_cierre(panaderia_id, str(usuario.id), perfil)
         return datos or {"cierre": None, "lineas": [], "resumen": [], "total_piezas": 0, "total_importe": "0"}
@@ -819,6 +820,7 @@ def descargar_tablas_ultimo_cierre_excel(
 ):
     usuario = obtener_usuario_autenticado(authorization)
     perfil = obtener_perfil(str(usuario.id))
+    comprobar_acceso_panaderia(str(usuario.id), perfil, panaderia_id)
     try:
         datos = obtener_datos_ultimo_cierre(panaderia_id, str(usuario.id), perfil)
         if not datos:
@@ -1055,6 +1057,8 @@ def descargar_lista_precios(
     """Descarga bajo demanda el historial de precios que sí quedó registrado."""
     usuario = obtener_usuario_autenticado(authorization)
     perfil = obtener_perfil(str(usuario.id))
+    if perfil.get("rol") == "produccion":
+        raise HTTPException(status_code=403, detail="Tu cuenta solo tiene acceso al módulo de Producción.")
     try:
         if es_admin_principal(perfil):
             panaderias = (
