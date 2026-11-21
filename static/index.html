@@ -244,7 +244,50 @@
 .catalogo-formulario{border:1px solid #e7ded2;border-radius:12px;padding:16px;margin:16px 0;background:#fff}
 .boton-peligro{background:#991b1b!important;color:white!important}
 @media(max-width:520px){.catalogo-categoria-cabecera{padding:9px}.catalogo-productos{padding:4px 10px 12px}.catalogo-producto{gap:6px}.catalogo-producto>button.secundario{padding:7px;font-size:11px}}
-</style></head>
+</style>
+<style>
+  /* Producción: tabla amplia en escritorio y desplazamiento horizontal táctil en móvil. */
+  #panelProduccion .produccion-tabla-scroll {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  #panelProduccion .produccion-tabla {
+    width: 100%;
+    min-width: 760px;
+    border-collapse: collapse;
+  }
+  #panelProduccion .produccion-tabla th,
+  #panelProduccion .produccion-tabla td {
+    padding: 9px 8px;
+    border: 1px solid #e7ddd1;
+    text-align: left;
+    vertical-align: top;
+  }
+  #panelProduccion .produccion-tabla th {
+    background: #f3e8d8;
+    white-space: nowrap;
+  }
+  #panelProduccion .produccion-acciones {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 6px;
+    min-width: 150px;
+  }
+  #panelProduccion .produccion-acciones button {
+    padding: 8px 10px;
+    font-size: 13px;
+    white-space: nowrap;
+  }
+  @media (max-width: 600px) {
+    #panelProduccion .produccion-tabla th,
+    #panelProduccion .produccion-tabla td { padding: 8px 7px; }
+    #panelProduccion .produccion-acciones { min-width: 150px; }
+  }
+</style>
+</head>
 
 <body>
   <header>
@@ -557,7 +600,7 @@
 
   <script src="/static/productos.js?v=permisos-encargados-20261108-1"></script>
   <script src="/static/registro.js?v=autoguardado-cierre-20261104-1"></script>
-  <script src="/static/produccion.js?v=20261120-1"></script>
+  <script src="/static/produccion.js?v=20261121-2"></script>
   <script src="/static/tablas.js?v=ultimo-cierre-excel-20261101-1"></script>
   <script src="/static/historial-inventarios.js?v=3"></script>
   <script>
