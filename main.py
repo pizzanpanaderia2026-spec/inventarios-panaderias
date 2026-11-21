@@ -244,6 +244,8 @@ class ProductoCambio(BaseModel):
 
 
 def comprobar_acceso_panaderia(usuario_id: str, perfil: dict, panaderia_id: int):
+    if perfil["rol"] == "produccion":
+        raise HTTPException(status_code=403, detail="Tu cuenta solo tiene acceso al módulo de Producción.")
     if perfil["rol"] == "admin" and perfil["es_admin_principal"]:
         return
     try:
@@ -801,6 +803,7 @@ def consultar_tablas_ultimo_cierre(
 ):
     usuario = obtener_usuario_autenticado(authorization)
     perfil = obtener_perfil(str(usuario.id))
+    comprobar_acceso_panaderia(str(usuario.id), perfil, panaderia_id)
     try:
         datos = obtener_datos_ultimo_cierre(panaderia_id, str(usuario.id), perfil)
         return datos or {"cierre": None, "lineas": [], "resumen": [], "total_piezas": 0, "total_importe": "0"}
@@ -817,6 +820,7 @@ def descargar_tablas_ultimo_cierre_excel(
 ):
     usuario = obtener_usuario_autenticado(authorization)
     perfil = obtener_perfil(str(usuario.id))
+    comprobar_acceso_panaderia(str(usuario.id), perfil, panaderia_id)
     try:
         datos = obtener_datos_ultimo_cierre(panaderia_id, str(usuario.id), perfil)
         if not datos:
@@ -1053,6 +1057,8 @@ def descargar_lista_precios(
     """Descarga bajo demanda el historial de precios que sí quedó registrado."""
     usuario = obtener_usuario_autenticado(authorization)
     perfil = obtener_perfil(str(usuario.id))
+    if perfil.get("rol") == "produccion":
+        raise HTTPException(status_code=403, detail="Tu cuenta solo tiene acceso al módulo de Producción.")
     try:
         if es_admin_principal(perfil):
             panaderias = (
@@ -1247,6 +1253,7 @@ class CuentaEncargadoNueva(BaseModel):
     nombre: str = Field(min_length=1, max_length=120)
     username: str = Field(min_length=3, max_length=60)
     password: str = Field(min_length=8, max_length=128)
+    tipo_usuario: str = Field(default="encargado", pattern="^(encargado|produccion)$")
     locales: list[int] = Field(min_length=1, max_length=100)
 
 
@@ -1254,6 +1261,7 @@ class CuentaEncargadoCambio(BaseModel):
     nombre: str = Field(min_length=1, max_length=120)
     username: str = Field(min_length=3, max_length=60)
     password: str | None = Field(default=None, min_length=8, max_length=128)
+    tipo_usuario: str = Field(default="encargado", pattern="^(encargado|produccion)$")
     locales: list[int] = Field(min_length=1, max_length=100)
 
 
@@ -1359,7 +1367,7 @@ def admin_crear_usuario(datos: CuentaEncargadoNueva, authorization: str | None =
             raise HTTPException(status_code=503, detail="No se pudo crear la cuenta de acceso.")
         uid = str(auth_user.id)
         try:
-            supabase.table("perfiles").insert({"id": uid, "nombre": nombre, "rol": "encargado", "es_admin_principal": False}).execute()
+            supabase.table("perfiles").insert({"id": uid, "nombre": nombre, "rol": datos.tipo_usuario, "es_admin_principal": False}).execute()
             supabase.table("accesos_panaderias").insert([{"usuario_id": uid, "panaderia_id": x} for x in datos.locales]).execute()
         except Exception:
             try:
@@ -1383,7 +1391,7 @@ def admin_actualizar_usuario(usuario_id: str, datos: CuentaEncargadoCambio, auth
         raise HTTPException(status_code=422, detail="Escribe un nombre.")
     try:
         perfil_result = supabase.table("perfiles").select("id,rol,es_admin_principal").eq("id", usuario_id).limit(1).execute().data
-        if not perfil_result or perfil_result[0].get("es_admin_principal") or perfil_result[0].get("rol") != "encargado":
+        if not perfil_result or perfil_result[0].get("es_admin_principal") or perfil_result[0].get("rol") not in ("encargado", "produccion"):
             raise HTTPException(status_code=403, detail="Esta cuenta no se puede editar desde aquí.")
         if len(set(datos.locales)) != len(datos.locales):
             raise HTTPException(status_code=422, detail="No repitas locales.")
@@ -1395,7 +1403,7 @@ def admin_actualizar_usuario(usuario_id: str, datos: CuentaEncargadoCambio, auth
         if datos.password:
             cambio_auth["password"] = datos.password
         supabase.auth.admin.update_user_by_id(usuario_id, cambio_auth)
-        supabase.table("perfiles").update({"nombre": nombre}).eq("id", usuario_id).execute()
+        supabase.table("perfiles").update({"nombre": nombre, "rol": datos.tipo_usuario}).eq("id", usuario_id).execute()
         supabase.table("accesos_panaderias").delete().eq("usuario_id", usuario_id).execute()
         supabase.table("accesos_panaderias").insert([{"usuario_id": usuario_id, "panaderia_id": x} for x in datos.locales]).execute()
         return {"actualizado": True}
@@ -1410,7 +1418,7 @@ def admin_eliminar_usuario(usuario_id: str, authorization: str | None = Header(d
     exigir_admin_principal(authorization)
     try:
         p = supabase.table("perfiles").select("id,rol,es_admin_principal").eq("id", usuario_id).limit(1).execute().data
-        if not p or p[0].get("es_admin_principal") or p[0].get("rol") != "encargado":
+        if not p or p[0].get("es_admin_principal") or p[0].get("rol") not in ("encargado", "produccion"):
             raise HTTPException(status_code=403, detail="Esta cuenta no se puede eliminar desde aquí.")
         supabase.auth.admin.delete_user(usuario_id)
         return {"eliminado": True}
@@ -1448,3 +1456,216 @@ app.include_router(historial_archivos_router)
 # Creación de locales y fotografías privadas en Cloudflare R2.
 from locales import router as locales_router
 app.include_router(locales_router)
+
+
+# ---------------------------------------------------------------------------
+# Producción diaria: independiente del inventario y con nombre de pan libre.
+# ---------------------------------------------------------------------------
+from datetime import timedelta, time
+from zoneinfo import ZoneInfo
+
+TZ_PRODUCCION = ZoneInfo("America/Mexico_City")
+PLAZO_EDICION_PRODUCCION_HORAS = 24
+
+
+class ProduccionNueva(BaseModel):
+    panaderia_id: int = Field(gt=0)
+    fecha_produccion: date
+    pan_nombre: str = Field(min_length=1, max_length=120)
+    cantidad: int = Field(ge=0)
+    observaciones: str | None = Field(default=None, max_length=1000)
+
+
+class ProduccionCambio(BaseModel):
+    pan_nombre: str = Field(min_length=1, max_length=120)
+    cantidad: int = Field(ge=0)
+    observaciones: str | None = Field(default=None, max_length=1000)
+
+
+def _perfil_con_acceso_produccion(usuario_id: str, perfil: dict, panaderia_id: int):
+    if perfil["rol"] not in ("produccion", "admin"):
+        raise HTTPException(status_code=403, detail="Tu cuenta no tiene acceso al módulo de Producción.")
+    if perfil["rol"] == "admin" and perfil.get("es_admin_principal"):
+        return
+    try:
+        acceso = (
+            supabase.table("accesos_panaderias")
+            .select("panaderia_id")
+            .eq("usuario_id", usuario_id)
+            .eq("panaderia_id", panaderia_id)
+            .limit(1)
+            .execute()
+        )
+        if not acceso.data:
+            raise HTTPException(status_code=403, detail="No tienes acceso a esta panadería.")
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=503, detail="No se pudo verificar el acceso a la panadería.")
+
+
+def _produccion_es_editable(registrado_en: str | datetime) -> bool:
+    marca = registrado_en if isinstance(registrado_en, datetime) else datetime.fromisoformat(str(registrado_en).replace("Z", "+00:00"))
+    if marca.tzinfo is None:
+        marca = marca.replace(tzinfo=timezone.utc)
+    return datetime.now(timezone.utc) - marca.astimezone(timezone.utc) < timedelta(hours=PLAZO_EDICION_PRODUCCION_HORAS)
+
+
+def _normalizar_pan_produccion(nombre: str) -> str:
+    return " ".join(nombre.strip().split())
+
+
+@app.get("/api/produccion")
+def consultar_produccion(
+    panaderia_id: int,
+    fecha_produccion: date,
+    authorization: str | None = Header(default=None),
+):
+    usuario = obtener_usuario_autenticado(authorization)
+    perfil = obtener_perfil(str(usuario.id))
+    _perfil_con_acceso_produccion(str(usuario.id), perfil, panaderia_id)
+    if fecha_produccion > datetime.now(TZ_PRODUCCION).date():
+        raise HTTPException(status_code=422, detail="No puedes consultar una fecha futura.")
+    try:
+        filas = (
+            supabase.table("produccion_registros")
+            .select("id,panaderia_id,fecha_produccion,pan_nombre,cantidad,observaciones,usuario_id,registrado_en,actualizado_en")
+            .eq("panaderia_id", panaderia_id)
+            .eq("fecha_produccion", fecha_produccion.isoformat())
+            .order("registrado_en")
+            .execute().data or []
+        )
+        ids = list({str(f["usuario_id"]) for f in filas})
+        perfiles = (
+            supabase.table("perfiles").select("id,nombre").in_("id", ids).execute().data
+            if ids else []
+        )
+        nombres = {str(p["id"]): p["nombre"] for p in perfiles}
+        for fila in filas:
+            fila["usuario_nombre"] = nombres.get(str(fila["usuario_id"]), "Usuario")
+            fila["editable"] = _produccion_es_editable(fila["registrado_en"])
+        return {"registros": filas, "total": len(filas)}
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=503, detail="No se pudieron consultar los registros de producción.")
+
+
+@app.post("/api/produccion", status_code=201)
+def crear_registro_produccion(
+    datos: ProduccionNueva,
+    authorization: str | None = Header(default=None),
+):
+    usuario = obtener_usuario_autenticado(authorization)
+    perfil = obtener_perfil(str(usuario.id))
+    _perfil_con_acceso_produccion(str(usuario.id), perfil, datos.panaderia_id)
+    ahora_local = datetime.now(TZ_PRODUCCION)
+    inicio_fecha = datetime.combine(datos.fecha_produccion, time.min, tzinfo=TZ_PRODUCCION)
+    if datos.fecha_produccion > ahora_local.date():
+        raise HTTPException(status_code=422, detail="No puedes registrar producción en una fecha futura.")
+    if ahora_local - inicio_fecha > timedelta(hours=PLAZO_EDICION_PRODUCCION_HORAS):
+        raise HTTPException(status_code=403, detail="El plazo para agregar registros de esa fecha terminó.")
+    pan = _normalizar_pan_produccion(datos.pan_nombre)
+    if not pan:
+        raise HTTPException(status_code=422, detail="Escribe el nombre del pan.")
+    try:
+        fila = supabase.table("produccion_registros").insert({
+            "panaderia_id": datos.panaderia_id,
+            "fecha_produccion": datos.fecha_produccion.isoformat(),
+            "pan_nombre": pan,
+            "cantidad": datos.cantidad,
+            "observaciones": (datos.observaciones or "").strip() or None,
+            "usuario_id": str(usuario.id),
+        }).execute().data[0]
+        return {"creado": True, "registro": fila}
+    except Exception:
+        raise HTTPException(status_code=503, detail="No se pudo guardar el registro de producción.")
+
+
+@app.patch("/api/produccion/{registro_id}")
+def actualizar_registro_produccion(
+    registro_id: int,
+    datos: ProduccionCambio,
+    authorization: str | None = Header(default=None),
+):
+    usuario = obtener_usuario_autenticado(authorization)
+    perfil = obtener_perfil(str(usuario.id))
+    try:
+        encontrado = (
+            supabase.table("produccion_registros")
+            .select("id,panaderia_id,registrado_en")
+            .eq("id", registro_id).limit(1).execute().data
+        )
+        if not encontrado:
+            raise HTTPException(status_code=404, detail="No se encontró el registro de producción.")
+        actual = encontrado[0]
+        _perfil_con_acceso_produccion(str(usuario.id), perfil, int(actual["panaderia_id"]))
+        if not _produccion_es_editable(actual["registrado_en"]):
+            raise HTTPException(status_code=403, detail="Terminó el plazo de edición de este registro. Solo puedes consultarlo.")
+        pan = _normalizar_pan_produccion(datos.pan_nombre)
+        if not pan:
+            raise HTTPException(status_code=422, detail="Escribe el nombre del pan.")
+        actualizado = (
+            supabase.table("produccion_registros")
+            .update({
+                "pan_nombre": pan,
+                "cantidad": datos.cantidad,
+                "observaciones": (datos.observaciones or "").strip() or None,
+                "actualizado_en": datetime.now(timezone.utc).isoformat(),
+            })
+            .eq("id", registro_id).execute().data
+        )
+        if not actualizado:
+            raise HTTPException(status_code=404, detail="No se pudo localizar el registro para actualizarlo.")
+        return {"actualizado": True, "registro": actualizado[0]}
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=503, detail="No se pudo actualizar el registro de producción.")
+
+
+@app.get("/api/produccion/excel")
+def descargar_produccion_excel(
+    panaderia_id: int,
+    fecha_produccion: date,
+    authorization: str | None = Header(default=None),
+):
+    usuario = obtener_usuario_autenticado(authorization)
+    perfil = obtener_perfil(str(usuario.id))
+    _perfil_con_acceso_produccion(str(usuario.id), perfil, panaderia_id)
+    datos = consultar_produccion(panaderia_id, fecha_produccion, authorization)
+    try:
+        local = supabase.table("panaderias").select("nombre").eq("id", panaderia_id).limit(1).execute().data
+        nombre_local = local[0]["nombre"] if local else f"Panadería {panaderia_id}"
+        libro = Workbook()
+        hoja = libro.active
+        hoja.title = "Producción diaria"
+        hoja.append(["Fecha", fecha_produccion.isoformat()])
+        hoja.append(["Panadería", nombre_local])
+        hoja.append([])
+        hoja.append(["Pan", "Cantidad", "Observaciones", "Registró", "Fecha y hora de captura"])
+        for registro in datos["registros"]:
+            hoja.append([
+                registro["pan_nombre"],
+                int(registro["cantidad"]),
+                registro.get("observaciones") or "",
+                registro.get("usuario_nombre") or "Usuario",
+                str(registro.get("registrado_en") or ""),
+            ])
+        hoja.freeze_panes = "A5"
+        hoja.auto_filter.ref = f"A4:E{max(4, hoja.max_row)}"
+        for col, width in {"A": 34, "B": 14, "C": 42, "D": 24, "E": 28}.items():
+            hoja.column_dimensions[col].width = width
+        salida = BytesIO()
+        libro.save(salida)
+        salida.seek(0)
+        nombre_archivo = f"produccion_{panaderia_id}_{fecha_produccion.isoformat()}.xlsx"
+        return StreamingResponse(
+            salida,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": f'attachment; filename="{nombre_archivo}"'},
+        )
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=503, detail="No se pudo generar el Excel de producción.")

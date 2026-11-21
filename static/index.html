@@ -418,7 +418,17 @@
         </section>
         <section id="panelProduccion" class="panel panel-seccion oculto">
           <h3>Producción</h3>
-          <p class="nota">Aquí se agregará el registro y la consulta de producción diaria.</p>
+          <div class="campo"><label for="fechaProduccion">Fecha</label><input id="fechaProduccion" type="date"></div>
+          <div id="mensajeProduccion" class="mensaje oculto" role="status"></div>
+          <div id="estadoProduccion" class="nota" aria-live="polite"></div>
+          <div id="formularioProduccion">
+            <div class="campo"><label for="panProduccion">Nombre del pan</label><input id="panProduccion" maxlength="120" autocomplete="off" placeholder="Escribe el nombre del pan"></div>
+            <div class="campo"><label for="cantidadProduccion">Cantidad producida</label><input id="cantidadProduccion" type="number" min="0" step="1" inputmode="numeric" placeholder="Escribe la cantidad"></div>
+            <div class="campo"><label for="observacionesProduccion">Observaciones (opcional)</label><textarea id="observacionesProduccion" rows="2" maxlength="1000"></textarea></div>
+            <button id="botonAgregarProduccion" type="button">Agregar producción</button>
+          </div>
+          <div class="barra"><h4>Registros del día</h4><button id="botonExcelProduccion" class="secundario" type="button">Descargar Excel del día</button></div>
+          <div id="tablaProduccion"></div>
         </section>
         <section id="panelRegistro" class="panel panel-seccion oculto"><h3>Registro diario</h3><div class="campo"><label for="fechaRegistro">Fecha</label><input id="fechaRegistro" type="date"></div><div class="barra"><strong id="estadoRegistro">Día abierto</strong></div><div id="mensajeRegistro" class="mensaje oculto" role="alert"></div><div id="filasRegistro"></div><button id="botonGuardarRegistro" type="button">Guardar registro</button> <button id="botonCerrarDia" type="button">Cerrar día</button> <button id="botonReabrirDia" class="secundario" type="button">Reabrir día</button></section>
         <section id="panelProductos" class="panel panel-seccion oculto">
@@ -521,6 +531,7 @@
             <div class="campo"><label for="adminNombre">Nombre</label><input id="adminNombre" maxlength="120" required></div>
             <div class="campo"><label for="adminUsername">Usuario</label><input id="adminUsername" maxlength="60" autocomplete="off" required></div>
             <div class="campo"><label for="adminPassword">Contraseña</label><input id="adminPassword" type="password" minlength="8" autocomplete="new-password"><p class="nota" id="adminAyudaPassword">Usa una contraseña de al menos 8 caracteres.</p></div>
+            <div class="campo"><label for="adminTipoUsuario">Tipo de usuario</label><select id="adminTipoUsuario" required><option value="encargado">Encargada</option><option value="produccion">Producción</option></select></div>
             <fieldset class="admin-locales"><legend>Locales autorizados (mínimo uno)</legend><div id="adminOpcionesLocales"></div></fieldset>
             <button id="adminGuardarUsuario" type="submit">Crear usuario</button>
             <button id="adminCancelarUsuario" class="secundario" type="button">Cancelar</button>
@@ -546,6 +557,7 @@
 
   <script src="/static/productos.js?v=permisos-encargados-20261108-1"></script>
   <script src="/static/registro.js?v=autoguardado-cierre-20261104-1"></script>
+  <script src="/static/produccion.js?v=20261120-1"></script>
   <script src="/static/tablas.js?v=ultimo-cierre-excel-20261101-1"></script>
   <script src="/static/historial-inventarios.js?v=3"></script>
   <script>
@@ -854,7 +866,25 @@
       return rol === "admin" && perfilActual?.es_admin_principal === true;
     }
 
+    function puedeVerProduccion() {
+      return esAdministrador() || String(perfilActual?.rol || "").toLowerCase() === "produccion";
+    }
+
+    function configurarMenuPorRol() {
+      const esProduccion = String(perfilActual?.rol || "").toLowerCase() === "produccion";
+      document.querySelectorAll(".boton-seccion").forEach(boton => {
+        const seccion = boton.dataset.seccion;
+        const ocultarAdmin = seccion === "panelAdministracion" && !esAdministrador();
+        const ocultarProduccion = seccion === "panelProduccion" && !puedeVerProduccion();
+        const ocultarInventario = esProduccion && seccion !== "panelProduccion";
+        boton.classList.toggle("oculto", ocultarAdmin || ocultarProduccion || ocultarInventario);
+      });
+    }
+
     function mostrarSeccion(idSeccion) {
+      if (idSeccion === "panelProduccion" && !puedeVerProduccion()) return;
+      if (idSeccion === "panelAdministracion" && !esAdministrador()) return;
+      if (String(perfilActual?.rol || "").toLowerCase() === "produccion" && idSeccion !== "panelProduccion") return;
       const secciones = ["panelRegistro", "panelTablas", "panelProductos", "panelHistorial", "panelAdministracion", "panelProduccion"];
       secciones.forEach(id => {
         const panel = document.getElementById(id);
@@ -873,29 +903,24 @@
 
     document.querySelectorAll(".boton-seccion").forEach(boton => {
       boton.addEventListener("click", () => {
-        if (boton.id === "botonAdministracion" && !esAdministrador()) return;
+        if (boton.dataset.seccion === "panelAdministracion" && !esAdministrador()) return;
+        if (boton.dataset.seccion === "panelProduccion" && !puedeVerProduccion()) return;
+        if (String(perfilActual?.rol || "").toLowerCase() === "produccion" && boton.dataset.seccion !== "panelProduccion") return;
         mostrarSeccion(boton.dataset.seccion);
       });
     });
 
     async function abrirPanaderia(panaderia) {
-      // Solo se permite seleccionar una panadería recibida
-      // por el backend para la cuenta autenticada.
       const autorizada = panaderiasAutorizadas.find(
         item => String(item.id) === String(panaderia.id)
       );
-
       if (!autorizada || autorizada.activa === false) {
-        mostrarMensaje(
-          document.getElementById("mensajePanaderias"),
-          "No tienes acceso a esa panadería."
-        );
+        mostrarMensaje(document.getElementById("mensajePanaderias"), "No tienes acceso a esa panadería.");
         return;
       }
 
       panaderiaSeleccionada = autorizada;
-      document.getElementById("nombrePanaderia").textContent =
-        autorizada.nombre;
+      document.getElementById("nombrePanaderia").textContent = autorizada.nombre;
       const fotoDetalle = document.getElementById("fotoPanaderiaDetalle");
       fotoDetalle.replaceChildren();
       if (autorizada.foto_url) {
@@ -906,20 +931,27 @@
       } else {
         fotoDetalle.textContent = "Foto";
       }
-      document.getElementById("botonAdministracion").classList.toggle("oculto", !esAdministrador());
-      mostrarSeccion("panelRegistro");
 
+      configurarMenuPorRol();
       document.getElementById("detalleUsuario").textContent =
-        "Cuenta: " + (usuarioActual.email || "Usuario autenticado");
-
+        "Cuenta: " + (perfilActual.nombre || usuarioActual.email || "Usuario autenticado");
       mostrarPantalla(pantallaDetalle);
+
+      if (String(perfilActual?.rol || "").toLowerCase() === "produccion") {
+        mostrarSeccion("panelProduccion");
+        try {
+          if (window.iniciarProduccion) await window.iniciarProduccion(sesionActual, autorizada);
+        } catch (error) {
+          mostrarMensaje(document.getElementById("mensajeProduccion"), error.message || "No se pudo iniciar Producción.");
+        }
+        return;
+      }
+
+      mostrarSeccion("panelRegistro");
       try {
-        // Cargar catálogo antes del registro: el registro necesita sus productos
-        // para mostrar correctamente las líneas guardadas.
         const catalogo = window.iniciarCatalogoProductos
           ? await window.iniciarCatalogoProductos(sesionActual, autorizada)
           : { productos: [], categorias: [] };
-
         if (!catalogo) {
           mostrarMensaje(
             document.getElementById("mensajeRegistro"),
@@ -927,17 +959,13 @@
           );
           return;
         }
-
-        if (window.iniciarTablasHistorial) {
-          window.iniciarTablasHistorial(sesionActual, autorizada);
-        }
-        if (window.iniciarHistorialInventarios) {
-          window.iniciarHistorialInventarios(sesionActual, autorizada);
-        }
+        if (window.iniciarTablasHistorial) window.iniciarTablasHistorial(sesionActual, autorizada);
+        if (window.iniciarHistorialInventarios) window.iniciarHistorialInventarios(sesionActual, autorizada);
         if (window.iniciarRegistroDiario) {
-          await window.iniciarRegistroDiario(
-            sesionActual, autorizada, catalogo.productos, catalogo.categorias
-          );
+          await window.iniciarRegistroDiario(sesionActual, autorizada, catalogo.productos, catalogo.categorias);
+        }
+        if (window.iniciarProduccion && esAdministrador()) {
+          await window.iniciarProduccion(sesionActual, autorizada);
         }
       } catch (error) {
         mostrarMensaje(
@@ -1104,7 +1132,7 @@
           const card = document.createElement("div");
           card.className = "admin-usuario";
           const nombre = document.createElement("strong");
-          nombre.textContent = u.nombre + " (" + (u.es_admin_principal ? "Administradora" : "Encargada") + ")";
+          nombre.textContent = u.nombre + " (" + (u.es_admin_principal ? "Administradora" : u.rol === "produccion" ? "Producción" : "Encargada") + ")";
           card.appendChild(nombre);
           const user = document.createElement("p");
           user.className = "nota";
@@ -1163,6 +1191,7 @@
       document.getElementById("adminNombre").value = u.nombre;
       document.getElementById("adminUsername").value = u.usuario;
       document.getElementById("adminPassword").value = "";
+      document.getElementById("adminTipoUsuario").value = u.rol === "produccion" ? "produccion" : "encargado";
       document.getElementById("adminPassword").required = false;
       document.getElementById("adminAyudaPassword").textContent = "Deja vacío para conservar la contraseña actual.";
       document.getElementById("adminGuardarUsuario").textContent = "Guardar cambios";
@@ -1172,6 +1201,7 @@
     async function adminAbrirAgregar() {
       adminEditarId = null;
       document.getElementById("adminFormularioUsuario").reset();
+      document.getElementById("adminTipoUsuario").value = "encargado";
       document.getElementById("adminTituloFormulario").textContent = "Agregar usuario";
       document.getElementById("adminPassword").required = true;
       document.getElementById("adminAyudaPassword").textContent = "Usa una contraseña de al menos 8 caracteres.";
@@ -1301,7 +1331,7 @@
       ev.preventDefault();
       const locales = [...document.querySelectorAll("#adminOpcionesLocales input:checked")].map(x => Number(x.value));
       if (!locales.length) { adminMensaje("Selecciona al menos un local."); return; }
-      const payload = {nombre:document.getElementById("adminNombre").value.trim(), username:document.getElementById("adminUsername").value.trim(), locales};
+      const payload = {nombre:document.getElementById("adminNombre").value.trim(), username:document.getElementById("adminUsername").value.trim(), tipo_usuario:document.getElementById("adminTipoUsuario").value, locales};
       const pass = document.getElementById("adminPassword").value;
       if (pass) payload.password = pass;
       if (!adminEditarId && !pass) { adminMensaje("Escribe una contraseña."); return; }
