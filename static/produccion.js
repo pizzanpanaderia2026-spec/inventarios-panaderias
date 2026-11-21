@@ -196,8 +196,9 @@
       crearCelda(fila, registro.usuario_nombre || "Usuario");
       crearCelda(fila, formatearFechaHora(registro.registrado_en));
       const acciones = document.createElement("td");
-      acciones.className = "produccion-acciones";
       if (registro.editable) {
+        const grupoAcciones = document.createElement("div");
+        grupoAcciones.className = "produccion-acciones";
         const editar = document.createElement("button");
         editar.type = "button";
         editar.className = "secundario";
@@ -221,7 +222,8 @@
             eliminar.disabled = false;
           }
         });
-        acciones.append(editar, eliminar);
+        grupoAcciones.append(editar, eliminar);
+        acciones.appendChild(grupoAcciones);
       } else {
         const soloLectura = document.createElement("span");
         soloLectura.className = "nota";
