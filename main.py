@@ -1624,6 +1624,41 @@ def actualizar_registro_produccion(
         raise HTTPException(status_code=503, detail="No se pudo actualizar el registro de producción.")
 
 
+@app.delete("/api/produccion/{registro_id}")
+def eliminar_registro_produccion(
+    registro_id: int,
+    authorization: str | None = Header(default=None),
+):
+    usuario = obtener_usuario_autenticado(authorization)
+    perfil = obtener_perfil(str(usuario.id))
+    try:
+        encontrado = (
+            supabase.table("produccion_registros")
+            .select("id,panaderia_id,registrado_en")
+            .eq("id", registro_id).limit(1).execute().data
+        )
+        if not encontrado:
+            raise HTTPException(status_code=404, detail="No se encontró el registro de producción.")
+        actual = encontrado[0]
+        _perfil_con_acceso_produccion(str(usuario.id), perfil, int(actual["panaderia_id"]))
+        if not _produccion_es_editable(actual["registrado_en"]):
+            raise HTTPException(status_code=403, detail="Terminó el plazo de edición. Este registro solo se puede consultar.")
+        eliminado = (
+            supabase.table("produccion_registros")
+            .delete()
+            .eq("id", registro_id)
+            .select("id")
+            .execute().data
+        )
+        if not eliminado:
+            raise HTTPException(status_code=404, detail="No se pudo localizar el registro para eliminarlo.")
+        return {"eliminado": True}
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=503, detail="No se pudo eliminar el registro de producción.")
+
+
 @app.get("/api/produccion/excel")
 def descargar_produccion_excel(
     panaderia_id: int,
@@ -1645,13 +1680,23 @@ def descargar_produccion_excel(
         hoja.append([])
         hoja.append(["Pan", "Cantidad", "Observaciones", "Registró", "Fecha y hora de captura"])
         for registro in datos["registros"]:
+            marca_captura = registro.get("registrado_en")
+            fecha_hora_captura = None
+            if marca_captura:
+                fecha_hora_captura = datetime.fromisoformat(
+                    str(marca_captura).replace("Z", "+00:00")
+                )
+                if fecha_hora_captura.tzinfo is None:
+                    fecha_hora_captura = fecha_hora_captura.replace(tzinfo=timezone.utc)
+                fecha_hora_captura = fecha_hora_captura.astimezone(TZ_PRODUCCION).replace(tzinfo=None)
             hoja.append([
                 registro["pan_nombre"],
                 int(registro["cantidad"]),
                 registro.get("observaciones") or "",
                 registro.get("usuario_nombre") or "Usuario",
-                str(registro.get("registrado_en") or ""),
+                fecha_hora_captura,
             ])
+            hoja.cell(row=hoja.max_row, column=5).number_format = "dd/mm/yy hh:mm"
         hoja.freeze_panes = "A5"
         hoja.auto_filter.ref = f"A4:E{max(4, hoja.max_row)}"
         for col, width in {"A": 34, "B": 14, "C": 42, "D": 24, "E": 28}.items():
