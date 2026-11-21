@@ -34,12 +34,14 @@ jobs:
           node --check static/productos.js
           node --check static/registro.js
           node --check static/tablas.js
+          node --check static/produccion.js
       - name: Verificar archivos de interfaz
         run: |
           test -s static/index.html
           test -s static/productos.js
           test -s static/registro.js
           test -s static/tablas.js
+          test -s static/produccion.js
       - name: Verificar migraciones SQL incluidas
         run: |
           for migration in supabase/migrations/20261026000{1,2,3,4,5,6,7}_*.sql; do
