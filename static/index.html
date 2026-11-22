@@ -303,7 +303,7 @@
   #panelHistorial .historial-periodo.activo,
   #panelHistorial .historial-vista.activo { background:#713f12; color:#fff; border-color:#713f12; }
   #panelHistorial .historial-filtros { margin:16px 0; padding:16px; box-shadow:none; }
-  #panelHistorial .historial-campos-dobles { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+  #panelHistorial .historial-anios-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; }\n  #panelHistorial .historial-anio-opcion { background:#eee7df; color:#422d20; border:1px solid #e7ddd1; }\n  #panelHistorial .historial-anio-opcion.activo { background:#713f12; color:#fff; border-color:#713f12; }\n  #panelHistorial .historial-campos-dobles { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
   #panelHistorial .historial-resultados-encabezado { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; }
   #panelHistorial .historial-contenido { min-height:150px; margin-top:12px; }
   #panelHistorial .historial-vacio { border:1px dashed #d6c8b8; border-radius:12px; padding:24px 16px; text-align:center; background:#faf7f2; }
@@ -571,7 +571,7 @@
               </div>
               <div class="campo oculto" data-hist-campo="anio">
                 <label for="histAnio">Selecciona el año</label>
-                <select id="histAnio" class="historial-anios"></select>
+                <div id="histAnioOpciones" class="historial-anios-grid" role="group" aria-label="Año"></div>
               </div>
               <div class="historial-campos-dobles oculto" data-hist-campo="periodo">
                 <div class="campo">
