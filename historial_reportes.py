@@ -178,6 +178,12 @@ def _reporte(panaderia_id, categoria, tipo, desde, hasta, authorization):
     usuario = obtener_usuario_autenticado(authorization)
     perfil = obtener_perfil(str(usuario.id))
     comprobar_acceso_panaderia(str(usuario.id), perfil, panaderia_id)
+    if tipo == "dia" and desde != hasta:
+        raise HTTPException(status_code=422, detail="La consulta diaria debe contener una sola fecha.")
+    if tipo == "mes" and (desde.year, desde.month) != (hasta.year, hasta.month):
+        raise HTTPException(status_code=422, detail="La consulta mensual debe corresponder a un solo mes.")
+    if tipo == "anio" and (desde.year != hasta.year or desde.month != 1 or desde.day != 1 or hasta.month != 12 or hasta.day != 31):
+        raise HTTPException(status_code=422, detail="La consulta anual debe abarcar del 1 de enero al 31 de diciembre.")
     if categoria in ("produccion", "analisis"):
         _perfil_con_acceso_produccion(str(usuario.id), perfil, panaderia_id)
     try:
@@ -254,16 +260,17 @@ def _grafica(hoja, titulo, fila_inicio, fila_fin, columna, titulo_grafica, ancla
     chart.x_axis.title = "Concepto"
     chart.height = 8
     chart.width = 14
-    chart.add_data(Reference(hoja, min_col=columna, min_row=fila_inicio, max_row=fila_fin), titles_from_data=True)
+    chart.add_data(Reference(hoja, min_col=columna, min_row=fila_inicio - 1, max_row=fila_fin), titles_from_data=True)
     if segunda_serie:
-        chart.add_data(Reference(hoja, min_col=segunda_serie, min_row=fila_inicio, max_row=fila_fin), titles_from_data=True)
-    chart.set_categories(Reference(hoja, min_col=categorias_col, min_row=fila_inicio + 1, max_row=fila_fin))
-    chart.legend = None if not segunda_serie else "b"
+        chart.add_data(Reference(hoja, min_col=segunda_serie, min_row=fila_inicio - 1, max_row=fila_fin), titles_from_data=True)
+    chart.set_categories(Reference(hoja, min_col=categorias_col, min_row=fila_inicio, max_row=fila_fin))
+    if not segunda_serie:
+        chart.legend = None
     chart.varyColors = True
     hoja.add_chart(chart, ancla)
 
 
-def _hoja_informe(libro, nombre_hoja, titulo, categoria, inventario, produccion, resumen_diario, resumen_mensual=None, anio=False):
+def _hoja_informe(libro, nombre_hoja, titulo, categoria, inventario, produccion, resumen_diario, resumen_mensual=None, analisis=None, anio=False):
     hoja = libro.create_sheet(nombre_hoja) if nombre_hoja != libro.sheetnames[0] else libro.active
     hoja.title = nombre_hoja
     hoja["A1"] = titulo
@@ -291,8 +298,13 @@ def _hoja_informe(libro, nombre_hoja, titulo, categoria, inventario, produccion,
     else:
         inicio_prod = fin_prod = 0
     if categoria == "analisis":
+        inicio_analisis = fila + 2
+        filas_analisis = (analisis or {}).get("por_pan", [])
         fila = _tabla(hoja, fila, "PRODUCCIÓN Y SOBRANTES", ["Pan", "Producido", "Sobrante", "% sobrante"],
-            [[x["pan"], x["producido"], x["sobrante"], x["porcentaje_sobrante"]] for x in inventario.get("comparacion", [])])
+            [[x["pan"], x["producido"], x["sobrante"], x["porcentaje_sobrante"] if x["porcentaje_sobrante"] is not None else "N/D"] for x in filas_analisis])
+        fin_analisis = fila - 2
+    else:
+        inicio_analisis = fin_analisis = 0
     if resumen_diario:
         datos = [[x["fecha"], x["inventario_cantidad"], float(Decimal(x["inventario_importe"])), x["produccion_cantidad"]] for x in resumen_diario]
         fila = _tabla(hoja, fila, "RESUMEN DIARIO", ["Fecha", "Inventario", "Importe inventario", "Producción"], datos, {3: '"$"#,##0.00'})
@@ -303,8 +315,10 @@ def _hoja_informe(libro, nombre_hoja, titulo, categoria, inventario, produccion,
         _grafica(hoja, "Producto", inicio_producto, fin_producto, 2, "Inventario por tipo de pan", "F3")
         if fin_precio >= inicio_precio:
             _grafica(hoja, "Precio", inicio_precio, fin_precio, 2, "Inventario por precio", "F19")
-    if categoria in ("produccion", "analisis") and fin_prod >= inicio_prod:
+    if categoria == "produccion" and fin_prod >= inicio_prod:
         _grafica(hoja, "Pan", inicio_prod, fin_prod, 2, "Producción por tipo de pan", "F35")
+    if categoria == "analisis" and fin_analisis >= inicio_analisis:
+        _grafica(hoja, "Producido", inicio_analisis, fin_analisis, 2, "Producción frente a sobrantes", "F35", segunda_serie=3)
     _estilizar(hoja)
     return hoja
 
@@ -326,7 +340,7 @@ def _crear_excel(categoria, tipo, desde, hasta, datos, resumen_only):
             mensual[mes]["produccion_cantidad"] += x["produccion_cantidad"]
         resumen_mensual = [{"mes": k, **{a: (str(v) if isinstance(v, Decimal) else v) for a,v in vals.items()}}
             for k, vals in sorted(mensual.items())]
-    _hoja_informe(libro, "Resumen", titulo, categoria, inv, prod, resumen_diario if tipo in ("mes","periodo") else [], resumen_mensual, anio=(tipo=="anio"))
+    _hoja_informe(libro, "Resumen", titulo, categoria, inv, prod, resumen_diario if tipo in ("mes","periodo") else [], resumen_mensual, datos.get("analisis"), anio=(tipo=="anio"))
 
     if resumen_only:
         pass
@@ -345,9 +359,11 @@ def _crear_excel(categoria, tipo, desde, hasta, datos, resumen_only):
                 "resumen_diario": inv_datos["resumen_diario"],
             }
             combinado["analisis"] = _agregar([inv_dia] if inv_dia else [], [prod_dia] if prod_dia else [], date.fromisoformat(fecha), date.fromisoformat(fecha))["analisis"]
-            nombre = date.fromisoformat(fecha).strftime("%d-%b").lower()
-            _hoja_informe(libro, nombre[:31], date.fromisoformat(fecha).strftime("%d de %B de %Y"), categoria,
-                combinado["inventario"], combinado["produccion"], combinado["resumen_diario"])
+            fecha_obj = date.fromisoformat(fecha)
+            nombre = f"{fecha_obj.day:02d}-{MESES_ES[fecha_obj.month-1][:3]}"
+            titulo_dia = f"{fecha_obj.day:02d} de {MESES_ES[fecha_obj.month-1]} de {fecha_obj.year}"
+            _hoja_informe(libro, nombre[:31], titulo_dia, categoria,
+                combinado["inventario"], combinado["produccion"], combinado["resumen_diario"], analisis=combinado["analisis"])
     elif tipo == "anio":
         for mes in range(1, 13):
             inicio = date(desde.year, mes, 1)
@@ -356,7 +372,7 @@ def _crear_excel(categoria, tipo, desde, hasta, datos, resumen_only):
             prod_mes = [x for x in prod["dias"] if inicio.isoformat() <= x["fecha"] <= fin.isoformat()]
             datos_mes = _agregar(inv_mes, prod_mes, inicio, fin)
             _hoja_informe(libro, MESES_ES[mes-1].capitalize(), MESES_ES[mes-1].capitalize() + " " + str(desde.year),
-                categoria, datos_mes["inventario"], datos_mes["produccion"], datos_mes["resumen_diario"])
+                categoria, datos_mes["inventario"], datos_mes["produccion"], datos_mes["resumen_diario"], analisis=datos_mes["analisis"])
     salida = BytesIO()
     libro.save(salida)
     salida.seek(0)
