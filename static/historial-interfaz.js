@@ -12,12 +12,14 @@
   const resumen = document.getElementById("histResumenConsulta");
   let categoria = "inventario";
   let periodo = "dia";
-  let vista = "graficas";
+  let vista = "tablas";
+  let anioSeleccionado = null;
 
   [fechaDia, desde, hasta].forEach(input => { input.max = isoHoy; });
   fechaDia.value = isoHoy;
   hasta.value = isoHoy;
-  const anioActual = hoy.getFullYear();\n  anioSeleccionado = anioActual;
+  const anioActual = hoy.getFullYear();
+  anioSeleccionado = anioActual;\n  anioSeleccionado = anioActual;
   document.querySelectorAll("#panelHistorial .historial-anios").forEach(select => {
     for (let y = anioActual; y >= 2016; y--) {
       const option = document.createElement("option");
