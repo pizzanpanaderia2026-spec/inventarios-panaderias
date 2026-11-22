@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from io import BytesIO
 from zoneinfo import ZoneInfo
@@ -40,7 +40,7 @@ def _validar(desde: date, hasta: date):
     dias = (hasta - desde).days + 1
     if dias > MAX_DIAS_CONSULTA:
         raise HTTPException(status_code=422, detail="El periodo supera el máximo técnico de consulta de diez años. Divide la consulta en intervalos más pequeños.")
-    if hasta > date.today():
+    if hasta > datetime.now(TZ_LOCAL).date():
         raise HTTPException(status_code=422, detail="No puedes consultar fechas futuras.")
     return dias
 
@@ -183,7 +183,7 @@ def _reporte(panaderia_id, categoria, tipo, desde, hasta, authorization):
         raise HTTPException(status_code=422, detail="La consulta diaria debe contener una sola fecha.")
     if tipo == "mes" and (desde.year, desde.month) != (hasta.year, hasta.month):
         raise HTTPException(status_code=422, detail="La consulta mensual debe corresponder a un solo mes.")
-    if tipo == "anio" and (desde.month != 1 or desde.day != 1 or desde.year != hasta.year or (hasta.month != 12 or hasta.day != 31) and hasta != date.today()):
+    if tipo == "anio" and (desde.month != 1 or desde.day != 1 or desde.year != hasta.year or (hasta.month != 12 or hasta.day != 31) and hasta != datetime.now(TZ_LOCAL).date()):
         raise HTTPException(status_code=422, detail="La consulta anual debe abarcar desde el 1 de enero hasta el cierre del año o la fecha actual.")
     if categoria in ("produccion", "analisis"):
         _perfil_con_acceso_produccion(str(usuario.id), perfil, panaderia_id)
