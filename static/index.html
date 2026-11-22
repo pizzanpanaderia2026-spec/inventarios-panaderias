@@ -201,6 +201,25 @@
       .menu-secciones { grid-template-columns: 1fr 1fr; }
       .boton-seccion { padding: 12px 8px; font-size: 14px; }
     }
+    #panelHistorial .historial-grafica { margin: 14px 0 22px; padding: 12px; border: 1px solid #e7ded2; border-radius: 12px; background: #fff; overflow: hidden; }
+    #panelHistorial .historial-grafica svg { display: block; width: 100%; height: auto; min-height: 80px; overflow: visible; }
+    #panelHistorial .historial-grafica svg text { fill: #43372d; font-family: Arial, sans-serif; }
+    #panelHistorial .historial-leyenda { display:flex; flex-wrap:wrap; gap:14px; margin-top:8px; font-size:12px; color:#62564d; }
+    #panelHistorial .historial-leyenda span { display:inline-flex; align-items:center; gap:6px; }
+    #panelHistorial .historial-leyenda i { width:10px; height:10px; display:inline-block; border-radius:2px; }
+    #panelHistorial .historial-tablas { min-width:0; }
+    #panelHistorial .historial-vistas button { min-width:90px; }
+    #panelHistorial .historial-anios-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; }
+    #panelHistorial .historial-anio-opcion { background:#eee7df; color:#422d20; border:1px solid #e7ddd1; }
+    #panelHistorial .historial-anio-opcion.activo { background:#713f12; color:#fff; border-color:#713f12; }
+    #panelHistorial .historial-campos-dobles { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+    #panelHistorial .historial-opcion, #panelHistorial .historial-periodo, #panelHistorial .historial-vista { min-height:44px; }
+    @media(max-width:520px) {
+      #panelHistorial .historial-campos-dobles { grid-template-columns:1fr; gap:0; }
+      #panelHistorial .historial-grafica { padding:8px; }
+      #panelHistorial .historial-grafica svg { min-width:520px; }
+      #panelHistorial .historial-grafica { overflow-x:auto; }
+    }
   </style>
 <style>
 .admin-resumen{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:14px 0}
