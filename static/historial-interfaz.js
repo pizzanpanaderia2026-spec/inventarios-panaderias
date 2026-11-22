@@ -27,6 +27,23 @@
     }
     select.value = String(anioActual);
   });
+  const anioGrid = document.getElementById("histAnioOpciones");
+  for (let y = anioActual; y >= 2016; y--) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "historial-anio-opcion" + (y === anioSeleccionado ? " activo" : "");
+    button.textContent = String(y);
+    button.setAttribute("aria-pressed", y === anioSeleccionado ? "true" : "false");
+    button.addEventListener("click", () => {
+      anioSeleccionado = y;
+      anioGrid.querySelectorAll("button").forEach(item => {
+        const active = Number(item.textContent) === y;
+        item.classList.toggle("activo", active);
+        item.setAttribute("aria-pressed", active ? "true" : "false");
+      });
+    });
+    anioGrid.appendChild(button);
+  }
   document.getElementById("histMes").value = String(hoy.getMonth()+1);
 
   function seleccionar(selector, atributo, valor) {
@@ -44,7 +61,7 @@
       dia:"Elige una fecha para consultar únicamente ese día.",
       mes:"Se consultará el mes completo del año seleccionado.",
       anio:"Se consultará el año completo, organizado por meses.",
-      periodo:"Selecciona un intervalo de hasta 365 días. Las fechas inicial y final son inclusivas."
+      periodo:"Selecciona las fechas inicial y final. El intervalo recomendado es de hasta 365 días; periodos mayores requerirán procesamiento especial."
     };
     ayuda.textContent = textos[periodo];
     resumen.textContent = "Consulta: " + periodo + " · Categoría: " + categoria;
@@ -92,8 +109,7 @@
       }
       const dias = Math.floor((Date.parse(hasta.value+"T00:00:00Z") - Date.parse(desde.value+"T00:00:00Z")) / 86400000) + 1;
       if (dias > 365) {
-        ayuda.textContent = "El periodo supera los 365 días recomendados. Selecciona un intervalo menor.";
-        return;
+        ayuda.textContent = "El periodo tiene " + dias + " días. Supera la duración recomendada; la consulta podrá requerir un informe resumido o dividido.";
       }
     }
     resultado.replaceChildren();
