@@ -142,10 +142,23 @@ def _agregar(inventario, produccion, desde, hasta, resumen_only=False):
     por_precio = [{"precio": str(k), "cantidad": v[0], "importe": str(v[1])}
         for k, v in sorted(precios.items())]
     por_pan = [{"pan": k, "cantidad": v} for k, v in sorted(panes.items(), key=lambda x: x[0].casefold())]
+    inventario_normalizado = {}
+    for nombre, valores in productos.items():
+        clave = _clave(nombre)
+        actual = inventario_normalizado.setdefault(clave, {"nombre": nombre, "cantidad": 0})
+        actual["cantidad"] += valores[0]
+    produccion_normalizada = {}
+    for nombre, cantidad in panes.items():
+        clave = _clave(nombre)
+        actual = produccion_normalizada.setdefault(clave, {"nombre": nombre, "cantidad": 0})
+        actual["cantidad"] += cantidad
     comparacion = []
-    for nombre in sorted(set(productos) | set(panes), key=str.casefold):
-        producido = panes.get(nombre, 0)
-        sobrante = productos.get(nombre, [0, Decimal("0")])[0]
+    for clave in sorted(set(inventario_normalizado) | set(produccion_normalizada)):
+        inv_item = inventario_normalizado.get(clave, {"nombre": "", "cantidad": 0})
+        prod_item = produccion_normalizada.get(clave, {"nombre": "", "cantidad": 0})
+        nombre = inv_item["nombre"] or prod_item["nombre"]
+        producido = prod_item["cantidad"]
+        sobrante = inv_item["cantidad"]
         comparacion.append({"pan": nombre, "producido": producido, "sobrante": sobrante,
             "porcentaje_sobrante": round(sobrante / producido * 100, 2) if producido > 0 else None})
     dias = []
@@ -303,6 +316,8 @@ def _hoja_informe(libro, nombre_hoja, titulo, categoria, inventario, produccion,
         filas_analisis = (analisis or {}).get("por_pan", [])
         fila = _tabla(hoja, fila, "PRODUCCIÓN Y SOBRANTES", ["Pan", "Producido", "Sobrante", "% sobrante"],
             [[x["pan"], x["producido"], x["sobrante"], x["porcentaje_sobrante"] if x["porcentaje_sobrante"] is not None else "N/D"] for x in filas_analisis])
+        hoja.cell(fila, 1, "El porcentaje compara sobrantes registrados con producción del mismo pan; no representa ventas.")
+        hoja.cell(fila, 1).font = Font(italic=True, color="666666")
         fin_analisis = fila - 2
     else:
         inicio_analisis = fin_analisis = 0
