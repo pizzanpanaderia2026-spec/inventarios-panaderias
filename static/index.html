@@ -1035,7 +1035,7 @@
         const seccion = boton.dataset.seccion;
         const ocultarAdmin = seccion === "panelAdministracion" && !esAdministrador();
         const ocultarProduccion = seccion === "panelProduccion" && !puedeVerProduccion();
-        const ocultarInventario = esProduccion && seccion !== "panelProduccion";
+        const ocultarInventario = esProduccion && seccion !== "panelProduccion" && seccion !== "panelHistorial";
         boton.classList.toggle("oculto", ocultarAdmin || ocultarProduccion || ocultarInventario);
       });
     }
@@ -1043,7 +1043,7 @@
     function mostrarSeccion(idSeccion) {
       if (idSeccion === "panelProduccion" && !puedeVerProduccion()) return;
       if (idSeccion === "panelAdministracion" && !esAdministrador()) return;
-      if (String(perfilActual?.rol || "").toLowerCase() === "produccion" && idSeccion !== "panelProduccion") return;
+      if (String(perfilActual?.rol || "").toLowerCase() === "produccion" && !["panelProduccion", "panelHistorial"].includes(idSeccion)) return;
       const secciones = ["panelRegistro", "panelTablas", "panelProductos", "panelHistorial", "panelAdministracion", "panelProduccion"];
       secciones.forEach(id => {
         const panel = document.getElementById(id);
@@ -1064,7 +1064,7 @@
       boton.addEventListener("click", () => {
         if (boton.dataset.seccion === "panelAdministracion" && !esAdministrador()) return;
         if (boton.dataset.seccion === "panelProduccion" && !puedeVerProduccion()) return;
-        if (String(perfilActual?.rol || "").toLowerCase() === "produccion" && boton.dataset.seccion !== "panelProduccion") return;
+        if (String(perfilActual?.rol || "").toLowerCase() === "produccion" && !["panelProduccion", "panelHistorial"].includes(boton.dataset.seccion)) return;
         mostrarSeccion(boton.dataset.seccion);
       });
     });
@@ -1098,6 +1098,7 @@
 
       if (String(perfilActual?.rol || "").toLowerCase() === "produccion") {
         mostrarSeccion("panelProduccion");
+        if (window.iniciarHistorial) window.iniciarHistorial(sesionActual, autorizada, perfilActual);
         try {
           if (window.iniciarProduccion) await window.iniciarProduccion(sesionActual, autorizada);
         } catch (error) {
@@ -1119,7 +1120,7 @@
           return;
         }
         if (window.iniciarTablasHistorial) window.iniciarTablasHistorial(sesionActual, autorizada);
-        if (window.iniciarHistorial) window.iniciarHistorial(sesionActual, autorizada);
+        if (window.iniciarHistorial) window.iniciarHistorial(sesionActual, autorizada, perfilActual);
         if (window.iniciarRegistroDiario) {
           await window.iniciarRegistroDiario(sesionActual, autorizada, catalogo.productos, catalogo.categorias);
         }
