@@ -15,7 +15,7 @@
   [dateDay, from, to].forEach(el => { el.max = todayISO; });
   dateDay.value = todayISO;
   to.value = todayISO;
-  $("histMes").value = String(today.getMonth() + 1);
+  let selectedMonth = today.getMonth() + 1;\n  const monthGrid = $("histMesOpciones");\n  months.forEach((name, index) => {\n    const b = document.createElement("button");\n    b.type = "button";\n    b.className = "historial-mes-opcion" + (index + 1 === selectedMonth ? " activo" : "");\n    b.textContent = name;\n    b.setAttribute("aria-pressed", index + 1 === selectedMonth ? "true" : "false");\n    b.addEventListener("click", () => {\n      selectedMonth = index + 1;\n      monthGrid.querySelectorAll("button").forEach(x => {\n        const active = Number(x.dataset.mes) === selectedMonth;\n        x.classList.toggle("activo", active);\n        x.setAttribute("aria-pressed", active ? "true" : "false");\n      });\n    });\n    b.dataset.mes = String(index + 1);\n    monthGrid.appendChild(b);\n  });
 
   const yearSelect = $("histAnioMes");
   for (let y = today.getFullYear(); y >= 2016; y--) yearSelect.add(new Option(String(y), String(y)));
@@ -97,7 +97,7 @@
     if (period === "dia") {
       start = end = dateDay.value;
     } else if (period === "mes") {
-      const y = Number(yearSelect.value), m = Number($("histMes").value);
+      const y = Number(yearSelect.value), m = selectedMonth;
       start = y + "-" + pad(m) + "-01";
       const last = new Date(y, m, 0).getDate();
       end = y === today.getFullYear() && m === today.getMonth() + 1 ? todayISO : y + "-" + pad(m) + "-" + pad(last);
