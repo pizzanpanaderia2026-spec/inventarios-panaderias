@@ -396,9 +396,26 @@
 
   consultButton.addEventListener("click", consult);
   downloadButton.addEventListener("click", download);
-  window.iniciarHistorial = function (session, local) {
+  window.iniciarHistorial = function (session, local, profile) {
     token = session && session.access_token;
     bakery = local;
+    const role = String(profile && profile.rol || "").toLowerCase();
+    if (role === "produccion") {
+      category = "produccion";
+      panel.querySelectorAll("[data-hist-categoria]").forEach(b => {
+        const allowed = b.getAttribute("data-hist-categoria") === "produccion";
+        b.classList.toggle("oculto", !allowed);
+      });
+    } else if (role !== "admin") {
+      category = "inventario";
+      panel.querySelectorAll("[data-hist-categoria]").forEach(b => {
+        const allowed = b.getAttribute("data-hist-categoria") === "inventario";
+        b.classList.toggle("oculto", !allowed);
+      });
+    } else {
+      panel.querySelectorAll("[data-hist-categoria]").forEach(b => b.classList.remove("oculto"));
+    }
+    setActive("[data-hist-categoria]", "data-hist-categoria", category);
     showField();
   };
   showField();
