@@ -51,8 +51,8 @@ class HistorialReportesTests(unittest.TestCase):
         book = load_workbook(BytesIO(output.getvalue()))
         self.assertEqual(len(book.sheetnames), 13)
         self.assertEqual(book.sheetnames[1:], [
-            "enero", "febrero", "marzo", "abril", "mayo", "junio",
-            "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"
+            "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+            "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"
         ])
         self.assertGreaterEqual(len(book["Resumen"]._charts), 1)
 
