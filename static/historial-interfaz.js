@@ -239,7 +239,20 @@
           x.porcentaje_sobrante == null ? "N/D" : Number(x.porcentaje_sobrante).toFixed(2) + "%"]));
       host.appendChild(el("p", "El porcentaje compara los sobrantes registrados con la producción del mismo pan y periodo. No representa ventas.", "nota"));
     }
-    if (period !== "dia" && !data.resumen_only) {
+    if (period === "anio") {
+      const monthly = new Map();
+      data.resumen_diario.forEach(x => {
+        const key = x.fecha.slice(0, 7);
+        const item = monthly.get(key) || { inventario_cantidad: 0, inventario_importe: 0, produccion_cantidad: 0 };
+        item.inventario_cantidad += Number(x.inventario_cantidad || 0);
+        item.inventario_importe += Number(x.inventario_importe || 0);
+        item.produccion_cantidad += Number(x.produccion_cantidad || 0);
+        monthly.set(key, item);
+      });
+      const rows = [...monthly.entries()].sort((a,b) => a[0].localeCompare(b[0]))
+        .map(([mes,x]) => [mes, formatNumber(x.inventario_cantidad), formatMoney(x.inventario_importe), formatNumber(x.produccion_cantidad)]);
+      addTable(host, "Resumen mensual del año", ["Mes", "Inventario", "Importe", "Producción"], rows);
+    } else if (period !== "dia" && !data.resumen_only) {
       const rows = data.resumen_diario.filter(x => x.tiene_inventario || x.tiene_produccion)
         .map(x => [x.fecha, formatNumber(x.inventario_cantidad), formatMoney(x.inventario_importe), formatNumber(x.produccion_cantidad)]);
       addTable(host, "Resumen diario", ["Fecha", "Inventario", "Importe", "Producción"], rows);
