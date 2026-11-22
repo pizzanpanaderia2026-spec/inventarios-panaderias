@@ -100,7 +100,7 @@
     if (!desde.value || !hasta.value) return;
     const dias = Math.floor((Date.parse(hasta.value+"T00:00:00Z") - Date.parse(desde.value+"T00:00:00Z")) / 86400000) + 1;
     ayuda.textContent = dias > 365
-      ? "El periodo seleccionado supera el máximo recomendado de 365 días. Reduce el intervalo."
+      ? "El periodo supera los 365 días recomendados y podría requerir un informe resumido o dividido."
       : "Periodo seleccionado: " + dias + " días (máximo recomendado: 365).";
   }
   document.getElementById("histConsultar").addEventListener("click", () => {
