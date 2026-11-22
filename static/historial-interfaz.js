@@ -15,7 +15,25 @@
   [dateDay, from, to].forEach(el => { el.max = todayISO; });
   dateDay.value = todayISO;
   to.value = todayISO;
-  let selectedMonth = today.getMonth() + 1;\n  const monthGrid = $("histMesOpciones");\n  months.forEach((name, index) => {\n    const b = document.createElement("button");\n    b.type = "button";\n    b.className = "historial-mes-opcion" + (index + 1 === selectedMonth ? " activo" : "");\n    b.textContent = name;\n    b.setAttribute("aria-pressed", index + 1 === selectedMonth ? "true" : "false");\n    b.addEventListener("click", () => {\n      selectedMonth = index + 1;\n      monthGrid.querySelectorAll("button").forEach(x => {\n        const active = Number(x.dataset.mes) === selectedMonth;\n        x.classList.toggle("activo", active);\n        x.setAttribute("aria-pressed", active ? "true" : "false");\n      });\n    });\n    b.dataset.mes = String(index + 1);\n    monthGrid.appendChild(b);\n  });
+  let selectedMonth = today.getMonth() + 1;
+  const monthGrid = $("histMesOpciones");
+  months.forEach((name, index) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "historial-mes-opcion" + (index + 1 === selectedMonth ? " activo" : "");
+    b.textContent = name;
+    b.setAttribute("aria-pressed", index + 1 === selectedMonth ? "true" : "false");
+    b.addEventListener("click", () => {
+      selectedMonth = index + 1;
+      monthGrid.querySelectorAll("button").forEach(x => {
+        const active = Number(x.dataset.mes) === selectedMonth;
+        x.classList.toggle("activo", active);
+        x.setAttribute("aria-pressed", active ? "true" : "false");
+      });
+    });
+    b.dataset.mes = String(index + 1);
+    monthGrid.appendChild(b);
+  });
 
   const yearSelect = $("histAnioMes");
   for (let y = today.getFullYear(); y >= 2016; y--) yearSelect.add(new Option(String(y), String(y)));
