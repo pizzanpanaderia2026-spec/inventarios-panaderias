@@ -19,10 +19,14 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
+      - name: Check Python syntax
+        run: python -m compileall -q main.py historial_archivos.py historial_reportes.py tests
       - name: Run tests
         run: python -m unittest discover -s tests -v
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
-      - name: Check production JavaScript syntax
-        run: node --check static/produccion.js
+      - name: Check application JavaScript syntax
+        run: |
+          node --check static/produccion.js
+          node --check static/historial-interfaz.js
