@@ -376,6 +376,9 @@ def _crear_excel(categoria, tipo, desde, hasta, datos, resumen_only):
         resumen_mensual = [{"mes": k, **{a: (str(v) if isinstance(v, Decimal) else v) for a,v in vals.items()}}
             for k, vals in sorted(mensual.items())]
     _hoja_informe(libro, "Resumen", titulo, categoria, inv, prod, resumen_diario if tipo in ("mes","periodo") else [], resumen_mensual, datos.get("analisis"), anio=(tipo=="anio"))
+    if resumen_only:
+        resumen["A2"] = "Informe resumido por la extensión del periodo; se omitieron las hojas diarias para proteger el rendimiento."
+        resumen["A2"].font = Font(italic=True, color="666666")
 
     if resumen_only:
         pass
