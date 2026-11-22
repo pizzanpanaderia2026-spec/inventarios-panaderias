@@ -19,7 +19,7 @@
   fechaDia.value = isoHoy;
   hasta.value = isoHoy;
   const anioActual = hoy.getFullYear();
-  anioSeleccionado = anioActual;\n  anioSeleccionado = anioActual;
+  anioSeleccionado = anioActual;
   document.querySelectorAll("#panelHistorial .historial-anios").forEach(select => {
     for (let y = anioActual; y >= 2016; y--) {
       const option = document.createElement("option");
