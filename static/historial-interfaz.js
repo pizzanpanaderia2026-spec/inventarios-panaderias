@@ -2,129 +2,346 @@
   const panel = document.getElementById("panelHistorial");
   if (!panel) return;
 
-  const hoy = new Date();
-  const isoHoy = [hoy.getFullYear(), String(hoy.getMonth()+1).padStart(2,"0"), String(hoy.getDate()).padStart(2,"0")].join("-");
-  const fechaDia = document.getElementById("histFechaDia");
-  const desde = document.getElementById("histDesde");
-  const hasta = document.getElementById("histHasta");
-  const ayuda = document.getElementById("histAyudaPeriodo");
-  const resultado = document.getElementById("historialResultadoNuevo");
-  const resumen = document.getElementById("histResumenConsulta");
-  let categoria = "inventario";
-  let periodo = "dia";
-  let vista = "tablas";
-  let anioSeleccionado = null;
+  const $ = id => document.getElementById(id);
+  const today = new Date();
+  const pad = n => String(n).padStart(2, "0");
+  const iso = d => d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate());
+  const todayISO = iso(today);
+  const months = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+  let token = null, bakery = null, category = "inventario", period = "dia", view = "tablas", lastQuery = null, lastData = null;
+  const dateDay = $("histFechaDia"), from = $("histDesde"), to = $("histHasta");
+  const result = $("historialResultadoNuevo"), summary = $("histResumenConsulta");
+  const consultButton = $("histConsultar"), downloadButton = $("histDescargarExcel");
+  [dateDay, from, to].forEach(el => { el.max = todayISO; });
+  dateDay.value = todayISO;
+  to.value = todayISO;
+  $("histMes").value = String(today.getMonth() + 1);
 
-  [fechaDia, desde, hasta].forEach(input => { input.max = isoHoy; });
-  fechaDia.value = isoHoy;
-  hasta.value = isoHoy;
-  const anioActual = hoy.getFullYear();
-  anioSeleccionado = anioActual;
-  document.querySelectorAll("#panelHistorial .historial-anios").forEach(select => {
-    for (let y = anioActual; y >= 2016; y--) {
-      const option = document.createElement("option");
-      option.value = String(y);
-      option.textContent = String(y);
-      select.appendChild(option);
-    }
-    select.value = String(anioActual);
-  });
-  const anioGrid = document.getElementById("histAnioOpciones");
-  for (let y = anioActual; y >= 2016; y--) {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "historial-anio-opcion" + (y === anioSeleccionado ? " activo" : "");
-    button.textContent = String(y);
-    button.setAttribute("aria-pressed", y === anioSeleccionado ? "true" : "false");
-    button.addEventListener("click", () => {
-      anioSeleccionado = y;
-      anioGrid.querySelectorAll("button").forEach(item => {
-        const active = Number(item.textContent) === y;
-        item.classList.toggle("activo", active);
-        item.setAttribute("aria-pressed", active ? "true" : "false");
+  const yearSelect = $("histAnioMes");
+  for (let y = today.getFullYear(); y >= 2016; y--) yearSelect.add(new Option(String(y), String(y)));
+
+  const yearGrid = $("histAnioOpciones");
+  let selectedYear = today.getFullYear();
+  for (let y = today.getFullYear(); y >= 2016; y--) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "historial-anio-opcion" + (y === selectedYear ? " activo" : "");
+    b.textContent = String(y);
+    b.setAttribute("aria-pressed", y === selectedYear ? "true" : "false");
+    b.addEventListener("click", () => {
+      selectedYear = y;
+      yearGrid.querySelectorAll("button").forEach(x => {
+        const active = Number(x.textContent) === y;
+        x.classList.toggle("activo", active);
+        x.setAttribute("aria-pressed", active ? "true" : "false");
       });
     });
-    anioGrid.appendChild(button);
+    yearGrid.appendChild(b);
   }
-  document.getElementById("histMes").value = String(hoy.getMonth()+1);
 
-  function seleccionar(selector, atributo, valor) {
-    panel.querySelectorAll(selector).forEach(button => {
-      const activo = button.getAttribute(atributo) === valor;
-      button.classList.toggle("activo", activo);
-      button.setAttribute("aria-pressed", activo ? "true" : "false");
+  function setActive(selector, attr, value) {
+    panel.querySelectorAll(selector).forEach(b => {
+      const active = b.getAttribute(attr) === value;
+      b.classList.toggle("activo", active);
+      b.setAttribute("aria-pressed", active ? "true" : "false");
     });
   }
-  function mostrarCampo() {
-    panel.querySelectorAll("[data-hist-campo]").forEach(campo => {
-      campo.classList.toggle("oculto", campo.getAttribute("data-hist-campo") !== periodo);
+  function showField() {
+    panel.querySelectorAll("[data-hist-campo]").forEach(el => {
+      el.classList.toggle("oculto", el.getAttribute("data-hist-campo") !== period);
     });
-    const textos = {
-      dia:"Elige una fecha para consultar únicamente ese día.",
-      mes:"Se consultará el mes completo del año seleccionado.",
-      anio:"Se consultará el año completo, organizado por meses.",
-      periodo:"Selecciona las fechas inicial y final. El intervalo recomendado es de hasta 365 días; periodos mayores requerirán procesamiento especial."
+    const messages = {
+      dia: "Consulta únicamente los registros de la fecha seleccionada.",
+      mes: "Consulta el mes completo. En el mes actual se consideran los días transcurridos.",
+      anio: "Consulta el año seleccionado. Para el año actual se consideran los días transcurridos.",
+      periodo: "Selecciona un intervalo personalizado. Hasta 365 días se genera el detalle diario; periodos mayores generan un resumen para cuidar los recursos."
     };
-    ayuda.textContent = textos[periodo];
-    resumen.textContent = "Consulta: " + periodo + " · Categoría: " + categoria;
+    $("histAyudaPeriodo").textContent = messages[period];
+    lastData = null;
+    downloadButton.disabled = true;
+    result.innerHTML = '<div class="historial-vacio"><strong>Configura tu consulta</strong><p class="nota">Selecciona los filtros y pulsa Consultar para cargar información real.</p></div>';
+    summary.textContent = "Categoría: " + category + " · Consulta: " + period;
   }
-  panel.querySelectorAll("[data-hist-categoria]").forEach(button => {
-    button.addEventListener("click", () => {
-      categoria = button.getAttribute("data-hist-categoria");
-      seleccionar("[data-hist-categoria]","data-hist-categoria",categoria);
-      mostrarCampo();
-    });
-  });
-  panel.querySelectorAll("[data-hist-periodo]").forEach(button => {
-    button.addEventListener("click", () => {
-      periodo = button.getAttribute("data-hist-periodo");
-      seleccionar("[data-hist-periodo]","data-hist-periodo",periodo);
-      mostrarCampo();
-    });
-  });
-  panel.querySelectorAll("[data-hist-vista]").forEach(button => {
-    button.addEventListener("click", () => {
-      vista = button.getAttribute("data-hist-vista");
-      seleccionar("[data-hist-vista]","data-hist-vista",vista);
-      resumen.textContent = "Visualización seleccionada: " + (vista === "tablas" ? "Tablas" : "Gráficas") + ".";
-    });
-  });
-  desde.addEventListener("change", () => {
-    hasta.min = desde.value || "";
-    if (desde.value && (!hasta.value || hasta.value < desde.value)) hasta.value = desde.value;
-    validarRango();
-  });
-  hasta.addEventListener("change", validarRango);
 
-  function validarRango() {
-    if (!desde.value || !hasta.value) return;
-    const dias = Math.floor((Date.parse(hasta.value+"T00:00:00Z") - Date.parse(desde.value+"T00:00:00Z")) / 86400000) + 1;
-    ayuda.textContent = dias > 365
-      ? "El periodo supera los 365 días recomendados y podría requerir un informe resumido o dividido."
-      : "Periodo seleccionado: " + dias + " días (máximo recomendado: 365).";
-  }
-  document.getElementById("histConsultar").addEventListener("click", () => {
-    if (periodo === "periodo") {
-      if (!desde.value || !hasta.value || desde.value > hasta.value) {
-        ayuda.textContent = "Selecciona un intervalo válido: la fecha inicial debe ser anterior o igual a la final.";
-        return;
-      }
-      const dias = Math.floor((Date.parse(hasta.value+"T00:00:00Z") - Date.parse(desde.value+"T00:00:00Z")) / 86400000) + 1;
-      if (dias > 365) {
-        ayuda.textContent = "El periodo tiene " + dias + " días. Supera la duración recomendada; la consulta podrá requerir un informe resumido o dividido.";
-      }
-    }
-    resultado.replaceChildren();
-    const mensaje = document.createElement("div");
-    mensaje.className = "historial-vacio";
-    const titulo = document.createElement("strong");
-    titulo.textContent = "Filtros listos";
-    const detalle = document.createElement("p");
-    detalle.className = "nota";
-    detalle.textContent = "La interfaz ya permite elegir " + categoria + ", consultar por " + periodo + " y alternar entre " + vista + ". La conexión de resultados reales y la exportación avanzada se integrarán después de completar y verificar los servicios de consulta.";
-    mensaje.append(titulo, detalle);
-    resultado.appendChild(mensaje);
-    resumen.textContent = "Filtros seleccionados: " + categoria + " · " + periodo + " · " + vista;
+  panel.querySelectorAll("[data-hist-categoria]").forEach(b => b.addEventListener("click", () => {
+    category = b.getAttribute("data-hist-categoria");
+    setActive("[data-hist-categoria]", "data-hist-categoria", category);
+    showField();
+  }));
+  panel.querySelectorAll("[data-hist-periodo]").forEach(b => b.addEventListener("click", () => {
+    period = b.getAttribute("data-hist-periodo");
+    setActive("[data-hist-periodo]", "data-hist-periodo", period);
+    showField();
+  }));
+  panel.querySelectorAll("[data-hist-vista]").forEach(b => b.addEventListener("click", () => {
+    view = b.getAttribute("data-hist-vista");
+    setActive("[data-hist-vista]", "data-hist-vista", view);
+    if (lastData) render(lastData);
+  }));
+  from.addEventListener("change", () => {
+    to.min = from.value || "";
+    if (from.value && (!to.value || to.value < from.value)) to.value = from.value;
+    updatePeriodHint();
   });
-  mostrarCampo();
+  to.addEventListener("change", updatePeriodHint);
+  function updatePeriodHint() {
+    if (!from.value || !to.value || from.value > to.value) return;
+    const days = Math.floor((Date.parse(to.value + "T00:00:00Z") - Date.parse(from.value + "T00:00:00Z")) / 86400000) + 1;
+    $("histAyudaPeriodo").textContent = "Periodo seleccionado: " + days + " días." +
+      (days > 365 ? " Se descargará un resumen sin hojas diarias para evitar archivos demasiado pesados." : " Se incluirán hojas diarias con registros.");
+  }
+
+  function queryRange() {
+    if (!bakery) throw new Error("No se ha seleccionado una panadería.");
+    let start, end;
+    if (period === "dia") {
+      start = end = dateDay.value;
+    } else if (period === "mes") {
+      const y = Number(yearSelect.value), m = Number($("histMes").value);
+      start = y + "-" + pad(m) + "-01";
+      const last = new Date(y, m, 0).getDate();
+      end = y === today.getFullYear() && m === today.getMonth() + 1 ? todayISO : y + "-" + pad(m) + "-" + pad(last);
+    } else if (period === "anio") {
+      const y = selectedYear;
+      start = y + "-01-01";
+      end = y === today.getFullYear() ? todayISO : y + "-12-31";
+    } else {
+      start = from.value;
+      end = to.value;
+    }
+    if (!start || !end) throw new Error("Selecciona las fechas de la consulta.");
+    if (start > end) throw new Error("La fecha inicial debe ser anterior o igual a la final.");
+    if (end > todayISO) throw new Error("No puedes consultar fechas futuras.");
+    const days = Math.floor((Date.parse(end + "T00:00:00Z") - Date.parse(start + "T00:00:00Z")) / 86400000) + 1;
+    if (days > 3650) throw new Error("El intervalo supera el máximo técnico de diez años. Divide la consulta.");
+    return { start, end, days };
+  }
+
+  function formatMoney(v) {
+    return Number(v || 0).toLocaleString("es-MX", { style: "currency", currency: "MXN" });
+  }
+  function formatNumber(v) { return Number(v || 0).toLocaleString("es-MX"); }
+  function el(tag, text, cls) {
+    const node = document.createElement(tag);
+    if (text !== undefined && text !== null) node.textContent = String(text);
+    if (cls) node.className = cls;
+    return node;
+  }
+  function addTable(parent, title, headers, rows, total) {
+    parent.appendChild(el("h4", title));
+    const wrap = el("div", null, "tabla-scroll");
+    const table = el("table");
+    const thead = el("thead"), hr = el("tr");
+    headers.forEach(h => hr.appendChild(el("th", h)));
+    thead.appendChild(hr); table.appendChild(thead);
+    const tbody = el("tbody");
+    rows.forEach(row => {
+      const tr = el("tr");
+      row.forEach(value => tr.appendChild(el("td", value)));
+      tbody.appendChild(tr);
+    });
+    if (total) {
+      const tr = el("tr", null, "tablas-total");
+      total.forEach(value => tr.appendChild(el("td", value)));
+      tbody.appendChild(tr);
+    }
+    table.appendChild(tbody); wrap.appendChild(table); parent.appendChild(wrap);
+  }
+  function chartSVG(title, series, labels) {
+    const wrapper = el("div", null, "historial-grafica");
+    wrapper.appendChild(el("h4", title));
+    if (!labels.length || !series.length) {
+      wrapper.appendChild(el("p", "No hay datos suficientes para esta gráfica.", "nota"));
+      return wrapper;
+    }
+    const width = 760, rowHeight = 34, top = 12, left = 145, right = 70;
+    const height = top + labels.length * rowHeight + 12;
+    const max = Math.max(1, ...series.flatMap(s => s.values.map(Number)));
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg.setAttribute("viewBox", "0 0 " + width + " " + height);
+    svg.setAttribute("role", "img");
+    svg.setAttribute("aria-label", title);
+    labels.forEach((label, i) => {
+      const y = top + i * rowHeight;
+      const text = document.createElementNS(svg.namespaceURI, "text");
+      text.setAttribute("x", left - 10); text.setAttribute("y", y + 16);
+      text.setAttribute("text-anchor", "end"); text.setAttribute("font-size", "12");
+      text.textContent = label.length > 20 ? label.slice(0, 18) + "…" : label;
+      svg.appendChild(text);
+      series.forEach((s, j) => {
+        const val = Number(s.values[i] || 0);
+        const bars = series.length > 1 ? series.length : 1;
+        const bh = Math.min(18, (rowHeight - 4) / bars);
+        const by = y + 2 + j * bh;
+        const rect = document.createElementNS(svg.namespaceURI, "rect");
+        rect.setAttribute("x", left); rect.setAttribute("y", by);
+        rect.setAttribute("width", Math.max(0, (width - left - right) * val / max));
+        rect.setAttribute("height", bh - 2); rect.setAttribute("rx", "3");
+        rect.setAttribute("fill", ["#8b5e34", "#c58b50", "#648a72"][j % 3]);
+        svg.appendChild(rect);
+        const value = document.createElementNS(svg.namespaceURI, "text");
+        value.setAttribute("x", left + (width - left - right) * val / max + 6);
+        value.setAttribute("y", by + bh - 4); value.setAttribute("font-size", "11");
+        value.textContent = formatNumber(val);
+        svg.appendChild(value);
+      });
+    });
+    wrapper.appendChild(svg);
+    if (series.length > 1) {
+      const legend = el("div", null, "historial-leyenda");
+      series.forEach((s, i) => {
+        const item = el("span", null);
+        const dot = el("i", null); dot.style.background = ["#8b5e34", "#c58b50", "#648a72"][i % 3];
+        item.append(dot, document.createTextNode(s.name)); legend.appendChild(item);
+      });
+      wrapper.appendChild(legend);
+    }
+    return wrapper;
+  }
+
+  function renderTables(data) {
+    const host = el("div", null, "historial-tablas");
+    const inv = data.inventario, prod = data.produccion;
+    if (category === "inventario" || category === "analisis") {
+      addTable(host, "Inventario por tipo de pan", ["Pan", "Cantidad", "Importe"],
+        inv.por_producto.map(x => [x.producto, formatNumber(x.cantidad), formatMoney(x.importe)]),
+        ["TOTAL", formatNumber(inv.total_piezas), formatMoney(inv.total_importe)]);
+      addTable(host, "Inventario por precio", ["Precio", "Cantidad", "Importe"],
+        inv.por_precio.map(x => [formatMoney(x.precio), formatNumber(x.cantidad), formatMoney(x.importe)]),
+        ["TOTAL", formatNumber(inv.total_piezas), formatMoney(inv.total_importe)]);
+    }
+    if (category === "produccion" || category === "analisis") {
+      addTable(host, "Producción por tipo de pan", ["Pan", "Cantidad producida"],
+        prod.por_pan.map(x => [x.pan, formatNumber(x.cantidad)]),
+        ["TOTAL PRODUCIDO", formatNumber(prod.total)]);
+    }
+    if (category === "analisis") {
+      addTable(host, "Producción y sobrantes", ["Pan", "Producido", "Sobrante", "% sobrante"],
+        data.analisis.por_pan.map(x => [x.pan, formatNumber(x.producido), formatNumber(x.sobrante),
+          x.porcentaje_sobrante == null ? "N/D" : Number(x.porcentaje_sobrante).toFixed(2) + "%"]));
+      host.appendChild(el("p", "El porcentaje compara los sobrantes registrados con la producción del mismo pan y periodo. No representa ventas.", "nota"));
+    }
+    if (period !== "dia" && !data.resumen_only) {
+      const rows = data.resumen_diario.filter(x => x.tiene_inventario || x.tiene_produccion)
+        .map(x => [x.fecha, formatNumber(x.inventario_cantidad), formatMoney(x.inventario_importe), formatNumber(x.produccion_cantidad)]);
+      addTable(host, "Resumen diario", ["Fecha", "Inventario", "Importe", "Producción"], rows);
+    } else if (data.resumen_only) {
+      const rows = data.resumen_mensual.map(x => [x.mes, formatNumber(x.inventario_cantidad), formatMoney(x.inventario_importe), formatNumber(x.produccion_cantidad)]);
+      addTable(host, "Resumen mensual del periodo", ["Mes", "Inventario", "Importe", "Producción"], rows);
+    }
+    return host;
+  }
+  function renderCharts(data) {
+    const host = el("div", null, "historial-graficas");
+    if (category === "inventario" || category === "analisis") {
+      host.appendChild(chartSVG("Inventario por tipo de pan",
+        [{ name: "Cantidad", values: data.inventario.por_producto.map(x => x.cantidad) }],
+        data.inventario.por_producto.map(x => x.producto)));
+      host.appendChild(chartSVG("Inventario por precio",
+        [{ name: "Cantidad", values: data.inventario.por_precio.map(x => x.cantidad) }],
+        data.inventario.por_precio.map(x => formatMoney(x.precio))));
+    }
+    if (category === "produccion") {
+      host.appendChild(chartSVG("Producción por tipo de pan",
+        [{ name: "Producido", values: data.produccion.por_pan.map(x => x.cantidad) }],
+        data.produccion.por_pan.map(x => x.pan)));
+    }
+    if (category === "analisis") {
+      host.appendChild(chartSVG("Producción frente a sobrantes", [
+        { name: "Producido", values: data.analisis.por_pan.map(x => x.producido) },
+        { name: "Sobrante", values: data.analisis.por_pan.map(x => x.sobrante) }
+      ], data.analisis.por_pan.map(x => x.pan)));
+    }
+    if (category === "produccion" && period === "anio") {
+      const monthsMap = new Map();
+      data.produccion.dias.forEach(d => {
+        const key = d.fecha.slice(0,7);
+        monthsMap.set(key, (monthsMap.get(key) || 0) + Number(d.total || 0));
+      });
+      const keys = [...monthsMap.keys()].sort();
+      host.appendChild(chartSVG("Producción por mes", [{ name: "Producción", values: keys.map(k => monthsMap.get(k)) }], keys));
+    }
+    return host;
+  }
+  function render(data) {
+    result.replaceChildren();
+    const empty = category === "inventario" ? !data.inventario.por_producto.length :
+      category === "produccion" ? !data.produccion.por_pan.length :
+      !data.inventario.por_producto.length && !data.produccion.por_pan.length;
+    if (empty) {
+      result.appendChild(el("div", "No hay registros para la categoría y las fechas seleccionadas.", "historial-vacio"));
+    } else {
+      result.appendChild(view === "tablas" ? renderTables(data) : renderCharts(data));
+    }
+    if (data.resumen_only) {
+      const note = el("p", "El intervalo supera 365 días. Se generará un resumen general y mensual sin hojas diarias.", "nota");
+      result.appendChild(note);
+    }
+  }
+  function queryString(q) {
+    const params = new URLSearchParams({
+      panaderia_id: String(bakery.id), categoria: category, tipo: period,
+      desde: q.start, hasta: q.end
+    });
+    return params.toString();
+  }
+  async function api(url, asBlob = false) {
+    const response = await fetch(url, { headers: { Authorization: "Bearer " + token, Accept: asBlob ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" : "application/json" } });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.detail || "No se pudo completar la consulta.");
+    }
+    return asBlob ? response.blob() : response.json();
+  }
+  async function consult() {
+    if (!token || !bakery) return;
+    let q;
+    try { q = queryRange(); } catch (e) { $("histAyudaPeriodo").textContent = e.message; return; }
+    consultButton.disabled = true;
+    downloadButton.disabled = true;
+    result.replaceChildren(el("p", "Consultando información histórica…", "nota"));
+    summary.textContent = "Consultando " + category + " · " + q.start + " a " + q.end;
+    try {
+      const data = await api("/api/historial/informe?" + queryString(q));
+      lastQuery = q; lastData = data;
+      summary.textContent = data.dias_consultados + " días consultados · " + (data.resumen_only ? "Resumen optimizado" : "Detalle disponible");
+      render(data);
+      downloadButton.disabled = false;
+    } catch (e) {
+      result.replaceChildren(el("div", e.message, "mensaje error"));
+      summary.textContent = "No se pudo completar la consulta.";
+    } finally {
+      consultButton.disabled = false;
+    }
+  }
+  async function download() {
+    if (!lastQuery || !token || !bakery) return;
+    downloadButton.disabled = true;
+    const oldText = downloadButton.textContent;
+    downloadButton.textContent = "Generando Excel…";
+    try {
+      const blob = await api("/api/historial/informe/excel?" + queryString(lastQuery), true);
+      const href = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = href;
+      a.download = "historial_" + category + "_" + lastQuery.start + "_" + lastQuery.end + ".xlsx";
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(href), 1500);
+      $("histEstadoDescarga").textContent = "El archivo Excel se generó correctamente.";
+    } catch (e) {
+      $("histEstadoDescarga").textContent = e.message;
+    } finally {
+      downloadButton.disabled = false;
+      downloadButton.textContent = oldText;
+    }
+  }
+
+  consultButton.addEventListener("click", consult);
+  downloadButton.addEventListener("click", download);
+  window.iniciarHistorial = function (session, local) {
+    token = session && session.access_token;
+    bakery = local;
+    showField();
+  };
+  showField();
 })();
