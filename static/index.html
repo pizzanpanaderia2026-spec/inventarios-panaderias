@@ -1101,7 +1101,7 @@
           return;
         }
         if (window.iniciarTablasHistorial) window.iniciarTablasHistorial(sesionActual, autorizada);
-        if (window.iniciarHistorialInventarios) window.iniciarHistorialInventarios(sesionActual, autorizada);
+        if (window.iniciarHistorial) window.iniciarHistorial(sesionActual, autorizada);
         if (window.iniciarRegistroDiario) {
           await window.iniciarRegistroDiario(sesionActual, autorizada, catalogo.productos, catalogo.categorias);
         }
@@ -1489,66 +1489,6 @@
         perfilActual.nombre = document.getElementById("adminNombrePrincipal").value.trim();
         await adminCargar(); adminMensaje("Nombre actualizado.", "exito");
       } catch(e) { adminMensaje(e.message); }
-    });
-
-    // Al elegir "Desde", completar "Hasta" con el máximo de 31 días inclusivos.
-    const resumenDesde = document.getElementById("resumenDesde");
-    const resumenHasta = document.getElementById("resumenHasta");
-    function fechaLocalISO() {
-      const hoy = new Date();
-      return hoy.getFullYear() + "-" + String(hoy.getMonth() + 1).padStart(2, "0") + "-" + String(hoy.getDate()).padStart(2, "0");
-    }
-    resumenDesde.max = fechaLocalISO();
-    resumenHasta.max = fechaLocalISO();
-    resumenDesde.addEventListener("change", () => {
-      const desde = resumenDesde.value;
-      if (!desde) {
-        resumenHasta.value = "";
-        resumenHasta.min = "";
-        resumenHasta.max = fechaLocalISO();
-        return;
-      }
-      const limite = new Date(desde + "T00:00:00Z");
-      limite.setUTCDate(limite.getUTCDate() + 30);
-      const maximo31Dias = limite.toISOString().slice(0, 10);
-      const hoy = fechaLocalISO();
-      resumenHasta.min = desde;
-      resumenHasta.max = maximo31Dias < hoy ? maximo31Dias : hoy;
-      resumenHasta.value = resumenHasta.max;
-    });
-
-    document.getElementById("botonResumenPeriodo").addEventListener("click", async () => {
-      const desde = document.getElementById("resumenDesde").value;
-      const hasta = document.getElementById("resumenHasta").value;
-      const msg = document.getElementById("mensajeResumenPeriodo");
-      if (!desde || !hasta) { mostrarMensaje(msg, "Selecciona las dos fechas."); return; }
-      if (desde > hasta) { mostrarMensaje(msg, "La fecha inicial debe ser anterior a la final."); return; }
-      const dias = (Date.parse(hasta + "T00:00:00Z") - Date.parse(desde + "T00:00:00Z")) / 86400000 + 1;
-      if (dias > 31) { mostrarMensaje(msg, "El periodo máximo es de 31 días contando ambas fechas."); return; }
-      const boton = document.getElementById("botonResumenPeriodo");
-      boton.disabled = true;
-      try {
-        const url = "/api/historial/periodo/excel?panaderia_id=" + encodeURIComponent(panaderiaSeleccionada.id) + "&desde=" + encodeURIComponent(desde) + "&hasta=" + encodeURIComponent(hasta);
-        const resp = await fetch(url, {headers:{"Authorization":"Bearer " + sesionActual.access_token}});
-        if (!resp.ok) {
-          const data = await resp.json().catch(() => ({}));
-          throw new Error(data.detail || "No se pudo crear el resumen.");
-        }
-        const blob = await resp.blob();
-        const href = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = href;
-        a.download = "historial_" + desde + "_" + hasta + ".xlsx";
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        URL.revokeObjectURL(href);
-        mostrarMensaje(msg, "Se descargó el Excel del periodo.", "exito");
-      } catch(e) {
-        mostrarMensaje(msg, e.message || "Error al descargar.");
-      } finally {
-        boton.disabled = false;
-      }
     });
 
     // Al abrir la página, revisar si ya existe una sesión.
