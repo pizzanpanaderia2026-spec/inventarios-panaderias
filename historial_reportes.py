@@ -5,7 +5,7 @@ from collections import defaultdict
 from datetime import date, timedelta
 from decimal import Decimal
 from io import BytesIO
-from calendar import month_name
+from zoneinfo import ZoneInfo
 import unicodedata
 
 from fastapi import APIRouter, Header, HTTPException
@@ -19,6 +19,7 @@ from historial_archivos import _normalizar_dia, _leer_archivos_r2, XLSX_MIME
 router = APIRouter()
 MAX_DIAS_DETALLE = 365
 MAX_DIAS_CONSULTA = 3650
+TZ_LOCAL = ZoneInfo("America/Mexico_City")
 MESES_ES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"]
 
 
@@ -214,7 +215,7 @@ def _reporte(panaderia_id, categoria, tipo, desde, hasta, authorization):
 
 def _titulo_periodo(tipo, desde, hasta):
     if tipo == "dia":
-        return desde.strftime("%d de %B de %Y")
+        return f"{desde.day:02d} de {MESES_ES[desde.month-1]} de {desde.year}"
     if tipo == "mes":
         return f"{MESES_ES[desde.month-1].capitalize()} {desde.year}"
     if tipo == "anio":
