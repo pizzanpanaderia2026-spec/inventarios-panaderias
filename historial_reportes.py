@@ -182,8 +182,8 @@ def _reporte(panaderia_id, categoria, tipo, desde, hasta, authorization):
         raise HTTPException(status_code=422, detail="La consulta diaria debe contener una sola fecha.")
     if tipo == "mes" and (desde.year, desde.month) != (hasta.year, hasta.month):
         raise HTTPException(status_code=422, detail="La consulta mensual debe corresponder a un solo mes.")
-    if tipo == "anio" and (desde.year != hasta.year or desde.month != 1 or desde.day != 1 or hasta.month != 12 or hasta.day != 31):
-        raise HTTPException(status_code=422, detail="La consulta anual debe abarcar del 1 de enero al 31 de diciembre.")
+    if tipo == "anio" and (desde.month != 1 or desde.day != 1 or desde.year != hasta.year or (hasta.month != 12 or hasta.day != 31) and hasta != date.today()):
+        raise HTTPException(status_code=422, detail="La consulta anual debe abarcar desde el 1 de enero hasta el cierre del año o la fecha actual.")
     if categoria in ("produccion", "analisis"):
         _perfil_con_acceso_produccion(str(usuario.id), perfil, panaderia_id)
     try:
@@ -308,9 +308,12 @@ def _hoja_informe(libro, nombre_hoja, titulo, categoria, inventario, produccion,
     if resumen_diario:
         datos = [[x["fecha"], x["inventario_cantidad"], float(Decimal(x["inventario_importe"])), x["produccion_cantidad"]] for x in resumen_diario]
         fila = _tabla(hoja, fila, "RESUMEN DIARIO", ["Fecha", "Inventario", "Importe inventario", "Producción"], datos, {3: '"$"#,##0.00'})
+    inicio_mensual = fin_mensual = 0
     if resumen_mensual:
+        inicio_mensual = fila + 2
         datos = [[x["mes"], x["inventario_cantidad"], float(Decimal(x["inventario_importe"])), x["produccion_cantidad"]] for x in resumen_mensual]
         fila = _tabla(hoja, fila, "RESUMEN MENSUAL", ["Mes", "Inventario", "Importe inventario", "Producción"], datos, {3: '"$"#,##0.00'})
+        fin_mensual = fila - 2
     if categoria in ("inventario", "analisis") and fin_producto >= inicio_producto:
         _grafica(hoja, "Producto", inicio_producto, fin_producto, 2, "Inventario por tipo de pan", "F3")
         if fin_precio >= inicio_precio:
@@ -319,6 +322,8 @@ def _hoja_informe(libro, nombre_hoja, titulo, categoria, inventario, produccion,
         _grafica(hoja, "Pan", inicio_prod, fin_prod, 2, "Producción por tipo de pan", "F35")
     if categoria == "analisis" and fin_analisis >= inicio_analisis:
         _grafica(hoja, "Producido", inicio_analisis, fin_analisis, 2, "Producción frente a sobrantes", "F35", segunda_serie=3)
+    if anio and categoria in ("produccion", "analisis") and fin_mensual >= inicio_mensual:
+        _grafica(hoja, "Mes", inicio_mensual, fin_mensual, 4, "Producción por mes", "F51")
     _estilizar(hoja)
     return hoja
 
@@ -365,7 +370,7 @@ def _crear_excel(categoria, tipo, desde, hasta, datos, resumen_only):
             _hoja_informe(libro, nombre[:31], titulo_dia, categoria,
                 combinado["inventario"], combinado["produccion"], combinado["resumen_diario"], analisis=combinado["analisis"])
     elif tipo == "anio":
-        for mes in range(1, 13):
+        for mes in range(1, hasta.month + 1):
             inicio = date(desde.year, mes, 1)
             fin = date(desde.year + (mes == 12), 1 if mes == 12 else mes + 1, 1) - timedelta(days=1)
             inv_mes = [x for x in inv["dias"] if inicio.isoformat() <= x["cierre"]["fecha"] <= fin.isoformat()]
