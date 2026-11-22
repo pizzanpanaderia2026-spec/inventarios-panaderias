@@ -337,7 +337,10 @@
       lastQuery = q; lastData = data;
       summary.textContent = data.dias_consultados + " días consultados · " + (data.resumen_only ? "Resumen optimizado" : "Detalle disponible");
       render(data);
-      downloadButton.disabled = false;
+      const hasRecords = category === "inventario" ? data.inventario.por_producto.length > 0 :
+        category === "produccion" ? data.produccion.por_pan.length > 0 :
+        data.inventario.por_producto.length > 0 || data.produccion.por_pan.length > 0;
+      downloadButton.disabled = !hasRecords;
     } catch (e) {
       result.replaceChildren(el("div", e.message, "mensaje error"));
       summary.textContent = "No se pudo completar la consulta.";
