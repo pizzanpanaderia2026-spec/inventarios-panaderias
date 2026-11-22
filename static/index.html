@@ -209,14 +209,14 @@
     #panelHistorial .historial-leyenda i { width:10px; height:10px; display:inline-block; border-radius:2px; }
     #panelHistorial .historial-tablas { min-width:0; }
     #panelHistorial .historial-vistas button { min-width:90px; }
-    #panelHistorial .historial-anios-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; }
+    #panelHistorial .historial-meses-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:8px; }\n    #panelHistorial .historial-mes-opcion { background:#eee7df; color:#422d20; border:1px solid #e7ddd1; padding:10px 6px; }\n    #panelHistorial .historial-mes-opcion.activo { background:#713f12; color:#fff; border-color:#713f12; }\n    #panelHistorial .historial-anios-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; }
     #panelHistorial .historial-anio-opcion { background:#eee7df; color:#422d20; border:1px solid #e7ddd1; }
     #panelHistorial .historial-anio-opcion.activo { background:#713f12; color:#fff; border-color:#713f12; }
     #panelHistorial .historial-campos-dobles { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
     #panelHistorial .historial-opcion, #panelHistorial .historial-periodo, #panelHistorial .historial-vista { min-height:44px; }
     @media(max-width:520px) {
       #panelHistorial .historial-campos-dobles { grid-template-columns:1fr; gap:0; }
-      #panelHistorial .historial-grafica { padding:8px; }
+      #panelHistorial .historial-meses-grid { grid-template-columns:repeat(3,minmax(0,1fr)); }\n      #panelHistorial .historial-grafica { padding:8px; }
       #panelHistorial .historial-grafica svg { min-width:520px; }
       #panelHistorial .historial-grafica { overflow-x:auto; }
     }
@@ -581,12 +581,7 @@
               <div class="historial-campos-dobles oculto" data-hist-campo="mes">
                 <div class="campo">
                   <label for="histMes">Mes</label>
-                  <select id="histMes">
-                    <option value="1">Enero</option><option value="2">Febrero</option><option value="3">Marzo</option>
-                    <option value="4">Abril</option><option value="5">Mayo</option><option value="6">Junio</option>
-                    <option value="7">Julio</option><option value="8">Agosto</option><option value="9">Septiembre</option>
-                    <option value="10">Octubre</option><option value="11">Noviembre</option><option value="12">Diciembre</option>
-                  </select>
+<div id="histMesOpciones" class="historial-meses-grid" role="group" aria-label="Mes"></div>
                 </div>
                 <div class="campo">
                   <label for="histAnioMes">Año</label>
