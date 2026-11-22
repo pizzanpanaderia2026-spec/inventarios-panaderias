@@ -287,6 +287,35 @@
     #panelProduccion .produccion-acciones { min-width: 150px; }
   }
 </style>
+
+<style>
+  /* Historial: mantiene la paleta y los componentes visuales existentes. */
+  #panelHistorial .historial-categorias,
+  #panelHistorial .historial-periodos,
+  #panelHistorial .historial-vistas { display:flex; flex-wrap:wrap; gap:8px; }
+  #panelHistorial .historial-opcion,
+  #panelHistorial .historial-periodo,
+  #panelHistorial .historial-vista { background:#eee7df; color:#422d20; border:1px solid #e7ddd1; }
+  #panelHistorial .historial-opcion { flex:1 1 150px; min-height:48px; font-weight:700; }
+  #panelHistorial .historial-periodo,
+  #panelHistorial .historial-vista { flex:1 1 65px; padding:10px 12px; }
+  #panelHistorial .historial-opcion.activo,
+  #panelHistorial .historial-periodo.activo,
+  #panelHistorial .historial-vista.activo { background:#713f12; color:#fff; border-color:#713f12; }
+  #panelHistorial .historial-filtros { margin:16px 0; padding:16px; box-shadow:none; }
+  #panelHistorial .historial-campos-dobles { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+  #panelHistorial .historial-resultados-encabezado { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+  #panelHistorial .historial-contenido { min-height:150px; margin-top:12px; }
+  #panelHistorial .historial-vacio { border:1px dashed #d6c8b8; border-radius:12px; padding:24px 16px; text-align:center; background:#faf7f2; }
+  #panelHistorial .historial-descarga { margin-top:18px; padding-top:14px; border-top:1px solid #e7ded2; }
+  #panelHistorial .historial-descarga button { min-width:190px; }
+  @media(max-width:520px) {
+    #panelHistorial .historial-campos-dobles { grid-template-columns:1fr; gap:0; }
+    #panelHistorial .historial-resultados-encabezado { align-items:flex-start; }
+    #panelHistorial .historial-vistas { width:100%; }
+  }
+</style>
+
 </head>
 
 <body>
@@ -447,7 +476,7 @@
           <button class="boton-seccion" type="button" data-seccion="panelRegistro">Registro</button>
           <button class="boton-seccion" type="button" data-seccion="panelTablas">Tablas</button>
           <button class="boton-seccion" type="button" data-seccion="panelProductos">Agregar productos</button>
-          <button class="boton-seccion" type="button" data-seccion="panelHistorial">Historial de inventarios</button>
+          <button class="boton-seccion" type="button" data-seccion="panelHistorial">Historial</button>
           <button id="botonAdministracion" class="boton-seccion oculto" type="button" data-seccion="panelAdministracion">Administración</button>
           <button id="botonProduccion" class="boton-seccion" type="button" data-seccion="panelProduccion">Producción</button>
         </nav>
@@ -498,23 +527,86 @@
         </section>
 
         <section id="panelHistorial" class="panel panel-seccion oculto">
-          <h3>Historial de inventarios</h3>
-          <p class="nota">Selecciona una fecha del calendario para consultar o descargar su inventario histórico.</p>
-          <div class="historial-calendario">
-            <div class="barra"><button id="histMesAnterior" class="secundario" type="button" aria-label="Mes anterior">‹</button><strong id="histMesTitulo"></strong><button id="histMesSiguiente" class="secundario" type="button" aria-label="Mes siguiente">›</button></div>
-            <div id="histCalendario" class="calendario-grid"></div>
-            <p class="nota"><span class="leyenda-reciente"></span> Últimos 30 días <span class="leyenda-antigua"></span> Más de 30 días</p>
+          <div class="historial-encabezado">
+            <div>
+              <h3>Historial</h3>
+              <p class="nota">Consulta inventarios, producción y análisis operativo por fecha o periodo.</p>
+            </div>
           </div>
-          <div id="historialResultado" class="historial-resultado"><p class="nota">Selecciona una fecha para ver su inventario.</p></div>
-                    <div class="panel" style="margin-top:18px">
-            <h4>Resumen de un periodo (hasta 31 días)</h4>
-            <p class="nota">Une los registros de varias fechas para saber cuántas conchas, bolillos u otros productos se registraron en el periodo elegido.</p>
-            <div class="campo"><label for="resumenDesde">Desde</label><input id="resumenDesde" type="date"></div>
-            <div class="campo"><label for="resumenHasta">Hasta</label><input id="resumenHasta" type="date"></div>
-            <button id="botonResumenPeriodo" type="button">Descargar resumen Excel</button>
-            <div id="mensajeResumenPeriodo" class="mensaje oculto" role="status"></div>
+
+          <div class="historial-categorias" role="group" aria-label="Categoría del historial">
+            <button type="button" class="historial-opcion activo" data-hist-categoria="inventario" aria-pressed="true">Inventario</button>
+            <button type="button" class="historial-opcion" data-hist-categoria="produccion" aria-pressed="false">Producción</button>
+            <button type="button" class="historial-opcion" data-hist-categoria="analisis" aria-pressed="false">Análisis operativo</button>
           </div>
-          <div id="mensajeHistorial" class="mensaje oculto" role="status"></div>
+
+          <div class="historial-filtros panel">
+            <h4>Tipo de consulta</h4>
+            <div class="historial-periodos" role="group" aria-label="Tipo de consulta">
+              <button type="button" class="historial-periodo activo" data-hist-periodo="dia" aria-pressed="true">Día</button>
+              <button type="button" class="historial-periodo" data-hist-periodo="mes" aria-pressed="false">Mes</button>
+              <button type="button" class="historial-periodo" data-hist-periodo="anio" aria-pressed="false">Año</button>
+              <button type="button" class="historial-periodo" data-hist-periodo="periodo" aria-pressed="false">Periodo</button>
+            </div>
+
+            <div class="historial-filtro-campos">
+              <div class="campo" data-hist-campo="dia">
+                <label for="histFechaDia">Selecciona la fecha</label>
+                <input id="histFechaDia" type="date">
+              </div>
+              <div class="historial-campos-dobles oculto" data-hist-campo="mes">
+                <div class="campo">
+                  <label for="histMes">Mes</label>
+                  <select id="histMes">
+                    <option value="1">Enero</option><option value="2">Febrero</option><option value="3">Marzo</option>
+                    <option value="4">Abril</option><option value="5">Mayo</option><option value="6">Junio</option>
+                    <option value="7">Julio</option><option value="8">Agosto</option><option value="9">Septiembre</option>
+                    <option value="10">Octubre</option><option value="11">Noviembre</option><option value="12">Diciembre</option>
+                  </select>
+                </div>
+                <div class="campo">
+                  <label for="histAnioMes">Año</label>
+                  <select id="histAnioMes" class="historial-anios"></select>
+                </div>
+              </div>
+              <div class="campo oculto" data-hist-campo="anio">
+                <label for="histAnio">Selecciona el año</label>
+                <select id="histAnio" class="historial-anios"></select>
+              </div>
+              <div class="historial-campos-dobles oculto" data-hist-campo="periodo">
+                <div class="campo">
+                  <label for="histDesde">Fecha inicial</label>
+                  <input id="histDesde" type="date">
+                </div>
+                <div class="campo">
+                  <label for="histHasta">Fecha final</label>
+                  <input id="histHasta" type="date">
+                </div>
+              </div>
+              <p id="histAyudaPeriodo" class="nota">Elige una fecha para consultar la información de ese día.</p>
+            </div>
+            <button id="histConsultar" type="button" class="ancho">Consultar</button>
+          </div>
+
+          <div class="historial-resultados">
+            <div class="historial-resultados-encabezado">
+              <div><h4>Resultados</h4><p id="histResumenConsulta" class="nota">Selecciona los filtros para comenzar.</p></div>
+              <div class="historial-vistas" role="group" aria-label="Tipo de visualización">
+                <button type="button" class="historial-vista activo" data-hist-vista="graficas" aria-pressed="true">Gráficas</button>
+                <button type="button" class="historial-vista" data-hist-vista="tablas" aria-pressed="false">Tablas</button>
+              </div>
+            </div>
+            <div id="historialResultadoNuevo" class="historial-contenido" aria-live="polite">
+              <div class="historial-vacio">
+                <strong>Consulta tu información histórica</strong>
+                <p class="nota">Aquí aparecerán las tablas o gráficas correspondientes a la categoría y al periodo que selecciones.</p>
+              </div>
+            </div>
+            <div class="historial-descarga">
+              <button id="histDescargarExcel" type="button" class="secundario" disabled>Descargar en Excel</button>
+              <p id="histEstadoDescarga" class="nota">La descarga se habilitará al conectar el generador de informes del Historial.</p>
+            </div>
+          </div>
         </section>
         <section id="panelAdministracion" class="panel panel-seccion oculto">
           <div class="admin-encabezado"><h3>Administración</h3></div>
@@ -603,6 +695,7 @@
   <script src="/static/produccion.js?v=20261121-2"></script>
   <script src="/static/tablas.js?v=ultimo-cierre-excel-20261101-1"></script>
   <script src="/static/historial-inventarios.js?v=3"></script>
+  <script src="/static/historial-interfaz.js?v=20261122-1"></script>
   <script>
     // CONFIGURACIÓN DE SUPABASE
     const SUPABASE_URL = "https://fjthttvprmjrfmmsnxer.supabase.co";
