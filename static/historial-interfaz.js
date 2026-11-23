@@ -25,6 +25,7 @@
     b.setAttribute("aria-pressed", index + 1 === selectedMonth ? "true" : "false");
     b.addEventListener("click", () => {
       selectedMonth = index + 1;
+      invalidateQuery();
       monthGrid.querySelectorAll("button").forEach(x => {
         const active = Number(x.dataset.mes) === selectedMonth;
         x.classList.toggle("activo", active);
@@ -48,6 +49,7 @@
     b.setAttribute("aria-pressed", y === selectedYear ? "true" : "false");
     b.addEventListener("click", () => {
       selectedYear = y;
+      invalidateQuery();
       yearGrid.querySelectorAll("button").forEach(x => {
         const active = Number(x.textContent) === y;
         x.classList.toggle("activo", active);
@@ -76,6 +78,7 @@
     };
     $("histAyudaPeriodo").textContent = messages[period];
     lastData = null;
+    lastQuery = null;
     downloadButton.disabled = true;
     result.innerHTML = '<div class="historial-vacio"><strong>Configura tu consulta</strong><p class="nota">Selecciona los filtros y pulsa Consultar para cargar información real.</p></div>';
     summary.textContent = "Categoría: " + category + " · Consulta: " + period;
@@ -96,12 +99,21 @@
     setActive("[data-hist-vista]", "data-hist-vista", view);
     if (lastData) render(lastData);
   }));
+  function invalidateQuery() {
+    lastQuery = null;
+    lastData = null;
+    downloadButton.disabled = true;
+    $("histEstadoDescarga").textContent = "Vuelve a consultar para descargar los filtros actuales.";
+  }
+  dateDay.addEventListener("change", invalidateQuery);
+  yearSelect.addEventListener("change", invalidateQuery);
   from.addEventListener("change", () => {
+    invalidateQuery();
     to.min = from.value || "";
     if (from.value && (!to.value || to.value < from.value)) to.value = from.value;
     updatePeriodHint();
   });
-  to.addEventListener("change", updatePeriodHint);
+  to.addEventListener("change", () => { invalidateQuery(); updatePeriodHint(); });
   function updatePeriodHint() {
     if (!from.value || !to.value || from.value > to.value) return;
     const days = Math.floor((Date.parse(to.value + "T00:00:00Z") - Date.parse(from.value + "T00:00:00Z")) / 86400000) + 1;
