@@ -13,6 +13,7 @@ from fastapi.responses import StreamingResponse
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment
 from openpyxl.chart import BarChart, Reference
+from openpyxl.chart.label import DataLabelList
 
 from historial_archivos import _normalizar_dia, _leer_archivos_r2, XLSX_MIME
 
@@ -281,6 +282,8 @@ def _grafica(hoja, titulo, fila_inicio, fila_fin, columna, titulo_grafica, ancla
     if not segunda_serie:
         chart.legend = None
     chart.varyColors = True
+    chart.dLbls = DataLabelList()
+    chart.dLbls.showVal = True
     hoja.add_chart(chart, ancla)
 
 
@@ -398,7 +401,7 @@ def _crear_excel(categoria, tipo, desde, hasta, datos, resumen_only):
             }
             combinado["analisis"] = _agregar([inv_dia] if inv_dia else [], [prod_dia] if prod_dia else [], date.fromisoformat(fecha), date.fromisoformat(fecha))["analisis"]
             fecha_obj = date.fromisoformat(fecha)
-            nombre = f"{fecha_obj.day:02d}-{MESES_ES[fecha_obj.month-1][:3]}"
+            nombre = f"{fecha_obj.day:02d}-{MESES_ES[fecha_obj.month-1][:3]}-{fecha_obj.year}"
             titulo_dia = f"{fecha_obj.day:02d} de {MESES_ES[fecha_obj.month-1]} de {fecha_obj.year}"
             _hoja_informe(libro, nombre[:31], titulo_dia, categoria,
                 combinado["inventario"], combinado["produccion"], combinado["resumen_diario"], analisis=combinado["analisis"])
