@@ -307,6 +307,19 @@
         { name: "Sobrante", values: data.analisis.por_pan.map(x => x.sobrante) }
       ], data.analisis.por_pan.map(x => x.pan)));
     }
+    if (category === "analisis" && (period === "anio" || data.resumen_only)) {
+      const monthly = new Map();
+      if (data.resumen_only) {
+        (data.resumen_mensual || []).forEach(x => monthly.set(x.mes, Number(x.produccion_cantidad || 0)));
+      } else {
+        data.resumen_diario.forEach(x => {
+          const key = x.fecha.slice(0,7);
+          monthly.set(key, (monthly.get(key) || 0) + Number(x.produccion_cantidad || 0));
+        });
+      }
+      const keys = [...monthly.keys()].sort();
+      host.appendChild(chartSVG("Producción por mes", [{ name: "Producción", values: keys.map(k => monthly.get(k)) }], keys));
+    }
     if (category === "produccion" && (period === "anio" || data.resumen_only)) {
       const monthsMap = new Map();
       if (data.resumen_only) {
