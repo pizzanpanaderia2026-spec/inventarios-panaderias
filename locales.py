@@ -351,7 +351,6 @@ def eliminar_panaderia_vacia(
         # Los productos inactivos y las categorías propias se eliminan junto con
         # el local; la validación previa protege cualquier producto con historial.
         core.supabase.table("productos").delete().eq("panaderia_id", panaderia_id).eq("activo", False).execute()
-        core.supabase.table("categorias_productos").delete().eq("panaderia_id", panaderia_id).execute()
         core.supabase.table("auditoria_inventario").delete().eq("panaderia_id", panaderia_id).execute()
         # Se retiran únicamente las asignaciones de este local; la comprobación
         # previa garantiza que cada cuenta conserva al menos otro local.
