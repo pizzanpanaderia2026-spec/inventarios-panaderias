@@ -226,13 +226,29 @@ def _iniciar_respaldo(background_tasks: BackgroundTasks) -> dict:
 def admin_estado_r2(authorization: str | None = Header(default=None)):
     _admin(authorization)
     try:
-        return comprobar_conexion_r2()
+        from main import supabase
+        if supabase is None:
+            raise HTTPException(status_code=503, detail="Supabase no está configurado en el servidor.")
+        # Confirma lectura real de la tabla que registra los archivos archivados.
+        supabase.table("archivos_archivados").select("id").limit(1).execute()
+        estado_r2 = comprobar_conexion_r2()
+        return {
+            **estado_r2,
+            "supabase": {
+                "conectado": True,
+                "metadatos_accesibles": True,
+                "mensaje": "Supabase permite consultar los registros de archivos archivados.",
+            },
+            "mensaje": "Supabase está conectado para los metadatos y Cloudflare R2 permite subir, leer, verificar y borrar un archivo de prueba.",
+        }
+    except HTTPException:
+        raise
     except R2ConfigurationError as error:
         raise HTTPException(status_code=503, detail=str(error))
     except Exception:
         raise HTTPException(
             status_code=503,
-            detail="No se pudo comprobar la conexión con Cloudflare R2. Revisa las variables de entorno y los permisos del token.",
+            detail="No se pudo comprobar Supabase y Cloudflare R2. Revisa la conexión de base de datos, las variables de R2 y los permisos del token.",
         )
 
 

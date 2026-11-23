@@ -192,15 +192,23 @@ def _reporte(panaderia_id, categoria, tipo, desde, hasta, authorization, incluir
     dias = _validar(desde, hasta)
     usuario = obtener_usuario_autenticado(authorization)
     perfil = obtener_perfil(str(usuario.id))
-    comprobar_acceso_panaderia(str(usuario.id), perfil, panaderia_id)
+    if categoria not in ("inventario", "produccion", "analisis"):
+        raise HTTPException(status_code=422, detail="La categoría de Historial no es válida.")
+    if categoria == "analisis":
+        from main import es_admin_principal
+        if not es_admin_principal(perfil):
+            raise HTTPException(status_code=403, detail="El análisis operativo está reservado para la administradora principal.")
+        comprobar_acceso_panaderia(str(usuario.id), perfil, panaderia_id)
+    elif categoria == "produccion":
+        _perfil_con_acceso_produccion(str(usuario.id), perfil, panaderia_id)
+    else:
+        comprobar_acceso_panaderia(str(usuario.id), perfil, panaderia_id)
     if tipo == "dia" and desde != hasta:
         raise HTTPException(status_code=422, detail="La consulta diaria debe contener una sola fecha.")
     if tipo == "mes" and (desde.year, desde.month) != (hasta.year, hasta.month):
         raise HTTPException(status_code=422, detail="La consulta mensual debe corresponder a un solo mes.")
     if tipo == "anio" and (desde.month != 1 or desde.day != 1 or desde.year != hasta.year or (hasta.month != 12 or hasta.day != 31) and hasta != datetime.now(TZ_LOCAL).date()):
         raise HTTPException(status_code=422, detail="La consulta anual debe abarcar desde el 1 de enero hasta el cierre del año o la fecha actual.")
-    if categoria in ("produccion", "analisis"):
-        _perfil_con_acceso_produccion(str(usuario.id), perfil, panaderia_id)
     try:
         inventario = _leer_inventario(panaderia_id, desde, hasta) if categoria in ("inventario", "analisis") else []
         produccion = _leer_produccion(panaderia_id, desde, hasta) if categoria in ("produccion", "analisis") else []

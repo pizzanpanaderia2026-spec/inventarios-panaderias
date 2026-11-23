@@ -205,13 +205,50 @@ def _subir_archivo_verificado(panaderia_id: int, desde: date, hasta: date, histo
             supabase.table("archivos_archivados").update(registro).eq("id", existente[0]["id"]).execute()
         else:
             supabase.table("archivos_archivados").insert(registro).execute()
-        return {"guardado": True, "verificado": True, "archivo": nombre, "tamano_bytes": len(contenido)}
-    except Exception:
+
+        # Verificación de lectura posterior: confirma que Supabase registró exactamente
+        # el objeto que ya se comprobó en R2, no solo que la escritura devolvió respuesta.
+        metadata = (
+            supabase.table("archivos_archivados")
+            .select("estado,archive_key,sha256,tamano_bytes")
+            .eq("panaderia_id", panaderia_id)
+            .eq("periodo_inicio", desde.isoformat())
+            .eq("periodo_fin", hasta.isoformat())
+            .limit(1).execute().data or []
+        )
+        if not metadata:
+            raise RuntimeError("El archivo se guardó en R2, pero no se encontró su registro de verificación en Supabase.")
+        guardado = metadata[0]
+        if (
+            guardado.get("estado") != "verificado"
+            or guardado.get("archive_key") != key
+            or guardado.get("sha256") != digest
+            or int(guardado.get("tamano_bytes") or -1) != len(contenido)
+        ):
+            raise RuntimeError("Los metadatos de Supabase no coinciden con el archivo verificado en R2.")
+        return {
+            "guardado": True,
+            "verificado": True,
+            "supabase_verificado": True,
+            "archivo": nombre,
+            "tamano_bytes": len(contenido),
+            "sha256": digest,
+        }
+    except Exception as error:
         if subido:
             try:
                 cliente.delete_object(Bucket=bucket, Key=key)
             except Exception:
                 pass
+        try:
+            supabase.table("archivos_archivados").update({
+                "estado": "error",
+                "ultimo_error": str(error)[:700],
+                "verificado_en": None,
+                "actualizado_en": datetime.now(timezone.utc).isoformat(),
+            }).eq("panaderia_id", panaderia_id).eq("periodo_inicio", desde.isoformat()).eq("periodo_fin", hasta.isoformat()).execute()
+        except Exception:
+            pass
         raise
 
 

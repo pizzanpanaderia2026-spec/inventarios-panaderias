@@ -457,23 +457,23 @@
             <h2 id="tituloEliminarLocal">Eliminar local</h2>
             <button id="volverListaDesdeEliminar" class="secundario" type="button">Volver a locales</button>
           </div>
-          <p>Selecciona el local que deseas retirar. Antes de permitir la eliminación, sus productos, historial y archivos deberán quedar respaldados y verificados en Cloudflare R2.</p>
+          <p>Selecciona un local vacío para eliminarlo. La aplicación comprobará que no tenga productos, inventarios, producción, archivos históricos ni usuarios asignados.</p>
           <div class="campo">
             <label for="localAEliminar">Local que deseas eliminar</label>
             <select id="localAEliminar" required>
               <option value="">Selecciona un local</option>
             </select>
           </div>
-          <h3>Respaldo obligatorio en Cloudflare R2</h3>
+          <h3>Comprobación de información del local</h3>
           <div class="lista-respaldo">
-            <label><input type="checkbox" disabled> <span><strong>Lista de productos</strong><br><span class="nota">Productos, nombres, precios y datos asociados al local.</span></span></label>
-            <label><input type="checkbox" disabled> <span><strong>Historial de inventarios</strong><br><span class="nota">Registros y cierres históricos que deben conservarse.</span></span></label>
-            <label><input type="checkbox" disabled> <span><strong>Archivos de los últimos 30 días</strong><br><span class="nota">Archivos asociados al local, con verificación de que se hayan guardado correctamente.</span></span></label>
+            <label><input type="checkbox" disabled> <span><strong>Productos</strong><br><span class="nota">No debe haber productos registrados.</span></span></label>
+            <label><input type="checkbox" disabled> <span><strong>Inventarios y producción</strong><br><span class="nota">No debe haber cierres ni registros de producción.</span></span></label>
+            <label><input type="checkbox" disabled> <span><strong>Usuarios y archivos</strong><br><span class="nota">No debe haber usuarios asignados ni archivos archivados.</span></span></label>
           </div>
-          <div id="estadoRespaldoLocal" class="estado-respaldo" role="status"><strong>Estado del respaldo:</strong><p class="nota">Pendiente. La eliminación permanece bloqueada hasta completar y verificar el respaldo integral del local en Cloudflare R2.</p></div>
+          <div id="estadoRespaldoLocal" class="estado-respaldo" role="status"><strong>Estado de la comprobación:</strong><p class="nota">Selecciona un local para comprobar si está vacío.</p></div>
           <div id="mensajeEliminarLocal" class="mensaje oculto" role="alert"></div>
           <button id="botonEliminarLocal" class="ancho boton-peligro" type="button" disabled>Eliminar local</button>
-          <p class="nota">Si falla el respaldo o no se puede verificar, el local no se eliminará. Los datos originales se conservarán.</p>
+          <p class="nota">Por seguridad, solo se eliminan locales sin información operativa. Los locales con datos se conservan y deben archivarse antes de cualquier retiro.</p>
         </section>
       </div>
     </section>
@@ -503,7 +503,7 @@
         <nav id="menuSecciones" class="menu-secciones" aria-label="Secciones de la panadería">
           <button class="boton-seccion" type="button" data-seccion="panelRegistro">Registro</button>
           <button class="boton-seccion" type="button" data-seccion="panelTablas">Tablas</button>
-          <button class="boton-seccion" type="button" data-seccion="panelProductos">Agregar productos</button>
+          <button class="boton-seccion" type="button" data-seccion="panelProductos">Productos</button>
           <button class="boton-seccion" type="button" data-seccion="panelHistorial">Historial</button>
           <button id="botonAdministracion" class="boton-seccion oculto" type="button" data-seccion="panelAdministracion">Administración</button>
           <button id="botonProduccion" class="boton-seccion" type="button" data-seccion="panelProduccion">Producción</button>
@@ -652,9 +652,9 @@
               </select>
             </div>
             <div class="admin-usuario">
-              <strong>Cloudflare R2</strong>
-              <p>El almacenamiento privado de los inventarios históricos se comprobará al abrir esta sección.</p>
-              <span class="nota">Los inventarios no se eliminan de Supabase hasta verificar que el respaldo esté guardado y se pueda recuperar.</span>
+              <strong>Supabase y Cloudflare R2</strong>
+              <p>Los archivos Excel se almacenan de forma privada en Cloudflare R2. Supabase conserva el registro del archivo, su periodo, tamaño y huella SHA-256.</p>
+              <span class="nota">La comprobación prueba la conexión con Supabase y realiza una subida, lectura, comparación y eliminación de un archivo temporal en R2. Cada respaldo también se vuelve a leer desde ambos servicios para confirmar que coincidan.</span>
             </div>
             <div class="admin-usuario" id="adminEstadoRespaldo" aria-live="polite">
               <div class="barra"><strong>Estado del respaldo</strong><span id="adminRespaldoEtiqueta" class="nota">En espera</span></div>
@@ -689,7 +689,7 @@
             <div class="campo"><label for="adminNombre">Nombre</label><input id="adminNombre" maxlength="120" required></div>
             <div class="campo"><label for="adminUsername">Usuario</label><input id="adminUsername" maxlength="60" autocomplete="off" required></div>
             <div class="campo"><label for="adminPassword">Contraseña</label><input id="adminPassword" type="password" minlength="8" autocomplete="new-password"><p class="nota" id="adminAyudaPassword">Usa una contraseña de al menos 8 caracteres.</p></div>
-            <div class="campo"><label for="adminTipoUsuario">Tipo de usuario</label><select id="adminTipoUsuario" required><option value="encargado">Encargada</option><option value="produccion">Producción</option></select></div>
+            <div class="campo"><label for="adminTipoUsuario">Tipo de usuario</label><select id="adminTipoUsuario" required><option value="encargado">Encargado de inventario</option><option value="produccion">Encargado de producción</option></select></div>
             <fieldset class="admin-locales"><legend>Locales autorizados (mínimo uno)</legend><div id="adminOpcionesLocales"></div></fieldset>
             <button id="adminGuardarUsuario" type="submit">Crear usuario</button>
             <button id="adminCancelarUsuario" class="secundario" type="button">Cancelar</button>
@@ -713,7 +713,7 @@
   <!-- Cliente oficial de Supabase -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
-  <script src="/static/productos.js?v=permisos-encargados-20261108-1"></script>
+  <script src="/static/productos.js?v=eliminar-individual-20261123-1"></script>
   <script src="/static/registro.js?v=autoguardado-cierre-20261104-1"></script>
   <script src="/static/produccion.js?v=20261121-2"></script>
   <script src="/static/tablas.js?v=ultimo-cierre-excel-20261101-1"></script>
@@ -887,11 +887,31 @@
           boton.disabled = false;
         }
       };
-      document.getElementById("botonEliminarLocal").onclick = () => {
-        if (!esAdministrador()) return;
-        mostrarMensaje(document.getElementById("mensajeEliminarLocal"),
-          "La eliminación está bloqueada hasta que el respaldo integral del local en Cloudflare R2 esté implementado y verificado.",
-          "error");
+      const selectorEliminar = document.getElementById("localAEliminar");
+      selectorEliminar.onchange = comprobarLocalParaEliminar;
+      document.getElementById("botonEliminarLocal").onclick = async () => {
+        if (!esAdministrador() || !selectorEliminar.value) return;
+        const localId = Number(selectorEliminar.value);
+        const local = panaderiasAutorizadas.find(x => Number(x.id) === localId);
+        if (!local || !confirm("¿Eliminar definitivamente el local vacío "+local.nombre+"? Esta acción no se puede deshacer.")) return;
+        const botonEliminar = document.getElementById("botonEliminarLocal");
+        botonEliminar.disabled = true;
+        try {
+          const respuesta = await fetch("/api/admin/panaderias/"+encodeURIComponent(localId), {
+            method:"DELETE",
+            headers:{"Authorization":"Bearer "+sesionActual.access_token,"Accept":"application/json"}
+          });
+          const resultado = await respuesta.json().catch(()=>({}));
+          if (!respuesta.ok) throw new Error(resultado.detail || "No se pudo eliminar el local.");
+          mostrarMensaje(document.getElementById("mensajeEliminarLocal"),"Local eliminado correctamente.","exito");
+          await cargarDatosUsuario(sesionActual);
+          mostrarVistaLocales("lista");
+        } catch(error) {
+          mostrarMensaje(document.getElementById("mensajeEliminarLocal"),error.message || "No se pudo eliminar el local.","error");
+          await comprobarLocalParaEliminar();
+        } finally {
+          botonEliminar.disabled = !selectorEliminar.value;
+        }
       };
     }
 
@@ -907,9 +927,37 @@
     function prepararOpcionesEliminarLocal() {
       const select = document.getElementById("localAEliminar");
       select.replaceChildren(new Option("Selecciona un local", ""));
-      panaderiasAutorizadas.forEach(local => {
-        select.add(new Option(local.nombre, String(local.id)));
-      });
+      panaderiasAutorizadas.forEach(local => select.add(new Option(local.nombre, String(local.id))));
+      document.getElementById("botonEliminarLocal").disabled = true;
+      document.getElementById("estadoRespaldoLocal").textContent = "Selecciona un local para comprobar si está vacío.";
+    }
+
+    async function comprobarLocalParaEliminar() {
+      const select = document.getElementById("localAEliminar");
+      const boton = document.getElementById("botonEliminarLocal");
+      const estado = document.getElementById("estadoRespaldoLocal");
+      boton.disabled = true;
+      if (!select.value) {
+        estado.textContent = "Selecciona un local para comprobar si está vacío.";
+        return;
+      }
+      try {
+        const respuesta = await fetch("/api/admin/panaderias/"+encodeURIComponent(select.value)+"/estado-eliminacion", {
+          headers:{"Authorization":"Bearer "+sesionActual.access_token,"Accept":"application/json"}
+        });
+        const datos = await respuesta.json().catch(()=>({}));
+        if (!respuesta.ok) throw new Error(datos.detail || "No se pudo comprobar el local.");
+        estado.replaceChildren();
+        const titulo = document.createElement("strong");
+        titulo.textContent = datos.eliminable ? "Local vacío: puede eliminarse." : "No se puede eliminar todavía.";
+        const detalle = document.createElement("p");
+        detalle.className = "nota";
+        detalle.textContent = datos.eliminable ? "No se encontraron productos, inventarios, producción, archivos ni usuarios asignados." : "Pendiente: "+(datos.motivos || []).join("; ")+".";
+        estado.append(titulo,detalle);
+        boton.disabled = !datos.eliminable;
+      } catch(error) {
+        estado.textContent = error.message || "No se pudo comprobar el local.";
+      }
     }
 
     function dibujarPanaderias() {
@@ -1292,7 +1340,7 @@
           const card = document.createElement("div");
           card.className = "admin-usuario";
           const nombre = document.createElement("strong");
-          nombre.textContent = u.nombre + " (" + (u.es_admin_principal ? "Administradora" : u.rol === "produccion" ? "Producción" : "Encargada") + ")";
+          nombre.textContent = u.nombre + " (" + (u.es_admin_principal ? "Administradora" : u.rol === "produccion" ? "Encargado de producción" : "Encargado de inventario") + ")";
           card.appendChild(nombre);
           const user = document.createElement("p");
           user.className = "nota";
