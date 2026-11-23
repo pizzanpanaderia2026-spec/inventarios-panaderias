@@ -186,7 +186,7 @@ def _agregar(inventario, produccion, desde, hasta, resumen_only=False):
     }
 
 
-def _reporte(panaderia_id, categoria, tipo, desde, hasta, authorization):
+def _reporte(panaderia_id, categoria, tipo, desde, hasta, authorization, incluir_detalle=True):
     from main import (obtener_usuario_autenticado, obtener_perfil,
         comprobar_acceso_panaderia, _perfil_con_acceso_produccion)
     dias = _validar(desde, hasta)
@@ -218,6 +218,10 @@ def _reporte(panaderia_id, categoria, tipo, desde, hasta, authorization):
                 "inventario_importe": str(v["inventario_importe"]), "produccion_cantidad": v["produccion_cantidad"]}
                 for k, v in sorted(mensual.items())]
             resumen["resumen_diario"] = []
+            resumen["inventario"]["dias"] = []
+            resumen["produccion"]["dias"] = []
+        elif not incluir_detalle:
+            # La pantalla necesita agregados y series, no las líneas completas de cada día.
             resumen["inventario"]["dias"] = []
             resumen["produccion"]["dias"] = []
         return resumen, resumen_only, dias
@@ -427,7 +431,7 @@ def consultar_informe_historial(panaderia_id: int, categoria: str, tipo: str, de
         raise HTTPException(status_code=422, detail="Categoría de historial no válida.")
     if tipo not in ("dia", "mes", "anio", "periodo"):
         raise HTTPException(status_code=422, detail="Tipo de consulta no válido.")
-    datos, resumen_only, dias = _reporte(panaderia_id, categoria, tipo, desde, hasta, authorization)
+    datos, resumen_only, dias = _reporte(panaderia_id, categoria, tipo, desde, hasta, authorization, incluir_detalle=False)
     return {"categoria": categoria, "tipo": tipo, "desde": desde.isoformat(), "hasta": hasta.isoformat(),
         "dias_consultados": dias, "resumen_only": resumen_only, **datos}
 
