@@ -468,7 +468,7 @@
           <div class="lista-respaldo">
             <label><input type="checkbox" disabled> <span><strong>Productos</strong><br><span class="nota">No debe haber productos registrados.</span></span></label>
             <label><input type="checkbox" disabled> <span><strong>Inventarios y producción</strong><br><span class="nota">No debe haber cierres ni registros de producción.</span></span></label>
-            <label><input type="checkbox" disabled> <span><strong>Usuarios y archivos</strong><br><span class="nota">No debe haber usuarios asignados ni archivos archivados.</span></span></label>
+            <label><input type="checkbox" disabled> <span><strong>Usuarios y archivos</strong><br><span class="nota">No debe haber archivos históricos ni usuarios que dependan exclusivamente de este local.</span></span></label>
           </div>
           <div id="estadoRespaldoLocal" class="estado-respaldo" role="status"><strong>Estado de la comprobación:</strong><p class="nota">Selecciona un local para comprobar si está vacío.</p></div>
           <div id="mensajeEliminarLocal" class="mensaje oculto" role="alert"></div>
@@ -952,7 +952,7 @@
         titulo.textContent = datos.eliminable ? "Local vacío: puede eliminarse." : "No se puede eliminar todavía.";
         const detalle = document.createElement("p");
         detalle.className = "nota";
-        detalle.textContent = datos.eliminable ? "No se encontraron productos, inventarios, producción, archivos ni usuarios asignados." : "Pendiente: "+(datos.motivos || []).join("; ")+".";
+        detalle.textContent = datos.eliminable ? "No se encontraron datos operativos ni usuarios que se queden sin otro local autorizado." : "Pendiente: "+(datos.motivos || []).join("; ")+".";
         estado.append(titulo,detalle);
         boton.disabled = !datos.eliminable;
       } catch(error) {
