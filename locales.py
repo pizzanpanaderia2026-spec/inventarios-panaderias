@@ -271,19 +271,35 @@ def _estado_eliminacion_local(core, panaderia_id: int):
         raise HTTPException(status_code=404, detail="No se encontró el local.")
     motivos = []
     restantes = core.supabase.table("panaderias").select("id").eq("activa", True).neq("id", panaderia_id).limit(1).execute().data or []
-    if local[0].get("activa") and not restantes:
+    if not restantes:
         motivos.append("Debe conservarse al menos un local activo.")
     comprobaciones = [
         ("productos", "Productos registrados"),
         ("cierres_diarios", "Cierres o inventarios registrados"),
         ("produccion_registros", "Registros de producción"),
         ("archivos_archivados", "Archivos históricos o respaldos"),
-        ("accesos_panaderias", "Usuarios asignados"),
     ]
     for tabla, etiqueta in comprobaciones:
-        filas = core.supabase.table(tabla).select("id" if tabla != "accesos_panaderias" else "usuario_id").eq("panaderia_id", panaderia_id).limit(1).execute().data or []
+        filas = core.supabase.table(tabla).select("id").eq("panaderia_id", panaderia_id).limit(1).execute().data or []
         if filas:
             motivos.append(etiqueta)
+
+    # Una cuenta puede estar asignada a varios locales. Solo bloqueamos si
+    # eliminar este local la dejaría sin ningún otro local autorizado.
+    accesos = core.supabase.table("accesos_panaderias").select("usuario_id").eq("panaderia_id", panaderia_id).execute().data or []
+    usuarios_sin_otro_local = []
+    for acceso in accesos:
+        otros = (
+            core.supabase.table("accesos_panaderias")
+            .select("panaderia_id")
+            .eq("usuario_id", acceso["usuario_id"])
+            .neq("panaderia_id", panaderia_id)
+            .limit(1).execute().data or []
+        )
+        if not otros:
+            usuarios_sin_otro_local.append(acceso["usuario_id"])
+    if usuarios_sin_otro_local:
+        motivos.append("Hay usuarios que solo tienen asignado este local")
     return local[0], motivos
 
 
@@ -326,6 +342,9 @@ def eliminar_panaderia_vacia(
         # Solo se limpian categorías y auditoría administrativa del local vacío.
         # Los registros operativos se validaron antes y no se eliminan aquí.
         core.supabase.table("auditoria_inventario").delete().eq("panaderia_id", panaderia_id).execute()
+        # Se retiran únicamente las asignaciones de este local; la comprobación
+        # previa garantiza que cada cuenta conserva al menos otro local.
+        core.supabase.table("accesos_panaderias").delete().eq("panaderia_id", panaderia_id).execute()
         eliminado = core.supabase.table("panaderias").delete().eq("id", panaderia_id).select("id").execute().data or []
         if not eliminado:
             raise HTTPException(status_code=409, detail="El local ya no existe o no pudo eliminarse.")
