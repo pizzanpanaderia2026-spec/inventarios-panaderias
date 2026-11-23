@@ -2,7 +2,7 @@
 (function () {
   const root = document.getElementById("catalogoProductos");
   if (!root) return;
-  let token = null, bakery = null, categories = [], products = [];
+  let token = null, bakery = null, categories = [], products = [], readOnly = false;
   let openCategory = null, globalMenuOpen = false, categoryMenuOpen = null, selectionMode = false, selected = new Set(), editingProduct = null, editingCategory = null;
   const message = document.getElementById("mensajeProductos");
   const form = document.getElementById("formProducto");
@@ -11,9 +11,15 @@
   const saveButton = document.getElementById("botonGuardarProducto");
   const categoryInput = document.getElementById("categoriaProducto");
 
-  window.iniciarCatalogoProductos = function (session, selectedBakery) {
+  window.iniciarCatalogoProductos = function (session, selectedBakery, soloLectura = false) {
     token = session.access_token;
     bakery = selectedBakery;
+    readOnly = Boolean(soloLectura);
+    form.classList.toggle("oculto", readOnly);
+    document.getElementById("formCategoria").classList.toggle("oculto", readOnly);
+    document.getElementById("botonListaPrecios").classList.toggle("oculto", readOnly);
+    const nota = document.querySelector("#panelProductos > p.nota");
+    if (nota) nota.textContent = readOnly ? "Consulta las categorías, productos y precios de esta panadería." : "Administra las categorías y los productos de esta panadería.";
     return load();
   };
 
@@ -105,17 +111,22 @@
     const h=document.createElement("h4");h.textContent="Categorías";
     const sub=document.createElement("p");sub.className="nota";sub.textContent="Organiza los productos de esta panadería.";
     title.append(h,sub);
-    const global=document.createElement("div");global.className="catalogo-menu-wrap";
-    const dots=makeButton("⋮",()=>{globalMenuOpen=!globalMenuOpen;draw()},"catalogo-tres-puntos");
-    dots.setAttribute("aria-label","Opciones del catálogo");global.append(dots);
-    if(globalMenuOpen){
-      const menu=document.createElement("div");menu.className="catalogo-menu";
-      menu.append(makeButton("＋ Nueva categoría",()=>{globalMenuOpen=false;showCategoryForm()}));
-      menu.append(makeButton("＋ Nuevo producto",()=>{globalMenuOpen=false;showProductForm()}));
-      menu.append(makeButton("Ver productos desactivados",()=>{globalMenuOpen=false;openCategory=categories.find(c=>c.protegida)?.id||null;draw()}));
-      global.append(menu);
+    if (!readOnly) {
+      const global=document.createElement("div");global.className="catalogo-menu-wrap";
+      const dots=makeButton("⋮",()=>{globalMenuOpen=!globalMenuOpen;draw()},"catalogo-tres-puntos");
+      dots.setAttribute("aria-label","Opciones del catálogo");global.append(dots);
+      if(globalMenuOpen){
+        const menu=document.createElement("div");menu.className="catalogo-menu";
+        menu.append(makeButton("＋ Nueva categoría",()=>{globalMenuOpen=false;showCategoryForm()}));
+        menu.append(makeButton("＋ Nuevo producto",()=>{globalMenuOpen=false;showProductForm()}));
+        menu.append(makeButton("Ver productos desactivados",()=>{globalMenuOpen=false;openCategory=categories.find(c=>c.protegida)?.id||null;draw()}));
+        global.append(menu);
+      }
+      heading.append(title,global);
+    } else {
+      heading.append(title);
     }
-    heading.append(title,global);root.append(heading);
+    root.append(heading);
     const search=document.createElement("input");search.type="search";search.placeholder="Buscar categoría o producto...";search.className="catalogo-busqueda";search.addEventListener("input",()=>drawFiltered(search.value));root.append(search);
     const list=document.createElement("div");list.id="listaCategorias";list.className="catalogo-categorias";root.append(list);
     drawFiltered("");
@@ -135,7 +146,7 @@
       label.append(strong,small);const arrow=document.createElement("span");arrow.textContent=openCategory===c.id?"⌃":"›";
       open.append(name,label,arrow);
       head.append(open);
-      if(!c.protegida){
+      if(!c.protegida && !readOnly){
         const actions=document.createElement("div");actions.className="catalogo-menu-wrap";
         const dots=makeButton("⋮",()=>{openCategory=c.id;categoryMenuOpen=categoryMenuOpen===c.id?null:c.id;draw()},"catalogo-tres-puntos");
         dots.setAttribute("aria-label","Opciones de "+c.nombre);actions.append(dots);
@@ -160,18 +171,19 @@
         if(!rows.length){const empty=document.createElement("p");empty.className="nota";empty.textContent="No hay productos en esta categoría.";body.append(empty);}
         rows.forEach(p=>{
           const row=document.createElement("div");row.className="catalogo-producto";
-          if(selectionMode){
+          if(selectionMode && !readOnly){
             const check=document.createElement("input");check.type="checkbox";check.checked=selected.has(p.id);check.addEventListener("change",()=>{check.checked?selected.add(p.id):selected.delete(p.id);drawSelectionActions()});row.append(check);
           }
           const info=document.createElement("button");info.type="button";info.className="catalogo-producto-info";
           const pn=document.createElement("strong");pn.textContent=p.nombre+(p.activo?"":" · Desactivado");
           const price=document.createElement("small");price.textContent="$"+Number(p.precio).toFixed(2);
-          info.append(pn,price);info.addEventListener("click",()=>{if(selectionMode){selected.has(p.id)?selected.delete(p.id):selected.add(p.id);draw()}else showProductForm(p,p.categoria_id)});
+          info.append(pn,price);info.disabled = readOnly;
+          if (!readOnly) info.addEventListener("click",()=>{if(selectionMode){selected.has(p.id)?selected.delete(p.id):selected.add(p.id);draw()}else showProductForm(p,p.categoria_id)});
           row.append(info);
-          if(c.protegida){
+          if(!readOnly && c.protegida){
             row.append(makeButton("Reactivar",()=>reactivate(p),"secundario"));
             if(!selectionMode) row.append(makeButton("Eliminar",()=>deleteInactiveProduct(p),"boton-peligro"));
-          } else if(!selectionMode) {
+          } else if(!readOnly && !selectionMode) {
             row.append(makeButton("Editar",()=>showProductForm(p,p.categoria_id),"secundario"));
             row.append(makeButton("Eliminar",()=>deleteProduct(p),"boton-peligro"));
           }
