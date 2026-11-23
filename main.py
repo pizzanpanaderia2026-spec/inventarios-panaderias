@@ -1453,6 +1453,10 @@ app.include_router(archivado_router)
 from historial_archivos import router as historial_archivos_router
 app.include_router(historial_archivos_router)
 
+# Informes del Historial: consultas agregadas y Excel con gráficas nativas.
+from historial_reportes import router as historial_reportes_router
+app.include_router(historial_reportes_router)
+
 # Creación de locales y fotografías privadas en Cloudflare R2.
 from locales import router as locales_router
 app.include_router(locales_router)
