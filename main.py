@@ -243,9 +243,9 @@ class ProductoCambio(BaseModel):
     activo: bool
 
 
-def comprobar_acceso_panaderia(usuario_id: str, perfil: dict, panaderia_id: int):
-    if perfil["rol"] == "produccion":
-        raise HTTPException(status_code=403, detail="Tu cuenta solo tiene acceso al módulo de Producción.")
+def comprobar_acceso_panaderia(usuario_id: str, perfil: dict, panaderia_id: int, permitir_produccion: bool = False):
+    if perfil["rol"] == "produccion" and not permitir_produccion:
+        raise HTTPException(status_code=403, detail="Tu cuenta no tiene permiso para esta operación.")
     if perfil["rol"] == "admin" and perfil["es_admin_principal"]:
         return
     try:
@@ -287,7 +287,7 @@ def listar_productos(
 ):
     usuario = obtener_usuario_autenticado(authorization)
     perfil = obtener_perfil(str(usuario.id))
-    comprobar_acceso_panaderia(str(usuario.id), perfil, panaderia_id)
+    comprobar_acceso_panaderia(str(usuario.id), perfil, panaderia_id, permitir_produccion=True)
     try:
         resultado = (
             supabase.table("productos")
@@ -729,8 +729,8 @@ def reabrir_registro(
 
 
 
-def obtener_datos_ultimo_cierre(panaderia_id: int, usuario_id: str, perfil: dict):
-    comprobar_acceso_panaderia(usuario_id, perfil, panaderia_id)
+def obtener_datos_ultimo_cierre(panaderia_id: int, usuario_id: str, perfil: dict, permitir_produccion: bool = False):
+    comprobar_acceso_panaderia(usuario_id, perfil, panaderia_id, permitir_produccion=permitir_produccion)
     cierres = (
         supabase.table("cierres_diarios")
         .select("id,panaderia_id,fecha,estado,cerrado_por,cerrado_por_nombre")
@@ -752,6 +752,24 @@ def obtener_datos_ultimo_cierre(panaderia_id: int, usuario_id: str, perfil: dict
         if perfil_cierre:
             nombre_usuario = perfil_cierre[0].get("nombre")
     cierre["cerrado_por_nombre"] = nombre_usuario or "Usuario"
+    filas_produccion = (
+        supabase.table("produccion_registros")
+        .select("pan_nombre,cantidad")
+        .eq("panaderia_id", panaderia_id)
+        .eq("fecha_produccion", cierre["fecha"])
+        .execute()
+    ).data
+    acumulado_produccion = {}
+    for fila in filas_produccion:
+        nombre_pan = " ".join(str(fila.get("pan_nombre") or "").split())
+        if not nombre_pan:
+            continue
+        acumulado_produccion[nombre_pan] = acumulado_produccion.get(nombre_pan, 0) + int(fila.get("cantidad") or 0)
+    tabla_produccion = [
+        {"producto": nombre, "cantidad": cantidad}
+        for nombre, cantidad in sorted(acumulado_produccion.items(), key=lambda item: item[0].casefold())
+    ]
+    total_produccion = sum(item["cantidad"] for item in tabla_produccion)
     detalles = (
         supabase.table("inventario_detalles")
         .select("producto_id,cantidad,precio_unitario,producto_nombre")
@@ -790,6 +808,7 @@ def obtener_datos_ultimo_cierre(panaderia_id: int, usuario_id: str, perfil: dict
         "resumen": resumen_salida,
         "total_piezas": total_piezas,
         "total_importe": str(total_importe),
+        "produccion": {"fecha": cierre["fecha"], "lineas": tabla_produccion, "total_cantidad": total_produccion},
     }
 
 
@@ -802,8 +821,8 @@ def consultar_tablas_ultimo_cierre(
     perfil = obtener_perfil(str(usuario.id))
     comprobar_acceso_panaderia(str(usuario.id), perfil, panaderia_id)
     try:
-        datos = obtener_datos_ultimo_cierre(panaderia_id, str(usuario.id), perfil)
-        return datos or {"cierre": None, "lineas": [], "resumen": [], "total_piezas": 0, "total_importe": "0"}
+        datos = obtener_datos_ultimo_cierre(panaderia_id, str(usuario.id), perfil, permitir_produccion=True)
+        return datos or {"cierre": None, "lineas": [], "resumen": [], "total_piezas": 0, "total_importe": "0", "produccion": {"fecha": None, "lineas": [], "total_cantidad": 0}}
     except HTTPException:
         raise
     except Exception:
@@ -819,7 +838,7 @@ def descargar_tablas_ultimo_cierre_excel(
     perfil = obtener_perfil(str(usuario.id))
     comprobar_acceso_panaderia(str(usuario.id), perfil, panaderia_id)
     try:
-        datos = obtener_datos_ultimo_cierre(panaderia_id, str(usuario.id), perfil)
+        datos = obtener_datos_ultimo_cierre(panaderia_id, str(usuario.id), perfil, permitir_produccion=True)
         if not datos:
             raise HTTPException(status_code=404, detail="Todavía no hay un día cerrado para descargar.")
         cierre = datos["cierre"]
