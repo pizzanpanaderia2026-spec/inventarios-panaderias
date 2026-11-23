@@ -14,6 +14,8 @@ ALTER TABLE public.perfiles DROP CONSTRAINT IF EXISTS perfiles_id_fkey;
 ALTER TABLE public.perfiles ADD CONSTRAINT perfiles_id_fkey FOREIGN KEY (id) REFERENCES auth.users(id) ON DELETE CASCADE;
 ALTER TABLE public.accesos_panaderias DROP CONSTRAINT IF EXISTS accesos_panaderias_usuario_id_fkey;
 ALTER TABLE public.accesos_panaderias ADD CONSTRAINT accesos_panaderias_usuario_id_fkey FOREIGN KEY (usuario_id) REFERENCES public.perfiles(id) ON DELETE CASCADE;
+ALTER TABLE public.configuracion_archivado DROP CONSTRAINT IF EXISTS configuracion_archivado_actualizado_por_fkey;
+ALTER TABLE public.configuracion_archivado ADD CONSTRAINT configuracion_archivado_actualizado_por_fkey FOREIGN KEY (actualizado_por) REFERENCES auth.users(id) ON DELETE SET NULL;
 ALTER TABLE public.auditoria_inventario DROP CONSTRAINT IF EXISTS auditoria_inventario_usuario_id_fkey;
 ALTER TABLE public.auditoria_inventario ADD CONSTRAINT auditoria_inventario_usuario_id_fkey FOREIGN KEY (usuario_id) REFERENCES auth.users(id) ON DELETE SET NULL;
 ALTER TABLE public.cierres_diarios DROP CONSTRAINT IF EXISTS cierres_diarios_cerrado_por_fkey;
