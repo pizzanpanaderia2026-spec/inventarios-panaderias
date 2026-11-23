@@ -697,7 +697,7 @@ def reabrir_registro(
         cierre = buscar_cierre(solicitud.panaderia_id, solicitud.fecha)
         if cierre["estado"] != "cerrado":
             return {"reabierto": True, "mensaje": "El día ya está abierto."}
-        if solicitud.fecha > date.today():
+        if solicitud.fecha > datetime.now(TZ_PRODUCCION).date():
             raise HTTPException(status_code=422, detail="No puedes reabrir una fecha futura.")
         ahora_local = datetime.now(TZ_PRODUCCION).date()
         dias_inventario = obtener_configuracion_edicion()["dias_inventario"]
