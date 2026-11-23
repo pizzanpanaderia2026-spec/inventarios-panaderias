@@ -173,6 +173,7 @@
             if(!selectionMode) row.append(makeButton("Eliminar",()=>deleteInactiveProduct(p),"boton-peligro"));
           } else if(!selectionMode) {
             row.append(makeButton("Editar",()=>showProductForm(p,p.categoria_id),"secundario"));
+            row.append(makeButton("Eliminar",()=>deleteProduct(p),"boton-peligro"));
           }
           body.append(row);
         });
@@ -223,6 +224,14 @@
       if(action==="eliminar")notice("Eliminados: "+r.eliminados+". Desactivados por tener historial: "+r.desactivados+".","exito");
       else notice(action==="mover"?"Productos movidos.":"Productos desactivados.","exito");
       selected.clear();selectionMode=false;categoryMenuOpen=null;await load();
+    }catch(e){notice(e.message);}
+  }
+  async function deleteProduct(p){
+    if(!confirm("¿Eliminar el producto "+p.nombre+"? Si ya forma parte de un inventario cerrado, se conservará desactivado para proteger el historial."))return;
+    try{
+      const r=await api("/api/catalogo/productos/"+p.id+"?panaderia_id="+bakery.id,{method:"DELETE"});
+      notice(r.accion==="eliminado"?"Producto eliminado.":"El producto tenía historial y quedó en Productos desactivados.","exito");
+      await load();
     }catch(e){notice(e.message);}
   }
   async function deleteInactiveProduct(p){
