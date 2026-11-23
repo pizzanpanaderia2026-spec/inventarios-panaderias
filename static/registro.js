@@ -407,7 +407,7 @@
   });
 
   document.getElementById("botonReabrirDia").addEventListener("click", async () => {
-    const motivo = prompt("Motivo de la reapertura (obligatorio para correcciones después de 48 horas):") || "";
+    const motivo = prompt("Si la fecha está fuera de los días editables configurados, escribe el motivo de la corrección:") || "";
     try {
       await api("/api/registro/reabrir", {
         method: "POST",
