@@ -374,7 +374,8 @@ def _crear_excel(categoria, tipo, desde, hasta, datos, resumen_only):
     resumen_mensual = datos.get("resumen_mensual")
     titulo = "Resumen " + _titulo_periodo(tipo, desde, hasta)
     if tipo == "anio":
-        mensual = defaultdict(lambda: {"inventario_cantidad": 0, "inventario_importe": Decimal("0"), "produccion_cantidad": 0})
+        mensual = {f"{desde.year}-{mes:02d}": {"inventario_cantidad": 0, "inventario_importe": Decimal("0"), "produccion_cantidad": 0}
+            for mes in range(1, 13)}
         for x in resumen_diario:
             mes = x["fecha"][:7]
             mensual[mes]["inventario_cantidad"] += x["inventario_cantidad"]
@@ -410,14 +411,16 @@ def _crear_excel(categoria, tipo, desde, hasta, datos, resumen_only):
             _hoja_informe(libro, nombre[:31], titulo_dia, categoria,
                 combinado["inventario"], combinado["produccion"], combinado["resumen_diario"], analisis=combinado["analisis"])
     elif tipo == "anio":
-        for mes in range(1, hasta.month + 1):
+        for mes in range(1, 13):
             inicio = date(desde.year, mes, 1)
-            fin = date(desde.year + (mes == 12), 1 if mes == 12 else mes + 1, 1) - timedelta(days=1)
-            inv_mes = [x for x in inv["dias"] if inicio.isoformat() <= x["cierre"]["fecha"] <= fin.isoformat()]
-            prod_mes = [x for x in prod["dias"] if inicio.isoformat() <= x["fecha"] <= fin.isoformat()]
-            datos_mes = _agregar(inv_mes, prod_mes, inicio, fin)
+            fin_mes = date(desde.year + (mes == 12), 1 if mes == 12 else mes + 1, 1) - timedelta(days=1)
+            fin_datos = min(fin_mes, hasta)
+            inv_mes = [x for x in inv["dias"] if inicio.isoformat() <= x["cierre"]["fecha"] <= fin_datos.isoformat()]
+            prod_mes = [x for x in prod["dias"] if inicio.isoformat() <= x["fecha"] <= fin_datos.isoformat()]
+            datos_mes = _agregar(inv_mes, prod_mes, inicio, fin_datos if inicio <= hasta else fin_mes)
+            resumen_dia_mes = datos_mes["resumen_diario"] if inicio <= hasta else []
             _hoja_informe(libro, MESES_ES[mes-1].capitalize(), MESES_ES[mes-1].capitalize() + " " + str(desde.year),
-                categoria, datos_mes["inventario"], datos_mes["produccion"], datos_mes["resumen_diario"], analisis=datos_mes["analisis"])
+                categoria, datos_mes["inventario"], datos_mes["produccion"], resumen_dia_mes, analisis=datos_mes["analisis"])
     salida = BytesIO()
     libro.save(salida)
     salida.seek(0)
