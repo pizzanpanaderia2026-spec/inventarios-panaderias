@@ -42,7 +42,7 @@ class HistorialReportesTests(unittest.TestCase):
         data = _agregar([self.inv], self.prod, date(2026, 3, 1), end)
         output = _crear_excel("analisis", "mes", date(2026, 3, 1), end, data, False)
         book = load_workbook(BytesIO(output.getvalue()))
-        self.assertEqual(book.sheetnames, ["Resumen", "01-mar"])
+        self.assertEqual(book.sheetnames, ["Resumen", "01-mar-2026"])
 
     def test_year_excel_has_monthly_sheets(self):
         start, end = date(2025, 1, 1), date(2025, 12, 31)
