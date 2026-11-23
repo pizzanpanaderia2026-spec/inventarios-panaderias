@@ -356,7 +356,7 @@ def _hoja_informe(libro, nombre_hoja, titulo, categoria, inventario, produccion,
         if fin_precio >= inicio_precio:
             _grafica(hoja, "Precio", inicio_precio, fin_precio, 2, "Inventario por precio", "F19")
     if categoria == "produccion" and fin_prod >= inicio_prod:
-        _grafica(hoja, "Pan", inicio_prod, fin_prod, 2, "Producción por tipo de pan", "F35")
+        _grafica(hoja, "Pan", inicio_prod, fin_prod, 2, "Producción por tipo de pan", "F3")
     if categoria == "analisis" and fin_analisis >= inicio_analisis:
         _grafica(hoja, "Producido", inicio_analisis, fin_analisis, 2, "Producción frente a sobrantes", "F35", segunda_serie=3)
     if anio and categoria in ("produccion", "analisis") and fin_mensual >= inicio_mensual:
