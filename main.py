@@ -537,8 +537,13 @@ def guardar_registro(
     usuario = obtener_usuario_autenticado(authorization)
     perfil = obtener_perfil(str(usuario.id))
     comprobar_acceso_panaderia(str(usuario.id), perfil, registro.panaderia_id)
-    if registro.fecha > datetime.now(TZ_PRODUCCION).date():
+    hoy_local = datetime.now(TZ_PRODUCCION).date()
+    if registro.fecha > hoy_local:
         raise HTTPException(status_code=422, detail="No puedes registrar una fecha futura.")
+    dias_inventario = obtener_configuracion_edicion()["dias_inventario"]
+    dias_transcurridos = (hoy_local - registro.fecha).days
+    if dias_transcurridos > dias_inventario and not es_admin_principal(perfil):
+        raise HTTPException(status_code=403, detail=f"El plazo para editar inventario es de {dias_inventario} días.")
     ids = [linea.producto_id for linea in registro.lineas]
     if len(ids) != len(set(ids)):
         raise HTTPException(status_code=422, detail="No repitas el mismo producto en el registro.")
