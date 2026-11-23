@@ -847,7 +847,7 @@ def descargar_tablas_ultimo_cierre_excel(
         hoja.title = "Cierre del día"
         hoja.sheet_view.showGridLines = False
         hoja.merge_cells("A1:D1")
-        hoja["A1"] = "INVENTARIO DIARIO"
+        hoja["A1"] = "INVENTARIO Y PRODUCCIÓN DIARIA"
         hoja["A1"].font = Font(name="Arial", size=16, bold=True, color="FFFFFF")
         hoja["A1"].fill = PatternFill("solid", fgColor="713F12")
         hoja["A1"].alignment = Alignment(horizontal="center", vertical="center")
@@ -906,6 +906,18 @@ def descargar_tablas_ultimo_cierre_excel(
         hoja.cell(fila, 3, float(Decimal(datos["total_importe"])))
         hoja.cell(fila, 3).number_format = '"$"#,##0.00'
         for c in hoja[fila][:3]:
+            c.font = Font(bold=True)
+            c.fill = PatternFill("solid", fgColor="F3E8D8")
+        fila += 2
+        fila = encabezado_tabla(fila, "PRODUCCIÓN · DETALLE POR PRODUCTO", ["Producto producido", "Cantidad"])
+        produccion = datos.get("produccion") or {"lineas": [], "total_cantidad": 0}
+        for linea in produccion.get("lineas", []):
+            hoja.cell(fila, 1, linea["producto"])
+            hoja.cell(fila, 2, int(linea["cantidad"]))
+            fila += 1
+        hoja.cell(fila, 1, "TOTAL PRODUCCIÓN")
+        hoja.cell(fila, 2, int(produccion.get("total_cantidad") or 0))
+        for c in hoja[fila][:2]:
             c.font = Font(bold=True)
             c.fill = PatternFill("solid", fgColor="F3E8D8")
 
