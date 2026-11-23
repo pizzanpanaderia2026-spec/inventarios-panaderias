@@ -4,6 +4,8 @@
 
   const detalle = document.getElementById("tablaDetalle");
   const resumen = document.getElementById("tablaResumen");
+  const produccion = document.getElementById("tablaProduccionTablas");
+  const fechaProduccion = document.getElementById("fechaProduccionTablas");
   const fecha = document.getElementById("fechaTablas");
   const msg = document.getElementById("mensajeTablas");
   const botonExcel = document.getElementById("botonDescargarExcel");
@@ -67,6 +69,8 @@
     if (cerradoPor) cerradoPor.textContent = "";
     detalle.textContent = "Las tablas aparecerán aquí cuando se cierre el primer día.";
     resumen.replaceChildren();
+    if (fechaProduccion) fechaProduccion.textContent = "—";
+    if (produccion) produccion.textContent = "No hay una fecha de inventario cerrada para consultar la producción.";
     botonExcel.disabled = true;
   }
 
@@ -107,6 +111,21 @@
       Number(datos.total_piezas || 0).toLocaleString("es-MX"),
       dinero(datos.total_importe)
     ]);
+
+    const datosProduccion = datos.produccion || { fecha: cierre.fecha, lineas: [], total_cantidad: 0 };
+    if (fechaProduccion) fechaProduccion.textContent = new Date((datosProduccion.fecha || cierre.fecha) + "T12:00:00").toLocaleDateString("es-MX", { day: "numeric", month: "long", year: "numeric" });
+    const filasProduccion = (datosProduccion.lineas || []).map(linea => [
+      linea.producto,
+      Number(linea.cantidad || 0).toLocaleString("es-MX")
+    ]);
+    if (filasProduccion.length) {
+      crearTabla(produccion, ["Producto producido", "Cantidad"], filasProduccion, [
+        "TOTAL PRODUCCIÓN",
+        Number(datosProduccion.total_cantidad || 0).toLocaleString("es-MX")
+      ]);
+    } else {
+      produccion.textContent = "No hay registros de producción para esta fecha.";
+    }
     botonExcel.disabled = false;
   }
 
