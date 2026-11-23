@@ -178,6 +178,8 @@ def eliminar_categoria(categoria_id: int, panaderia_id: int, authorization: str 
         return {"eliminada": True, "productos_desactivados": len(products)}
     except HTTPException:
         raise
+    except HTTPException:
+        raise
     except Exception:
         raise HTTPException(status_code=503, detail="No se pudo eliminar la categoría.")
 
@@ -312,6 +314,14 @@ def eliminar_producto_catalogo(producto_id: int, panaderia_id: int, authorizatio
             _desactivar(core, product, protected[0]["id"])
             return {"accion": "desactivado"}
         core.supabase.table("productos").delete().eq("id", producto_id).eq("panaderia_id", panaderia_id).execute()
+        core.supabase.table("auditoria_inventario").insert({
+            "panaderia_id": panaderia_id,
+            "usuario_id": str(user.id),
+            "accion": "eliminar_producto",
+            "detalles": {"producto_id": producto_id, "nombre": product.get("nombre")},
+        }).execute()
         return {"accion": "eliminado"}
+    except HTTPException:
+        raise
     except Exception:
         raise HTTPException(status_code=503, detail="No se pudo eliminar el producto.")
