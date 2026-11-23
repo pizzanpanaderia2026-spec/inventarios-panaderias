@@ -537,7 +537,7 @@ def guardar_registro(
     usuario = obtener_usuario_autenticado(authorization)
     perfil = obtener_perfil(str(usuario.id))
     comprobar_acceso_panaderia(str(usuario.id), perfil, registro.panaderia_id)
-    if registro.fecha > date.today():
+    if registro.fecha > datetime.now(TZ_PRODUCCION).date():
         raise HTTPException(status_code=422, detail="No puedes registrar una fecha futura.")
     ids = [linea.producto_id for linea in registro.lineas]
     if len(ids) != len(set(ids)):
@@ -630,7 +630,7 @@ def cerrar_registro(
     usuario = obtener_usuario_autenticado(authorization)
     perfil = obtener_perfil(str(usuario.id))
     comprobar_acceso_panaderia(str(usuario.id), perfil, panaderia_id)
-    if fecha_registro > date.today():
+    if fecha_registro > datetime.now(TZ_PRODUCCION).date():
         raise HTTPException(status_code=422, detail="No puedes cerrar una fecha futura.")
     try:
         cierre = obtener_o_crear_cierre(panaderia_id, fecha_registro, str(usuario.id))
