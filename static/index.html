@@ -652,9 +652,9 @@
               </select>
             </div>
             <div class="admin-usuario">
-              <strong>Cloudflare R2</strong>
-              <p>El almacenamiento privado de los inventarios históricos se comprobará al abrir esta sección.</p>
-              <span class="nota">Los inventarios no se eliminan de Supabase hasta verificar que el respaldo esté guardado y se pueda recuperar.</span>
+              <strong>Supabase y Cloudflare R2</strong>
+              <p>Los archivos Excel se almacenan de forma privada en Cloudflare R2. Supabase conserva el registro del archivo, su periodo, tamaño y huella SHA-256.</p>
+              <span class="nota">La comprobación prueba la conexión con Supabase y realiza una subida, lectura, comparación y eliminación de un archivo temporal en R2. Cada respaldo también se vuelve a leer desde ambos servicios para confirmar que coincidan.</span>
             </div>
             <div class="admin-usuario" id="adminEstadoRespaldo" aria-live="polite">
               <div class="barra"><strong>Estado del respaldo</strong><span id="adminRespaldoEtiqueta" class="nota">En espera</span></div>
