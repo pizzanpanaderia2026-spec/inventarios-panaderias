@@ -273,8 +273,15 @@ def _estado_eliminacion_local(core, panaderia_id: int):
     restantes = core.supabase.table("panaderias").select("id").eq("activa", True).neq("id", panaderia_id).limit(1).execute().data or []
     if not restantes:
         motivos.append("Debe conservarse al menos un local activo.")
+    productos = core.supabase.table("productos").select("id,activo").eq("panaderia_id", panaderia_id).execute().data or []
+    if any(bool(p.get("activo", True)) for p in productos):
+        motivos.append("Productos activos registrados")
+    ids_productos = [int(p["id"]) for p in productos]
+    if ids_productos:
+        detalles = core.supabase.table("inventario_detalles").select("id").in_("producto_id", ids_productos).limit(1).execute().data or []
+        if detalles:
+            motivos.append("Los productos conservan detalles de inventario históricos")
     comprobaciones = [
-        ("productos", "Productos registrados"),
         ("cierres_diarios", "Cierres o inventarios registrados"),
         ("produccion_registros", "Registros de producción"),
         ("archivos_archivados", "Archivos históricos o respaldos"),
@@ -341,6 +348,10 @@ def eliminar_panaderia_vacia(
             )
         # Solo se limpian categorías y auditoría administrativa del local vacío.
         # Los registros operativos se validaron antes y no se eliminan aquí.
+        # Los productos inactivos y las categorías propias se eliminan junto con
+        # el local; la validación previa protege cualquier producto con historial.
+        core.supabase.table("productos").delete().eq("panaderia_id", panaderia_id).eq("activo", False).execute()
+        core.supabase.table("categorias_productos").delete().eq("panaderia_id", panaderia_id).execute()
         core.supabase.table("auditoria_inventario").delete().eq("panaderia_id", panaderia_id).execute()
         # Se retiran únicamente las asignaciones de este local; la comprobación
         # previa garantiza que cada cuenta conserva al menos otro local.
