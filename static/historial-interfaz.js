@@ -249,6 +249,10 @@
         item.produccion_cantidad += Number(x.produccion_cantidad || 0);
         monthly.set(key, item);
       });
+      for (let m = 1; m <= 12; m++) {
+        const key = selectedYear + "-" + pad(m);
+        if (!monthly.has(key)) monthly.set(key, { inventario_cantidad: 0, inventario_importe: 0, produccion_cantidad: 0 });
+      }
       const items = [...monthly.entries()].sort((a,b) => a[0].localeCompare(b[0]));
       if (category === "inventario") {
         addTable(host, "Resumen mensual del año", ["Mes", "Inventario", "Importe"],
@@ -316,6 +320,12 @@
           const key = x.fecha.slice(0,7);
           monthly.set(key, (monthly.get(key) || 0) + Number(x.produccion_cantidad || 0));
         });
+        if (period === "anio") {
+          for (let m = 1; m <= 12; m++) {
+            const key = selectedYear + "-" + pad(m);
+            if (!monthly.has(key)) monthly.set(key, 0);
+          }
+        }
       }
       const keys = [...monthly.keys()].sort();
       host.appendChild(chartSVG("Producción por mes", [{ name: "Producción", values: keys.map(k => monthly.get(k)) }], keys));
@@ -329,6 +339,12 @@
           const key = d.fecha.slice(0,7);
           monthsMap.set(key, (monthsMap.get(key) || 0) + Number(d.produccion_cantidad || 0));
         });
+        if (period === "anio") {
+          for (let m = 1; m <= 12; m++) {
+            const key = selectedYear + "-" + pad(m);
+            if (!monthsMap.has(key)) monthsMap.set(key, 0);
+          }
+        }
       }
       const keys = [...monthsMap.keys()].sort();
       host.appendChild(chartSVG("Producción por mes", [{ name: "Producción", values: keys.map(k => monthsMap.get(k)) }], keys));
