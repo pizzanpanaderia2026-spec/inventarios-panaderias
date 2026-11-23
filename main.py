@@ -545,19 +545,11 @@ def guardar_registro(
     try:
         cierre = obtener_o_crear_cierre(registro.panaderia_id, registro.fecha, str(usuario.id))
         if cierre["estado"] == "cerrado":
-            cerrado_en = datetime.fromisoformat(cierre["cerrado_en"].replace("Z", "+00:00"))
-            ahora = datetime.now(timezone.utc)
-            es_admin_principal = (
-                perfil["rol"] == "admin" and perfil["es_admin_principal"]
-            )
-            if (
-                (ahora - cerrado_en).total_seconds() >= 48 * 3600
-                and not es_admin_principal
-            ):
-                raise HTTPException(
-                    status_code=403,
-                    detail="Pasaron 48 horas desde el cierre. Solo el administrador principal puede reabrirlo para corregirlo.",
-                )
+            dias_inventario = obtener_configuracion_edicion()["dias_inventario"]
+            dias_transcurridos = (datetime.now(TZ_PRODUCCION).date() - registro.fecha).days
+            es_admin_principal = perfil["rol"] == "admin" and perfil["es_admin_principal"]
+            if (dias_transcurridos > dias_inventario or dias_transcurridos < 0) and not es_admin_principal:
+                raise HTTPException(status_code=403, detail=f"El plazo para editar inventario es de {dias_inventario} días. Solo la dueña puede reabrirlo fuera de ese plazo.")
             # Todo cierre debe reabrirse por el endpoint específico antes de editar.
             # Así se exige motivo y auditoría en correcciones administrativas tardías.
             raise HTTPException(
@@ -707,20 +699,20 @@ def reabrir_registro(
             return {"reabierto": True, "mensaje": "El día ya está abierto."}
         if solicitud.fecha > date.today():
             raise HTTPException(status_code=422, detail="No puedes reabrir una fecha futura.")
-        cerrado_en = datetime.fromisoformat(cierre["cerrado_en"].replace("Z", "+00:00"))
-        ahora = datetime.now(timezone.utc)
-        dentro_de_48h = (ahora - cerrado_en).total_seconds() < 48 * 3600
+        ahora_local = datetime.now(TZ_PRODUCCION).date()
+        dias_inventario = obtener_configuracion_edicion()["dias_inventario"]
+        dentro_del_plazo = 0 <= (ahora_local - solicitud.fecha).days <= dias_inventario
         admin = es_admin_principal(perfil)
-        if not dentro_de_48h and not admin:
-            raise HTTPException(status_code=403, detail="Pasaron 48 horas. Solo el administrador principal puede reabrir este registro.")
+        if not dentro_del_plazo and not admin:
+            raise HTTPException(status_code=403, detail=f"El plazo para editar inventario es de {dias_inventario} días. Solo la dueña puede reabrir registros anteriores.")
         motivo = (solicitud.motivo or "").strip()
-        if not dentro_de_48h and admin and len(motivo) < 5:
-            raise HTTPException(status_code=422, detail="Para una corrección después de 48 horas, escribe un motivo de al menos 5 caracteres.")
+        if not dentro_del_plazo and admin and len(motivo) < 5:
+            raise HTTPException(status_code=422, detail="Para una corrección fuera del plazo configurado, escribe un motivo de al menos 5 caracteres.")
         resultado = supabase.rpc("reabrir_cierre_diario", {
             "p_cierre_id": cierre["id"],
             "p_usuario_id": str(usuario.id),
             "p_motivo": motivo or "",
-            "p_dentro_de_48h": dentro_de_48h,
+            "p_dentro_de_48h": dentro_del_plazo,
             "p_fecha": ahora.isoformat(),
         }).execute()
         return {"reabierto": True, "cierre": resultado.data}
@@ -1241,6 +1233,44 @@ def exigir_admin_principal(authorization: str | None):
         raise HTTPException(status_code=403, detail="Solo la administradora principal puede gestionar cuentas.")
     return usuario, perfil
 
+class ConfiguracionEdicionCambio(BaseModel):
+    dias_inventario: int = Field(ge=0, le=365)
+    dias_produccion: int = Field(ge=0, le=365)
+
+
+def obtener_configuracion_edicion():
+    try:
+        filas = supabase.table("configuracion_edicion").select("dias_inventario,dias_produccion").eq("id", 1).limit(1).execute().data or []
+        if filas:
+            return {"dias_inventario": int(filas[0]["dias_inventario"]), "dias_produccion": int(filas[0]["dias_produccion"])}
+        supabase.table("configuracion_edicion").insert({"id": 1, "dias_inventario": 2, "dias_produccion": 1}).execute()
+        return {"dias_inventario": 2, "dias_produccion": 1}
+    except Exception:
+        raise HTTPException(status_code=503, detail="No se pudo consultar la configuración de días editables.")
+
+
+@app.get("/api/admin/configuracion-edicion")
+def admin_obtener_configuracion_edicion(authorization: str | None = Header(default=None)):
+    exigir_admin_principal(authorization)
+    return obtener_configuracion_edicion()
+
+
+@app.put("/api/admin/configuracion-edicion")
+def admin_guardar_configuracion_edicion(datos: ConfiguracionEdicionCambio, authorization: str | None = Header(default=None)):
+    usuario, _ = exigir_admin_principal(authorization)
+    try:
+        supabase.table("configuracion_edicion").upsert({
+            "id": 1, "dias_inventario": datos.dias_inventario,
+            "dias_produccion": datos.dias_produccion,
+            "actualizado_por": str(usuario.id), "actualizado_en": datetime.now(timezone.utc).isoformat(),
+        }, on_conflict="id").execute()
+        return {"guardado": True, **obtener_configuracion_edicion()}
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=503, detail="No se pudo guardar la configuración de días editables.")
+
+
 
 def email_interno_encargado(username: str) -> str:
     limpio = "".join(c.lower() for c in username if c.isalnum() or c in "._-")
@@ -1421,6 +1451,9 @@ def admin_eliminar_usuario(usuario_id: str, authorization: str | None = Header(d
         if not p or p[0].get("es_admin_principal") or p[0].get("rol") not in ("encargado", "produccion"):
             raise HTTPException(status_code=403, detail="Esta cuenta no se puede eliminar desde aquí.")
         supabase.auth.admin.delete_user(usuario_id)
+        restantes = supabase.table("perfiles").select("id").eq("id", usuario_id).limit(1).execute().data or []
+        if restantes:
+            raise HTTPException(status_code=409, detail="La cuenta no se eliminó por completo; revisa sus relaciones históricas.")
         return {"eliminado": True}
     except HTTPException:
         raise
@@ -1469,7 +1502,6 @@ from datetime import timedelta, time
 from zoneinfo import ZoneInfo
 
 TZ_PRODUCCION = ZoneInfo("America/Mexico_City")
-PLAZO_EDICION_PRODUCCION_HORAS = 24
 
 
 class ProduccionNueva(BaseModel):
@@ -1508,11 +1540,11 @@ def _perfil_con_acceso_produccion(usuario_id: str, perfil: dict, panaderia_id: i
         raise HTTPException(status_code=503, detail="No se pudo verificar el acceso a la panadería.")
 
 
-def _produccion_es_editable(registrado_en: str | datetime) -> bool:
-    marca = registrado_en if isinstance(registrado_en, datetime) else datetime.fromisoformat(str(registrado_en).replace("Z", "+00:00"))
-    if marca.tzinfo is None:
-        marca = marca.replace(tzinfo=timezone.utc)
-    return datetime.now(timezone.utc) - marca.astimezone(timezone.utc) < timedelta(hours=PLAZO_EDICION_PRODUCCION_HORAS)
+def _produccion_es_editable(fecha_produccion: str | date) -> bool:
+    fecha = fecha_produccion if isinstance(fecha_produccion, date) else date.fromisoformat(str(fecha_produccion)[:10])
+    dias = obtener_configuracion_edicion()["dias_produccion"]
+    transcurridos = (datetime.now(TZ_PRODUCCION).date() - fecha).days
+    return 0 <= transcurridos <= dias
 
 
 def _normalizar_pan_produccion(nombre: str) -> str:
@@ -1533,22 +1565,22 @@ def consultar_produccion(
     try:
         filas = (
             supabase.table("produccion_registros")
-            .select("id,panaderia_id,fecha_produccion,pan_nombre,cantidad,observaciones,usuario_id,registrado_en,actualizado_en")
+            .select("id,panaderia_id,fecha_produccion,pan_nombre,cantidad,observaciones,usuario_id,usuario_nombre,registrado_en,actualizado_en")
             .eq("panaderia_id", panaderia_id)
             .eq("fecha_produccion", fecha_produccion.isoformat())
             .order("registrado_en")
             .execute().data or []
         )
-        ids = list({str(f["usuario_id"]) for f in filas})
+        ids = list({str(f["usuario_id"]) for f in filas if f.get("usuario_id")})
         perfiles = (
             supabase.table("perfiles").select("id,nombre").in_("id", ids).execute().data
             if ids else []
         )
         nombres = {str(p["id"]): p["nombre"] for p in perfiles}
         for fila in filas:
-            fila["usuario_nombre"] = nombres.get(str(fila["usuario_id"]), "Usuario")
-            fila["editable"] = _produccion_es_editable(fila["registrado_en"])
-        return {"registros": filas, "total": len(filas)}
+            fila["usuario_nombre"] = fila.get("usuario_nombre") or nombres.get(str(fila.get("usuario_id")), "Usuario")
+            fila["editable"] = _produccion_es_editable(fila["fecha_produccion"])
+        return {"registros": filas, "total": len(filas), "dias_editables": obtener_configuracion_edicion()["dias_produccion"]}
     except HTTPException:
         raise
     except Exception:
@@ -1563,12 +1595,13 @@ def crear_registro_produccion(
     usuario = obtener_usuario_autenticado(authorization)
     perfil = obtener_perfil(str(usuario.id))
     _perfil_con_acceso_produccion(str(usuario.id), perfil, datos.panaderia_id)
-    ahora_local = datetime.now(TZ_PRODUCCION)
-    inicio_fecha = datetime.combine(datos.fecha_produccion, time.min, tzinfo=TZ_PRODUCCION)
-    if datos.fecha_produccion > ahora_local.date():
+    ahora_local = datetime.now(TZ_PRODUCCION).date()
+    dias_produccion = obtener_configuracion_edicion()["dias_produccion"]
+    dias_transcurridos = (ahora_local - datos.fecha_produccion).days
+    if dias_transcurridos < 0:
         raise HTTPException(status_code=422, detail="No puedes registrar producción en una fecha futura.")
-    if ahora_local - inicio_fecha > timedelta(hours=PLAZO_EDICION_PRODUCCION_HORAS):
-        raise HTTPException(status_code=403, detail="El plazo para agregar registros de esa fecha terminó.")
+    if dias_transcurridos > dias_produccion:
+        raise HTTPException(status_code=403, detail=f"El plazo para registrar o editar producción es de {dias_produccion} días.")
     pan = _normalizar_pan_produccion(datos.pan_nombre)
     if not pan:
         raise HTTPException(status_code=422, detail="Escribe el nombre del pan.")
@@ -1580,6 +1613,7 @@ def crear_registro_produccion(
             "cantidad": datos.cantidad,
             "observaciones": (datos.observaciones or "").strip() or None,
             "usuario_id": str(usuario.id),
+            "usuario_nombre": obtener_perfil(str(usuario.id))["nombre"],
         }).execute().data[0]
         return {"creado": True, "registro": fila}
     except Exception:
@@ -1597,14 +1631,14 @@ def actualizar_registro_produccion(
     try:
         encontrado = (
             supabase.table("produccion_registros")
-            .select("id,panaderia_id,registrado_en")
+            .select("id,panaderia_id,fecha_produccion")
             .eq("id", registro_id).limit(1).execute().data
         )
         if not encontrado:
             raise HTTPException(status_code=404, detail="No se encontró el registro de producción.")
         actual = encontrado[0]
         _perfil_con_acceso_produccion(str(usuario.id), perfil, int(actual["panaderia_id"]))
-        if not _produccion_es_editable(actual["registrado_en"]):
+        if not _produccion_es_editable(actual["fecha_produccion"]):
             raise HTTPException(status_code=403, detail="Terminó el plazo de edición de este registro. Solo puedes consultarlo.")
         pan = _normalizar_pan_produccion(datos.pan_nombre)
         if not pan:
@@ -1638,14 +1672,14 @@ def eliminar_registro_produccion(
     try:
         encontrado = (
             supabase.table("produccion_registros")
-            .select("id,panaderia_id,registrado_en")
+            .select("id,panaderia_id,fecha_produccion")
             .eq("id", registro_id).limit(1).execute().data
         )
         if not encontrado:
             raise HTTPException(status_code=404, detail="No se encontró el registro de producción.")
         actual = encontrado[0]
         _perfil_con_acceso_produccion(str(usuario.id), perfil, int(actual["panaderia_id"]))
-        if not _produccion_es_editable(actual["registrado_en"]):
+        if not _produccion_es_editable(actual["fecha_produccion"]):
             raise HTTPException(status_code=403, detail="Terminó el plazo de edición. Este registro solo se puede consultar.")
         eliminado = (
             supabase.table("produccion_registros")
