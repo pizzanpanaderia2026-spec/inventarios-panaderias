@@ -12,11 +12,11 @@ def _core():
     return main
 
 
-def _context(authorization, panaderia_id):
+def _context(authorization, panaderia_id, solo_lectura=False):
     core = _core()
     user = core.obtener_usuario_autenticado(authorization)
     profile = core.obtener_perfil(str(user.id))
-    core.comprobar_acceso_panaderia(str(user.id), profile, panaderia_id)
+    core.comprobar_acceso_panaderia(str(user.id), profile, panaderia_id, permitir_produccion=solo_lectura)
     return core, user, profile
 
 
@@ -92,7 +92,7 @@ class AccionProductos(BaseModel):
 
 @router.get("")
 def listar_catalogo(panaderia_id: int, authorization: str | None = Header(default=None)):
-    core, user, profile = _context(authorization, panaderia_id)
+    core, user, profile = _context(authorization, panaderia_id, solo_lectura=True)
     try:
         categories = core.supabase.table("categorias_productos").select("*").eq("panaderia_id", panaderia_id).order("protegida").order("nombre").execute().data
         products = core.supabase.table("productos").select("id,panaderia_id,nombre,precio,activo,creado_en,categoria_id,categoria_original_id").eq("panaderia_id", panaderia_id).order("nombre").execute().data
