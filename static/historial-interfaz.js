@@ -103,6 +103,8 @@
     lastQuery = null;
     lastData = null;
     downloadButton.disabled = true;
+    summary.textContent = "Los filtros cambiaron. Vuelve a consultar para actualizar los resultados.";
+    result.replaceChildren(el("div", "Pulsa Consultar para actualizar la información con los filtros nuevos.", "historial-vacio"));
     $("histEstadoDescarga").textContent = "Vuelve a consultar para descargar los filtros actuales.";
   }
   dateDay.addEventListener("change", invalidateQuery);
