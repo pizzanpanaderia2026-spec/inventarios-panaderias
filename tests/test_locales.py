@@ -77,7 +77,7 @@ class LocalDeletionChecksTests(unittest.TestCase):
 
     def test_user_with_another_location_does_not_block_removal(self):
         core = self.make_core(
-            access=[{"usuario_id": "user-1"}],
+            access=[{"usuario_id": "user-1", "panaderia_id": 2}],
             other_access={"user-1": [{"panaderia_id": 1}]},
         )
         _, blockers = _estado_eliminacion_local(core, 2)
