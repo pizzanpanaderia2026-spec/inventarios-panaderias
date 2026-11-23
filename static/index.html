@@ -513,6 +513,7 @@
           <h3>Tablas del último día cerrado</h3><p class="nota" id="fechaTablas">Cargando el último cierre…</p><p id="usuarioCierreTablas" class="nota tablas-usuario-cierre"></p>
           <h4>Tabla A · Detalle por producto</h4><div id="tablaDetalle"></div>
           <h4>Tabla B · Resumen por precio</h4><div id="tablaResumen"></div>
+          <h4>Producción · <span id="fechaProduccionTablas">—</span></h4><div id="tablaProduccionTablas"></div>
           <button id="botonDescargarExcel" type="button">Descargar tablas del día</button>
           <div id="mensajeTablas" class="mensaje oculto" role="status"></div>
         </section>
@@ -722,10 +723,10 @@
   <!-- Cliente oficial de Supabase -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
-  <script src="/static/productos.js?v=eliminar-individual-20261123-1"></script>
+  <script src="/static/productos.js?v=consulta-produccion-20261123-1"></script>
   <script src="/static/registro.js?v=dias-editables-20261123-1"></script>
   <script src="/static/produccion.js?v=dias-editables-20261123-1"></script>
-  <script src="/static/tablas.js?v=ultimo-cierre-excel-20261101-1"></script>
+  <script src="/static/tablas.js?v=produccion-tablas-20261123-1"></script>
   <script src="/static/historial-inventarios.js?v=3"></script>
   <script src="/static/historial-interfaz.js?v=historial-real-20261122-2"></script>
   <script>
@@ -1092,7 +1093,8 @@
         const seccion = boton.dataset.seccion;
         const ocultarAdmin = seccion === "panelAdministracion" && !esAdministrador();
         const ocultarProduccion = seccion === "panelProduccion" && !puedeVerProduccion();
-        const ocultarInventario = esProduccion && seccion !== "panelProduccion" && seccion !== "panelHistorial";
+        const seccionesProduccion = ["panelProduccion", "panelHistorial", "panelTablas", "panelProductos"];
+        const ocultarInventario = esProduccion && !seccionesProduccion.includes(seccion);
         boton.classList.toggle("oculto", ocultarAdmin || ocultarProduccion || ocultarInventario);
       });
     }
@@ -1100,7 +1102,7 @@
     function mostrarSeccion(idSeccion) {
       if (idSeccion === "panelProduccion" && !puedeVerProduccion()) return;
       if (idSeccion === "panelAdministracion" && !esAdministrador()) return;
-      if (String(perfilActual?.rol || "").toLowerCase() === "produccion" && !["panelProduccion", "panelHistorial"].includes(idSeccion)) return;
+      if (String(perfilActual?.rol || "").toLowerCase() === "produccion" && !["panelProduccion", "panelHistorial", "panelTablas", "panelProductos"].includes(idSeccion)) return;
       const secciones = ["panelRegistro", "panelTablas", "panelProductos", "panelHistorial", "panelAdministracion", "panelProduccion"];
       secciones.forEach(id => {
         const panel = document.getElementById(id);
@@ -1121,7 +1123,7 @@
       boton.addEventListener("click", () => {
         if (boton.dataset.seccion === "panelAdministracion" && !esAdministrador()) return;
         if (boton.dataset.seccion === "panelProduccion" && !puedeVerProduccion()) return;
-        if (String(perfilActual?.rol || "").toLowerCase() === "produccion" && !["panelProduccion", "panelHistorial"].includes(boton.dataset.seccion)) return;
+        if (String(perfilActual?.rol || "").toLowerCase() === "produccion" && !["panelProduccion", "panelHistorial", "panelTablas", "panelProductos"].includes(boton.dataset.seccion)) return;
         mostrarSeccion(boton.dataset.seccion);
       });
     });
@@ -1155,11 +1157,13 @@
 
       if (String(perfilActual?.rol || "").toLowerCase() === "produccion") {
         mostrarSeccion("panelProduccion");
-        if (window.iniciarHistorial) window.iniciarHistorial(sesionActual, autorizada, perfilActual);
         try {
+          if (window.iniciarCatalogoProductos) await window.iniciarCatalogoProductos(sesionActual, autorizada, true);
+          if (window.iniciarTablasHistorial) await window.iniciarTablasHistorial(sesionActual, autorizada);
+          if (window.iniciarHistorial) window.iniciarHistorial(sesionActual, autorizada, perfilActual);
           if (window.iniciarProduccion) await window.iniciarProduccion(sesionActual, autorizada);
         } catch (error) {
-          mostrarMensaje(document.getElementById("mensajeProduccion"), error.message || "No se pudo iniciar Producción.");
+          mostrarMensaje(document.getElementById("mensajeProduccion"), error.message || "No se pudo iniciar la información de producción.");
         }
         return;
       }
@@ -1167,7 +1171,7 @@
       mostrarSeccion("panelRegistro");
       try {
         const catalogo = window.iniciarCatalogoProductos
-          ? await window.iniciarCatalogoProductos(sesionActual, autorizada)
+          ? await window.iniciarCatalogoProductos(sesionActual, autorizada, !esAdministrador())
           : { productos: [], categorias: [] };
         if (!catalogo) {
           mostrarMensaje(

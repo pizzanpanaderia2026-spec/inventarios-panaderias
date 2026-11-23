@@ -243,9 +243,9 @@ class ProductoCambio(BaseModel):
     activo: bool
 
 
-def comprobar_acceso_panaderia(usuario_id: str, perfil: dict, panaderia_id: int):
-    if perfil["rol"] == "produccion":
-        raise HTTPException(status_code=403, detail="Tu cuenta solo tiene acceso al módulo de Producción.")
+def comprobar_acceso_panaderia(usuario_id: str, perfil: dict, panaderia_id: int, permitir_produccion: bool = False):
+    if perfil["rol"] == "produccion" and not permitir_produccion:
+        raise HTTPException(status_code=403, detail="Tu cuenta no tiene permiso para esta operación.")
     if perfil["rol"] == "admin" and perfil["es_admin_principal"]:
         return
     try:
@@ -263,6 +263,11 @@ def comprobar_acceso_panaderia(usuario_id: str, perfil: dict, panaderia_id: int)
         raise
     except Exception:
         raise HTTPException(status_code=503, detail="No se pudo verificar el acceso a la panadería.")
+
+
+def exigir_duena_catalogo(perfil: dict):
+    if perfil.get("rol") != "admin" or perfil.get("es_admin_principal") is not True:
+        raise HTTPException(status_code=403, detail="Solo la dueña puede agregar, editar o eliminar productos y categorías.")
 
 
 def normalizar_nombre_producto(nombre: str) -> str:
@@ -287,7 +292,7 @@ def listar_productos(
 ):
     usuario = obtener_usuario_autenticado(authorization)
     perfil = obtener_perfil(str(usuario.id))
-    comprobar_acceso_panaderia(str(usuario.id), perfil, panaderia_id)
+    comprobar_acceso_panaderia(str(usuario.id), perfil, panaderia_id, permitir_produccion=True)
     try:
         resultado = (
             supabase.table("productos")
@@ -308,6 +313,7 @@ def crear_producto(
 ):
     usuario = obtener_usuario_autenticado(authorization)
     perfil = obtener_perfil(str(usuario.id))
+    exigir_duena_catalogo(perfil)
     comprobar_acceso_panaderia(str(usuario.id), perfil, producto.panaderia_id)
     nombre = normalizar_nombre_producto(producto.nombre)
     if not nombre:
@@ -368,6 +374,7 @@ def actualizar_producto(
 ):
     usuario = obtener_usuario_autenticado(authorization)
     perfil = obtener_perfil(str(usuario.id))
+    exigir_duena_catalogo(perfil)
     try:
         encontrado = (
             supabase.table("productos")
@@ -414,6 +421,7 @@ def eliminar_o_desactivar_producto(
 ):
     usuario = obtener_usuario_autenticado(authorization)
     perfil = obtener_perfil(str(usuario.id))
+    exigir_duena_catalogo(perfil)
     try:
         encontrado = (
             supabase.table("productos")
@@ -729,8 +737,8 @@ def reabrir_registro(
 
 
 
-def obtener_datos_ultimo_cierre(panaderia_id: int, usuario_id: str, perfil: dict):
-    comprobar_acceso_panaderia(usuario_id, perfil, panaderia_id)
+def obtener_datos_ultimo_cierre(panaderia_id: int, usuario_id: str, perfil: dict, permitir_produccion: bool = False):
+    comprobar_acceso_panaderia(usuario_id, perfil, panaderia_id, permitir_produccion=permitir_produccion)
     cierres = (
         supabase.table("cierres_diarios")
         .select("id,panaderia_id,fecha,estado,cerrado_por,cerrado_por_nombre")
@@ -752,6 +760,24 @@ def obtener_datos_ultimo_cierre(panaderia_id: int, usuario_id: str, perfil: dict
         if perfil_cierre:
             nombre_usuario = perfil_cierre[0].get("nombre")
     cierre["cerrado_por_nombre"] = nombre_usuario or "Usuario"
+    filas_produccion = (
+        supabase.table("produccion_registros")
+        .select("pan_nombre,cantidad")
+        .eq("panaderia_id", panaderia_id)
+        .eq("fecha_produccion", cierre["fecha"])
+        .execute()
+    ).data
+    acumulado_produccion = {}
+    for fila in filas_produccion:
+        nombre_pan = " ".join(str(fila.get("pan_nombre") or "").split())
+        if not nombre_pan:
+            continue
+        acumulado_produccion[nombre_pan] = acumulado_produccion.get(nombre_pan, 0) + int(fila.get("cantidad") or 0)
+    tabla_produccion = [
+        {"producto": nombre, "cantidad": cantidad}
+        for nombre, cantidad in sorted(acumulado_produccion.items(), key=lambda item: item[0].casefold())
+    ]
+    total_produccion = sum(item["cantidad"] for item in tabla_produccion)
     detalles = (
         supabase.table("inventario_detalles")
         .select("producto_id,cantidad,precio_unitario,producto_nombre")
@@ -790,6 +816,7 @@ def obtener_datos_ultimo_cierre(panaderia_id: int, usuario_id: str, perfil: dict
         "resumen": resumen_salida,
         "total_piezas": total_piezas,
         "total_importe": str(total_importe),
+        "produccion": {"fecha": cierre["fecha"], "lineas": tabla_produccion, "total_cantidad": total_produccion},
     }
 
 
@@ -800,10 +827,10 @@ def consultar_tablas_ultimo_cierre(
 ):
     usuario = obtener_usuario_autenticado(authorization)
     perfil = obtener_perfil(str(usuario.id))
-    comprobar_acceso_panaderia(str(usuario.id), perfil, panaderia_id)
+    comprobar_acceso_panaderia(str(usuario.id), perfil, panaderia_id, permitir_produccion=True)
     try:
-        datos = obtener_datos_ultimo_cierre(panaderia_id, str(usuario.id), perfil)
-        return datos or {"cierre": None, "lineas": [], "resumen": [], "total_piezas": 0, "total_importe": "0"}
+        datos = obtener_datos_ultimo_cierre(panaderia_id, str(usuario.id), perfil, permitir_produccion=True)
+        return datos or {"cierre": None, "lineas": [], "resumen": [], "total_piezas": 0, "total_importe": "0", "produccion": {"fecha": None, "lineas": [], "total_cantidad": 0}}
     except HTTPException:
         raise
     except Exception:
@@ -817,9 +844,9 @@ def descargar_tablas_ultimo_cierre_excel(
 ):
     usuario = obtener_usuario_autenticado(authorization)
     perfil = obtener_perfil(str(usuario.id))
-    comprobar_acceso_panaderia(str(usuario.id), perfil, panaderia_id)
+    comprobar_acceso_panaderia(str(usuario.id), perfil, panaderia_id, permitir_produccion=True)
     try:
-        datos = obtener_datos_ultimo_cierre(panaderia_id, str(usuario.id), perfil)
+        datos = obtener_datos_ultimo_cierre(panaderia_id, str(usuario.id), perfil, permitir_produccion=True)
         if not datos:
             raise HTTPException(status_code=404, detail="Todavía no hay un día cerrado para descargar.")
         cierre = datos["cierre"]
@@ -828,7 +855,7 @@ def descargar_tablas_ultimo_cierre_excel(
         hoja.title = "Cierre del día"
         hoja.sheet_view.showGridLines = False
         hoja.merge_cells("A1:D1")
-        hoja["A1"] = "INVENTARIO DIARIO"
+        hoja["A1"] = "INVENTARIO Y PRODUCCIÓN DIARIA"
         hoja["A1"].font = Font(name="Arial", size=16, bold=True, color="FFFFFF")
         hoja["A1"].fill = PatternFill("solid", fgColor="713F12")
         hoja["A1"].alignment = Alignment(horizontal="center", vertical="center")
@@ -887,6 +914,18 @@ def descargar_tablas_ultimo_cierre_excel(
         hoja.cell(fila, 3, float(Decimal(datos["total_importe"])))
         hoja.cell(fila, 3).number_format = '"$"#,##0.00'
         for c in hoja[fila][:3]:
+            c.font = Font(bold=True)
+            c.fill = PatternFill("solid", fgColor="F3E8D8")
+        fila += 2
+        fila = encabezado_tabla(fila, "PRODUCCIÓN · DETALLE POR PRODUCTO", ["Producto producido", "Cantidad"])
+        produccion = datos.get("produccion") or {"lineas": [], "total_cantidad": 0}
+        for linea in produccion.get("lineas", []):
+            hoja.cell(fila, 1, linea["producto"])
+            hoja.cell(fila, 2, int(linea["cantidad"]))
+            fila += 1
+        hoja.cell(fila, 1, "TOTAL PRODUCCIÓN")
+        hoja.cell(fila, 2, int(produccion.get("total_cantidad") or 0))
+        for c in hoja[fila][:2]:
             c.font = Font(bold=True)
             c.fill = PatternFill("solid", fgColor="F3E8D8")
 
