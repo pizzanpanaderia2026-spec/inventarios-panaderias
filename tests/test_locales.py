@@ -84,7 +84,7 @@ class LocalDeletionChecksTests(unittest.TestCase):
         self.assertEqual(blockers, [])
 
     def test_user_with_only_this_location_blocks_removal(self):
-        core = self.make_core(access=[{"usuario_id": "user-1"}], other_access={"user-1": []})
+        core = self.make_core(access=[{"usuario_id": "user-1", "panaderia_id": 2}], other_access={"user-1": []})
         _, blockers = _estado_eliminacion_local(core, 2)
         self.assertIn("Hay usuarios que solo tienen asignado este local", blockers)
 
