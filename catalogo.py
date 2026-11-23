@@ -17,6 +17,8 @@ def _context(authorization, panaderia_id, solo_lectura=False):
     user = core.obtener_usuario_autenticado(authorization)
     profile = core.obtener_perfil(str(user.id))
     core.comprobar_acceso_panaderia(str(user.id), profile, panaderia_id, permitir_produccion=solo_lectura)
+    if not solo_lectura:
+        core.exigir_duena_catalogo(profile)
     return core, user, profile
 
 
@@ -107,7 +109,7 @@ def listar_catalogo(panaderia_id: int, authorization: str | None = Header(defaul
             p["categoria_nombre"] = category.get("nombre") if category else None
             p["categoria_activa"] = bool(category and category.get("activa"))
             p["categoria_protegida"] = bool(category and category.get("protegida"))
-        return {"categorias": categories, "productos": products, "es_admin": bool(profile.get("es_admin_principal") or profile.get("rol") == "admin")}
+        return {"categorias": categories, "productos": products, "es_admin": bool(profile.get("rol") == "admin" and profile.get("es_admin_principal") is True)}
     except HTTPException:
         raise
     except Exception:
