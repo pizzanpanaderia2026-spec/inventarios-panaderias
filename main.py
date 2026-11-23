@@ -1540,9 +1540,9 @@ def _perfil_con_acceso_produccion(usuario_id: str, perfil: dict, panaderia_id: i
         raise HTTPException(status_code=503, detail="No se pudo verificar el acceso a la panadería.")
 
 
-def _produccion_es_editable(fecha_produccion: str | date) -> bool:
+def _produccion_es_editable(fecha_produccion: str | date, dias_editables: int | None = None) -> bool:
     fecha = fecha_produccion if isinstance(fecha_produccion, date) else date.fromisoformat(str(fecha_produccion)[:10])
-    dias = obtener_configuracion_edicion()["dias_produccion"]
+    dias = obtener_configuracion_edicion()["dias_produccion"] if dias_editables is None else dias_editables
     transcurridos = (datetime.now(TZ_PRODUCCION).date() - fecha).days
     return 0 <= transcurridos <= dias
 
@@ -1577,10 +1577,11 @@ def consultar_produccion(
             if ids else []
         )
         nombres = {str(p["id"]): p["nombre"] for p in perfiles}
+        dias_editables = obtener_configuracion_edicion()["dias_produccion"]
         for fila in filas:
             fila["usuario_nombre"] = fila.get("usuario_nombre") or nombres.get(str(fila.get("usuario_id")), "Usuario")
-            fila["editable"] = _produccion_es_editable(fila["fecha_produccion"])
-        return {"registros": filas, "total": len(filas), "dias_editables": obtener_configuracion_edicion()["dias_produccion"]}
+            fila["editable"] = _produccion_es_editable(fila["fecha_produccion"], dias_editables)
+        return {"registros": filas, "total": len(filas), "dias_editables": dias_editables}
     except HTTPException:
         raise
     except Exception:
