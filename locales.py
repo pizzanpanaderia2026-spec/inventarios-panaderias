@@ -262,3 +262,84 @@ async def actualizar_foto_panaderia(
         except Exception:
             pass
         raise HTTPException(status_code=503, detail="No se pudo actualizar la fotografía.")
+
+
+def _estado_eliminacion_local(core, panaderia_id: int):
+    """Solo permite retirar locales realmente vacíos; no toca datos operativos."""
+    local = core.supabase.table("panaderias").select("id,nombre,foto_key,activa").eq("id", panaderia_id).limit(1).execute().data
+    if not local:
+        raise HTTPException(status_code=404, detail="No se encontró el local.")
+    motivos = []
+    restantes = core.supabase.table("panaderias").select("id").eq("activa", True).neq("id", panaderia_id).limit(1).execute().data or []
+    if local[0].get("activa") and not restantes:
+        motivos.append("Debe conservarse al menos un local activo.")
+    comprobaciones = [
+        ("productos", "Productos registrados"),
+        ("cierres_diarios", "Cierres o inventarios registrados"),
+        ("produccion_registros", "Registros de producción"),
+        ("archivos_archivados", "Archivos históricos o respaldos"),
+        ("accesos_panaderias", "Usuarios asignados"),
+    ]
+    for tabla, etiqueta in comprobaciones:
+        filas = core.supabase.table(tabla).select("id" if tabla != "accesos_panaderias" else "usuario_id").eq("panaderia_id", panaderia_id).limit(1).execute().data or []
+        if filas:
+            motivos.append(etiqueta)
+    return local[0], motivos
+
+
+@router.get("/api/admin/panaderias/{panaderia_id}/estado-eliminacion")
+def estado_eliminacion_panaderia(
+    panaderia_id: int,
+    authorization: str | None = Header(default=None),
+):
+    _admin(authorization)
+    core = _core()
+    try:
+        local, motivos = _estado_eliminacion_local(core, panaderia_id)
+        return {
+            "panaderia_id": panaderia_id,
+            "nombre": local["nombre"],
+            "eliminable": not motivos,
+            "motivos": motivos,
+            "mensaje": "El local está vacío y puede eliminarse." if not motivos else "No se puede eliminar porque aún contiene información o tiene dependencias.",
+        }
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=503, detail="No se pudo comprobar si el local está vacío.")
+
+
+@router.delete("/api/admin/panaderias/{panaderia_id}")
+def eliminar_panaderia_vacia(
+    panaderia_id: int,
+    authorization: str | None = Header(default=None),
+):
+    user, profile = _admin(authorization)
+    core = _core()
+    try:
+        local, motivos = _estado_eliminacion_local(core, panaderia_id)
+        if motivos:
+            raise HTTPException(
+                status_code=409,
+                detail="No se puede eliminar este local: " + "; ".join(motivos) + ".",
+            )
+        # Solo se limpian categorías y auditoría administrativa del local vacío.
+        # Los registros operativos se validaron antes y no se eliminan aquí.
+        core.supabase.table("auditoria_inventario").delete().eq("panaderia_id", panaderia_id).execute()
+        core.supabase.table("categorias_productos").delete().eq("panaderia_id", panaderia_id).execute()
+        eliminado = core.supabase.table("panaderias").delete().eq("id", panaderia_id).select("id").execute().data or []
+        if not eliminado:
+            raise HTTPException(status_code=409, detail="El local ya no existe o no pudo eliminarse.")
+        foto_key = local.get("foto_key")
+        if foto_key:
+            try:
+                client, bucket = _r2()
+                client.delete_object(Bucket=bucket, Key=foto_key)
+            except Exception:
+                # La eliminación del local ya quedó confirmada; la foto huérfana no afecta los datos.
+                pass
+        return {"eliminado": True, "panaderia_id": panaderia_id}
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=503, detail="No se pudo eliminar el local vacío. No se modificaron sus inventarios ni registros.")
