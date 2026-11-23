@@ -326,7 +326,6 @@ def eliminar_panaderia_vacia(
         # Solo se limpian categorías y auditoría administrativa del local vacío.
         # Los registros operativos se validaron antes y no se eliminan aquí.
         core.supabase.table("auditoria_inventario").delete().eq("panaderia_id", panaderia_id).execute()
-        core.supabase.table("categorias_productos").delete().eq("panaderia_id", panaderia_id).execute()
         eliminado = core.supabase.table("panaderias").delete().eq("id", panaderia_id).select("id").execute().data or []
         if not eliminado:
             raise HTTPException(status_code=409, detail="El local ya no existe o no pudo eliminarse.")
