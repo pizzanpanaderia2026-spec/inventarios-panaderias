@@ -1171,7 +1171,7 @@
       mostrarSeccion("panelRegistro");
       try {
         const catalogo = window.iniciarCatalogoProductos
-          ? await window.iniciarCatalogoProductos(sesionActual, autorizada)
+          ? await window.iniciarCatalogoProductos(sesionActual, autorizada, !esAdministrador())
           : { productos: [], categorias: [] };
         if (!catalogo) {
           mostrarMensaje(
