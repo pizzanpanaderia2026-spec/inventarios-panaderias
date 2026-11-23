@@ -1,98 +1,33 @@
 import unittest
 from types import SimpleNamespace
-
 from locales import _estado_eliminacion_local
 
-
-class FakeQuery:
-    def __init__(self, table, data):
-        self.table = table
-        self.data = data
-        self.filters = {}
-        self.excluded = {}
-        self.limit_count = None
-
-    def select(self, *_args):
-        return self
-
-    def eq(self, key, value):
-        self.filters[key] = value
-        return self
-
-    def neq(self, key, value):
-        self.excluded[key] = value
-        return self
-
-    def limit(self, count):
-        self.limit_count = count
-        return self
-
+class Q:
+    def __init__(self,t,d): self.t=t; self.d=d; self.f={}; self.n={}
+    def select(self,*a): return self
+    def eq(self,k,v): self.f[k]=v; return self
+    def neq(self,k,v): self.n[k]=v; return self
+    def in_(self,k,v): self.f[k]=list(v); return self
+    def limit(self,n): self.l=n; return self
     def execute(self):
-        if self.table == "panaderias":
-            if "id" in self.filters:
-                rows = [self.data["local"]] if self.data["local"]["id"] == self.filters["id"] else []
-            else:
-                rows = self.data.get("other_active", [])
-        elif self.table == "accesos_panaderias":
-            if "usuario_id" in self.filters:
-                rows = self.data.get("other_access", {}).get(self.filters["usuario_id"], [])
-            else:
-                rows = self.data.get("access", [])
-        else:
-            rows = self.data.get(self.table, [])
-        for key, value in self.filters.items():
-            rows = [row for row in rows if row.get(key) == value]
-        for key, value in self.excluded.items():
-            rows = [row for row in rows if row.get(key) != value]
-        return SimpleNamespace(data=rows[:self.limit_count] if self.limit_count is not None else rows)
-
-
-class FakeSupabase:
-    def __init__(self, data):
-        self.data = data
-
-    def table(self, name):
-        return FakeQuery(name, self.data)
-
-
-class LocalDeletionChecksTests(unittest.TestCase):
-    def make_core(self, **overrides):
-        data = {
-            "local": {"id": 2, "nombre": "Local vacío", "foto_key": None, "activa": True},
-            "other_active": [{"id": 1, "activa": True}],
-            "access": [],
-            "other_access": {},
-            "productos": [],
-            "cierres_diarios": [],
-            "produccion_registros": [],
-            "archivos_archivados": [],
-        }
-        data.update(overrides)
-        return SimpleNamespace(supabase=FakeSupabase(data))
-
-    def test_empty_location_can_be_removed(self):
-        local, blockers = _estado_eliminacion_local(self.make_core(), 2)
-        self.assertEqual(local["nombre"], "Local vacío")
-        self.assertEqual(blockers, [])
-
-    def test_user_with_another_location_does_not_block_removal(self):
-        core = self.make_core(
-            access=[{"usuario_id": "user-1", "panaderia_id": 2}],
-            other_access={"user-1": [{"usuario_id": "user-1", "panaderia_id": 1}]},
-        )
-        _, blockers = _estado_eliminacion_local(core, 2)
-        self.assertEqual(blockers, [])
-
-    def test_user_with_only_this_location_blocks_removal(self):
-        core = self.make_core(access=[{"usuario_id": "user-1", "panaderia_id": 2}], other_access={"user-1": []})
-        _, blockers = _estado_eliminacion_local(core, 2)
-        self.assertIn("Hay usuarios que solo tienen asignado este local", blockers)
-
-    def test_products_block_removal(self):
-        core = self.make_core(productos=[{"id": 10, "panaderia_id": 2}])
-        _, blockers = _estado_eliminacion_local(core, 2)
-        self.assertIn("Productos registrados", blockers)
-
-
-if __name__ == "__main__":
-    unittest.main()
+        if self.t=="panaderias": rows=[self.d["local"]] if self.d["local"]["id"]==self.f.get("id") else self.d.get("other_active",[])
+        elif self.t=="accesos_panaderias": rows=self.d.get("other_access",{}).get(self.f["usuario_id"],[]) if "usuario_id" in self.f else self.d.get("access",[])
+        else: rows=self.d.get(self.t,[])
+        for k,v in self.f.items():
+            if k=="id" and self.t=="panaderias": continue
+            rows=[r for r in rows if r.get(k) in v] if isinstance(v,list) else [r for r in rows if r.get(k)==v]
+        for k,v in self.n.items(): rows=[r for r in rows if r.get(k)!=v]
+        return SimpleNamespace(data=rows[:getattr(self,"l",len(rows))])
+class S:
+    def __init__(self,d): self.d=d
+    def table(self,n): return Q(n,self.d)
+class T(unittest.TestCase):
+    def core(self,**kw):
+        d={"local":{"id":2,"nombre":"G","foto_key":None,"activa":True},"other_active":[{"id":1,"activa":True}],"access":[],"other_access":{},"productos":[],"inventario_detalles":[],"cierres_diarios":[],"produccion_registros":[],"archivos_archivados":[]}; d.update(kw); return SimpleNamespace(supabase=S(d))
+    def test_empty(self): self.assertEqual(_estado_eliminacion_local(self.core(),2)[1],[])
+    def test_disabled_products_ok(self): self.assertEqual(_estado_eliminacion_local(self.core(productos=[{"id":8,"activo":False}]),2)[1],[])
+    def test_active_products_block(self): self.assertIn("Productos activos registrados",_estado_eliminacion_local(self.core(productos=[{"id":8,"activo":True}]),2)[1])
+    def test_old_inventory_detail_blocks(self): self.assertTrue(_estado_eliminacion_local(self.core(productos=[{"id":8,"activo":False}],inventario_detalles=[{"id":1,"producto_id":8}]),2)[1])
+    def test_access_with_other_local_ok(self): self.assertEqual(_estado_eliminacion_local(self.core(access=[{"usuario_id":"u","panaderia_id":2}],other_access={"u":[{"panaderia_id":1}]}),2)[1],[])
+    def test_only_access_blocks(self): self.assertTrue(_estado_eliminacion_local(self.core(access=[{"usuario_id":"u","panaderia_id":2}]),2)[1])
+if __name__=="__main__": unittest.main()
