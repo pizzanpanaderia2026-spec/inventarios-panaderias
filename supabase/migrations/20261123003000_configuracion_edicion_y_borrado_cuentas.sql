@@ -27,3 +27,65 @@ UPDATE public.produccion_registros pr SET usuario_nombre=p.nombre FROM public.pe
 ALTER TABLE public.produccion_registros ALTER COLUMN usuario_id DROP NOT NULL;
 ALTER TABLE public.produccion_registros DROP CONSTRAINT IF EXISTS produccion_registros_usuario_id_fkey;
 ALTER TABLE public.produccion_registros ADD CONSTRAINT produccion_registros_usuario_id_fkey FOREIGN KEY (usuario_id) REFERENCES auth.users(id) ON DELETE SET NULL;
+
+
+-- La ventana de inventario se calcula por días naturales en la zona horaria
+-- de México. El booleano solo lo envía el backend service_role después de
+-- validar el plazo configurable y los permisos de la cuenta.
+CREATE OR REPLACE FUNCTION public.reabrir_cierre_diario(
+  p_cierre_id bigint,
+  p_usuario_id uuid,
+  p_motivo text,
+  p_dentro_de_48h boolean,
+  p_fecha timestamptz
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_cierre public.cierres_diarios%rowtype;
+  v_dentro_de_48h boolean;
+  v_motivo text;
+BEGIN
+  SELECT * INTO v_cierre
+  FROM public.cierres_diarios
+  WHERE id = p_cierre_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN RAISE EXCEPTION 'No existe el cierre indicado'; END IF;
+  IF v_cierre.estado = 'abierto' THEN
+    RETURN jsonb_build_object('id', v_cierre.id, 'estado', v_cierre.estado, 'reabierto_en', v_cierre.reabierto_en);
+  END IF;
+  IF v_cierre.cerrado_en IS NULL THEN RAISE EXCEPTION 'El cierre no tiene una fecha de cierre válida'; END IF;
+
+  v_dentro_de_48h := COALESCE(p_dentro_de_48h, false);
+  v_motivo := btrim(coalesce(p_motivo, ''));
+  IF NOT v_dentro_de_48h AND length(v_motivo) < 5 THEN
+    RAISE EXCEPTION 'La corrección administrativa requiere un motivo de al menos cinco caracteres';
+  END IF;
+
+  UPDATE public.cierres_diarios
+  SET estado = 'abierto',
+      reabierto_en = now(),
+      reabierto_por = p_usuario_id,
+      motivo_correccion = CASE WHEN v_dentro_de_48h THEN NULL ELSE v_motivo END,
+      actualizado_en = now()
+  WHERE id = p_cierre_id
+  RETURNING * INTO v_cierre;
+
+  INSERT INTO public.auditoria_inventario
+    (cierre_id, panaderia_id, usuario_id, accion, motivo, detalles)
+  VALUES
+    (v_cierre.id, v_cierre.panaderia_id, p_usuario_id,
+     CASE WHEN v_dentro_de_48h THEN 'reabrir_dentro_plazo' ELSE 'correccion_administrativa' END,
+     CASE WHEN v_dentro_de_48h THEN NULL ELSE v_motivo END,
+     jsonb_build_object('estado_anterior', 'cerrado', 'estado_nuevo', 'abierto'));
+
+  RETURN jsonb_build_object('id', v_cierre.id, 'estado', v_cierre.estado, 'reabierto_en', v_cierre.reabierto_en);
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.reabrir_cierre_diario(bigint, uuid, text, boolean, timestamptz) FROM public, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.reabrir_cierre_diario(bigint, uuid, text, boolean, timestamptz) TO service_role;
