@@ -33,11 +33,13 @@
       String(d.getDate()).padStart(2, "0");
   }
 
+  let diasEditables = 1;
   function puedeAgregarEnFecha(valor) {
-    if (!valor) return false;
+    if (!valor || valor > fechaLocal()) return false;
     const inicio = new Date(valor + "T00:00:00");
-    const ahora = new Date();
-    return valor <= fechaLocal() && ahora.getTime() - inicio.getTime() <= 24 * 60 * 60 * 1000;
+    const hoy = new Date(fechaLocal() + "T00:00:00");
+    const dias = Math.round((hoy.getTime() - inicio.getTime()) / 86400000);
+    return dias >= 0 && dias <= diasEditables;
   }
 
   function aviso(texto, tipo = "error") {
@@ -318,6 +320,7 @@
         "/api/produccion?panaderia_id=" + encodeURIComponent(bakery.id) +
         "&fecha_produccion=" + encodeURIComponent(fecha.value)
       );
+      diasEditables = Number.isInteger(Number(datos.dias_editables)) ? Number(datos.dias_editables) : 1;
       const registros = datos.registros || [];
       construirTabla(registros);
       const permiteAgregar = puedeAgregarEnFecha(fecha.value);
