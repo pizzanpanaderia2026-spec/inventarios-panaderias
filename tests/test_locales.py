@@ -59,7 +59,7 @@ class LocalDeletionChecksTests(unittest.TestCase):
     def make_core(self, **overrides):
         data = {
             "local": {"id": 2, "nombre": "Local vacío", "foto_key": None, "activa": True},
-            "other_active": [{"id": 1}],
+            "other_active": [{"id": 1, "activa": True}],
             "access": [],
             "other_access": {},
             "productos": [],
