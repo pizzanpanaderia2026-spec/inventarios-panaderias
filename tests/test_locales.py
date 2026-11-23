@@ -10,6 +10,7 @@ class FakeQuery:
         self.data = data
         self.filters = {}
         self.excluded = {}
+        self.limit_count = None
 
     def select(self, *_args):
         return self
@@ -22,7 +23,8 @@ class FakeQuery:
         self.excluded[key] = value
         return self
 
-    def limit(self, *_args):
+    def limit(self, count):
+        self.limit_count = count
         return self
 
     def execute(self):
@@ -42,7 +44,7 @@ class FakeQuery:
             rows = [row for row in rows if row.get(key) == value]
         for key, value in self.excluded.items():
             rows = [row for row in rows if row.get(key) != value]
-        return SimpleNamespace(data=rows[:1] if self.table == "panaderias" and "id" not in self.filters else rows[:1] if "limit" in self.filters else rows)
+        return SimpleNamespace(data=rows[:self.limit_count] if self.limit_count is not None else rows)
 
 
 class FakeSupabase:
