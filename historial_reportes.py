@@ -426,17 +426,21 @@ def _hoja_informe(libro, nombre_hoja, titulo, categoria, inventario, produccion,
         inicio_producto = fin_producto = inicio_precio = fin_precio = 0
     if categoria in ("produccion", "analisis"):
         inicio_prod = fila + 2
-        fila = _tabla(hoja, fila, "PRODUCCIÓN POR TIPO DE PAN", ["Pan", "Cantidad producida"],
-            [[x["pan"], x["cantidad"]] for x in filas_prod])
+        fila = _tabla(hoja, fila, "PRODUCCIÓN POR TIPO DE PAN", ["Pan", "Cantidad producida", "Importe"],
+            [[x["pan"], x["cantidad"], float(Decimal(x["importe"])) if x.get("importe") is not None else "N/D"] for x in filas_prod],
+            {3: '"$"#,##0.00'})
         fin_prod = fila - 2
     else:
         inicio_prod = fin_prod = 0
     if categoria == "analisis":
         inicio_analisis = fila + 2
         filas_analisis = (analisis or {}).get("por_pan", [])
-        fila = _tabla(hoja, fila, "PRODUCCIÓN Y SOBRANTES", ["Pan", "Producido", "Sobrante", "% sobrante"],
-            [[x["pan"], x["producido"], x["sobrante"], x["porcentaje_sobrante"] if x["porcentaje_sobrante"] is not None else "N/D"] for x in filas_analisis])
-        hoja.cell(fila, 1, "El porcentaje compara sobrantes registrados con producción del mismo pan; no representa ventas.")
+        fila = _tabla(hoja, fila, "PRODUCCIÓN, VENTAS E INVENTARIO FINAL", ["Pan", "Producido", "Vendido", "Importe ventas", "Inventario final", "Producción - ventas (referencia)"],
+            [[x["pan"], x["producido"], x["vendido"], float(Decimal(x["importe_ventas"])),
+              x["inventario_final"] if x["inventario_final"] is not None else "N/D",
+              x["diferencia_produccion_ventas"] if x["diferencia_produccion_ventas"] is not None else "N/D"] for x in filas_analisis],
+            {4: '"$"#,##0.00'})
+        hoja.cell(fila, 1, "La diferencia producción - ventas es referencial y no representa merma; no considera existencias iniciales, devoluciones ni ajustes.")
         hoja.cell(fila, 1).font = Font(italic=True, color="666666")
         fin_analisis = fila - 2
     else:
@@ -446,11 +450,11 @@ def _hoja_informe(libro, nombre_hoja, titulo, categoria, inventario, produccion,
             datos = [[x["fecha"], x["inventario_cantidad"], float(Decimal(x["inventario_importe"]))] for x in resumen_diario]
             fila = _tabla(hoja, fila, "RESUMEN DIARIO", ["Fecha", "Inventario", "Importe"], datos, {3: '"$"#,##0.00'})
         elif categoria == "produccion":
-            datos = [[x["fecha"], x["produccion_cantidad"]] for x in resumen_diario]
-            fila = _tabla(hoja, fila, "RESUMEN DIARIO", ["Fecha", "Producción"], datos)
+            datos = [[x["fecha"], x["produccion_cantidad"], float(Decimal(x["produccion_importe"])) if x.get("produccion_importe") is not None else "N/D"] for x in resumen_diario]
+            fila = _tabla(hoja, fila, "RESUMEN DIARIO", ["Fecha", "Producción", "Importe producción"], datos, {3: '"$"#,##0.00'})
         else:
-            datos = [[x["fecha"], x["inventario_cantidad"], float(Decimal(x["inventario_importe"])), x["produccion_cantidad"]] for x in resumen_diario]
-            fila = _tabla(hoja, fila, "RESUMEN DIARIO", ["Fecha", "Inventario", "Importe inventario", "Producción"], datos, {3: '"$"#,##0.00'})
+            datos = [[x["fecha"], x["inventario_cantidad"], float(Decimal(x["inventario_importe"])), x["produccion_cantidad"], x["ventas_cantidad"], float(Decimal(x["ventas_importe"]))] for x in resumen_diario]
+            fila = _tabla(hoja, fila, "RESUMEN DIARIO", ["Fecha", "Inventario final", "Importe inventario", "Producción", "Ventas", "Importe ventas"], datos, {3: '"$"#,##0.00', 6: '"$"#,##0.00'})
     inicio_mensual = fin_mensual = 0
     if resumen_mensual:
         inicio_mensual = fila + 2
@@ -461,8 +465,8 @@ def _hoja_informe(libro, nombre_hoja, titulo, categoria, inventario, produccion,
             datos = [[x["mes"], x["produccion_cantidad"]] for x in resumen_mensual]
             fila = _tabla(hoja, fila, "RESUMEN MENSUAL", ["Mes", "Producción"], datos)
         else:
-            datos = [[x["mes"], x["inventario_cantidad"], float(Decimal(x["inventario_importe"])), x["produccion_cantidad"]] for x in resumen_mensual]
-            fila = _tabla(hoja, fila, "RESUMEN MENSUAL", ["Mes", "Inventario", "Importe inventario", "Producción"], datos, {3: '"$"#,##0.00'})
+            datos = [[x["mes"], x["inventario_cantidad"], float(Decimal(x["inventario_importe"])), x["produccion_cantidad"], x.get("ventas_cantidad",0), float(Decimal(x.get("ventas_importe","0")))] for x in resumen_mensual]
+            fila = _tabla(hoja, fila, "RESUMEN MENSUAL", ["Mes", "Inventario final", "Importe inventario", "Producción", "Ventas", "Importe ventas"], datos, {3: '"$"#,##0.00', 6: '"$"#,##0.00'})
         fin_mensual = fila - 2
     if categoria in ("inventario", "analisis") and fin_producto >= inicio_producto:
         _grafica(hoja, "Producto", inicio_producto, fin_producto, 2, "Inventario por tipo de pan", "F3")
@@ -513,13 +517,15 @@ def _crear_excel(categoria, tipo, desde, hasta, datos, resumen_only):
     resumen_mensual = datos.get("resumen_mensual")
     titulo = "Resumen " + _titulo_periodo(tipo, desde, hasta)
     if tipo == "anio":
-        mensual = {f"{desde.year}-{mes:02d}": {"inventario_cantidad": 0, "inventario_importe": Decimal("0"), "produccion_cantidad": 0}
+        mensual = {f"{desde.year}-{mes:02d}": {"inventario_cantidad": 0, "inventario_importe": Decimal("0"), "produccion_cantidad": 0, "ventas_cantidad":0, "ventas_importe":Decimal("0")}
             for mes in range(1, 13)}
         for x in resumen_diario:
             mes = x["fecha"][:7]
             mensual[mes]["inventario_cantidad"] += x["inventario_cantidad"]
             mensual[mes]["inventario_importe"] += Decimal(x["inventario_importe"])
             mensual[mes]["produccion_cantidad"] += x["produccion_cantidad"]
+            mensual[mes]["ventas_cantidad"] += x.get("ventas_cantidad",0)
+            mensual[mes]["ventas_importe"] += Decimal(x.get("ventas_importe","0"))
         resumen_mensual = [{"mes": k, **{a: (str(v) if isinstance(v, Decimal) else v) for a,v in vals.items()}}
             for k, vals in sorted(mensual.items())]
     _hoja_informe(libro, "Resumen", titulo, categoria, inv, prod, resumen_diario if tipo in ("mes","periodo") else [], resumen_mensual, datos.get("analisis"), anio=(tipo=="anio"))
