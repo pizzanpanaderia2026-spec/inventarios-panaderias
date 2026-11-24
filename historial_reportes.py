@@ -566,7 +566,7 @@ def _crear_excel(categoria, tipo, desde, hasta, datos, resumen_only):
             combinado = {
                 "inventario": inv_datos["inventario"],
                 "produccion": prod_datos["produccion"],
-                "resumen_diario": inv_datos["resumen_diario"],
+                "resumen_diario": dia_completo["resumen_diario"],
             }
             combinado["analisis"] = dia_completo["analisis"]
             fecha_obj = date.fromisoformat(fecha)
