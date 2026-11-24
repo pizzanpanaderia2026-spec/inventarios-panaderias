@@ -262,6 +262,7 @@ def _agregar(inventario, produccion, desde, hasta, resumen_only=False, ventas=No
             "cantidad_total":sum(v["cantidad"] for v in ventas_producto.values()),
             "importe_total":str(sum((v["importe"] for v in ventas_producto.values()),Decimal("0")).quantize(Decimal("0.01"))),
             "total_ventas":len(ventas)},
+        "ventas_detalle": ventas,
         "analisis": {"por_pan": comparacion},
         "resumen_diario": dias,
     }
@@ -543,18 +544,24 @@ def _crear_excel(categoria, tipo, desde, hasta, datos, resumen_only):
     elif tipo in ("mes", "periodo", "semana"):
         inv_map = {x["cierre"]["fecha"]: x for x in inv["dias"]}
         prod_map = {x["fecha"]: x for x in prod["dias"]}
-        fechas = sorted(set(inv_map) | set(prod_map))
+        ventas_map = defaultdict(list)
+        for venta in datos.get("ventas_detalle", []):
+            ventas_map[str(venta.get("fecha") or "")[:10]].append(venta)
+        fechas = sorted(set(inv_map) | set(prod_map) | set(ventas_map))
         for fecha in fechas:
             inv_dia = inv_map.get(fecha)
             prod_dia = prod_map.get(fecha)
             inv_datos = _agregar([inv_dia] if inv_dia else [], [], date.fromisoformat(fecha), date.fromisoformat(fecha))
             prod_datos = _agregar([], [prod_dia] if prod_dia else [], date.fromisoformat(fecha), date.fromisoformat(fecha))
+            dia_completo = _agregar([inv_dia] if inv_dia else [], [prod_dia] if prod_dia else [],
+                date.fromisoformat(fecha), date.fromisoformat(fecha),
+                ventas=ventas_map.get(fecha, []) if categoria == "analisis" else None)
             combinado = {
                 "inventario": inv_datos["inventario"],
                 "produccion": prod_datos["produccion"],
                 "resumen_diario": inv_datos["resumen_diario"],
             }
-            combinado["analisis"] = _agregar([inv_dia] if inv_dia else [], [prod_dia] if prod_dia else [], date.fromisoformat(fecha), date.fromisoformat(fecha))["analisis"]
+            combinado["analisis"] = dia_completo["analisis"]
             fecha_obj = date.fromisoformat(fecha)
             nombre = f"{fecha_obj.day:02d}-{MESES_ES[fecha_obj.month-1][:3]}-{fecha_obj.year}"
             titulo_dia = f"{fecha_obj.day:02d} de {MESES_ES[fecha_obj.month-1]} de {fecha_obj.year}"
