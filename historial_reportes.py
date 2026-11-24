@@ -472,7 +472,7 @@ def _hoja_informe(libro, nombre_hoja, titulo, categoria, inventario, produccion,
             fila = _tabla(hoja, fila, "RESUMEN MENSUAL", ["Mes", "Producción", "Importe producción"], datos, {3: '"$"#,##0.00'})
         else:
             datos = [[x["mes"], x["inventario_cantidad"], float(Decimal(x["inventario_importe"])), x["produccion_cantidad"], float(Decimal(x["produccion_importe"])) if x.get("produccion_importe") is not None else "N/D", x.get("ventas_cantidad",0), float(Decimal(x.get("ventas_importe","0")))] for x in resumen_mensual]
-            fila = _tabla(hoja, fila, "RESUMEN MENSUAL", ["Mes", "Inventario final", "Importe inventario", "Producción", "Importe producción", "Ventas", "Importe ventas"], datos, {3: '"$"#,##0.00', 5: '"$"#,##0.00', 7: '"$"#,##0.00'})
+            fila = _tabla(hoja, fila, "RESUMEN MENSUAL", ["Mes", "Inventario registrado", "Importe inventario", "Producción", "Importe producción", "Ventas", "Importe ventas"], datos, {3: '"$"#,##0.00', 5: '"$"#,##0.00', 7: '"$"#,##0.00'})
         fin_mensual = fila - 2
     if categoria in ("inventario", "analisis") and fin_producto >= inicio_producto:
         _grafica(hoja, "Producto", inicio_producto, fin_producto, 2, "Inventario por tipo de pan", "F3")
