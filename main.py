@@ -1696,15 +1696,18 @@ def consultar_produccion(
         config_edicion = obtener_configuracion_edicion()
         total_cantidad = 0
         total_importe = Decimal("0")
+        importe_completo = True
         for fila in filas:
             fila["usuario_nombre"] = fila.get("usuario_nombre") or nombres.get(str(fila.get("usuario_id")), "Usuario")
             fila["editable"] = _produccion_es_editable(fila["fecha_produccion"])
             total_cantidad += int(fila.get("cantidad") or 0)
-            if fila.get("importe") is not None:
+            if fila.get("importe") is None:
+                importe_completo = False
+            else:
                 total_importe += Decimal(str(fila["importe"]))
         return {"registros": filas, "total": len(filas), "dias_editables": config_edicion["dias_produccion"],
                 "horas_editables": config_edicion["horas_produccion"], "total_cantidad": total_cantidad,
-                "total_importe": str(total_importe.quantize(Decimal("0.01")))}
+                "total_importe": str(total_importe.quantize(Decimal("0.01"))) if importe_completo else None}
     except HTTPException:
         raise
     except Exception:
