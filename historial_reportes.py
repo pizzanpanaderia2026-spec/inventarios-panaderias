@@ -316,16 +316,21 @@ def _reporte(panaderia_id, categoria, tipo, desde, hasta, authorization, incluir
         resumen_only = tipo == "periodo" and dias > MAX_DIAS_DETALLE
         if resumen_only:
             # Para intervalos largos se conservan los agregados y la serie mensual, no cientos de hojas.
-            mensual = defaultdict(lambda: {"inventario_cantidad": 0, "inventario_importe": Decimal("0"), "produccion_cantidad": 0, "ventas_cantidad":0, "ventas_importe":Decimal("0")})
+            mensual = defaultdict(lambda: {"inventario_cantidad": 0, "inventario_importe": Decimal("0"), "produccion_cantidad": 0, "produccion_importe":Decimal("0"), "produccion_importe_completo":True, "ventas_cantidad":0, "ventas_importe":Decimal("0")})
             for item in resumen["resumen_diario"]:
                 mes = item["fecha"][:7]
                 mensual[mes]["inventario_cantidad"] += item["inventario_cantidad"]
                 mensual[mes]["inventario_importe"] += Decimal(item["inventario_importe"])
                 mensual[mes]["produccion_cantidad"] += item["produccion_cantidad"]
+                if item.get("produccion_importe") is None:
+                    mensual[mes]["produccion_importe_completo"] = False
+                else:
+                    mensual[mes]["produccion_importe"] += Decimal(item.get("produccion_importe","0"))
                 mensual[mes]["ventas_cantidad"] += item.get("ventas_cantidad",0)
                 mensual[mes]["ventas_importe"] += Decimal(item.get("ventas_importe","0"))
             resumen["resumen_mensual"] = [{"mes": k, "inventario_cantidad": v["inventario_cantidad"],
                 "inventario_importe": str(v["inventario_importe"]), "produccion_cantidad": v["produccion_cantidad"],
+                "produccion_importe":str(v["produccion_importe"]) if v["produccion_importe_completo"] else None,
                 "ventas_cantidad":v["ventas_cantidad"],"ventas_importe":str(v["ventas_importe"])}
                 for k, v in sorted(mensual.items())]
             resumen["resumen_diario"] = []
