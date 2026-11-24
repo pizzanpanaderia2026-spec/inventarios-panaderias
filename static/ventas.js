@@ -115,6 +115,7 @@
               body: JSON.stringify({ panaderia_id: state.bakery.id, producto_id: product.id, disponible: checkbox.checked })
             });
             product.disponible = checkbox.checked;
+            if (!checkbox.checked) state.cart.delete(product.id);
             drawNewSale();
             clearNotice();
           } catch (error) {
@@ -281,6 +282,7 @@
       button.onclick = () => switchView(button.dataset.posVista);
     });
     $("posRegistrarVenta").onclick = registerSale;
+    $("posActualizarDia").onclick = loadSales;
     await loadAvailability();
     switchView("nueva");
     return true;
