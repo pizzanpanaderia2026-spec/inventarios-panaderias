@@ -5,6 +5,7 @@
   if (!panel) return;
 
   let token = null, bakery = null, catalogo = [], categorias = [], cierre = null;
+  let diasEditables = 365, horasEditables = 0, adminPrincipal = false;
   let seleccionados = new Map();
   const fecha = document.getElementById("fechaRegistro");
   const filas = document.getElementById("filasRegistro");
@@ -75,12 +76,12 @@
 
   function actualizarLimitesFecha() {
     const hoy = new Date();
-    const anteayer = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate() - 2);
+    const diasDeCalendario = diasEditables + (horasEditables > 0 ? 1 : 0);
+    const limite = adminPrincipal ? new Date(1900,0,1) :
+      new Date(hoy.getFullYear(),hoy.getMonth(),hoy.getDate()-diasDeCalendario);
     fecha.max = fechaLocal(hoy);
-    fecha.min = fechaLocal(anteayer);
-    if (!fecha.value || fecha.value < fecha.min || fecha.value > fecha.max) {
-      fecha.value = fecha.max;
-    }
+    fecha.min = fechaLocal(limite);
+    if (!fecha.value || fecha.value < fecha.min || fecha.value > fecha.max) fecha.value = fecha.max;
   }
 
   actualizarLimitesFecha();
@@ -135,17 +136,27 @@
     return catalogo.find(p => String(p.id) === String(id));
   }
 
-  async function persistirRegistro() {
-    const lineas = [...seleccionados.values()].map(x => ({producto_id:Number(x.producto.id), cantidad:Number(x.cantidad)}));
-    if (lineas.some(x => !Number.isInteger(x.cantidad) || x.cantidad < 0)) throw new Error("Las cantidades deben ser números enteros de cero o más.");
-    await api("/api/registro", {method:"PUT", body:JSON.stringify({panaderia_id:Number(bakery.id), fecha:fecha.value, lineas})});
+  async function guardarLinea(producto, cantidad) {
+    if (!Number.isInteger(Number(cantidad)) || Number(cantidad) < 0) throw new Error("La cantidad debe ser un número entero de cero o más.");
+    const resultado = await api("/api/registro/linea", {
+      method:"PUT",
+      body:JSON.stringify({panaderia_id:Number(bakery.id),fecha:fecha.value,producto_id:Number(producto.id),cantidad:Number(cantidad)})
+    });
+    const linea = resultado.linea || {};
+    return {...producto, precio: linea.precio_unitario ?? producto.precio, nombre: linea.producto_nombre || producto.nombre, usuario_nombre: linea.usuario_nombre || producto.usuario_nombre};
   }
 
   async function cargar() {
     actualizarLimitesFecha();
     if (!token || !bakery || !fecha.value) return;
     try {
-      const d = await api("/api/registro?panaderia_id=" + bakery.id + "&fecha_registro=" + fecha.value);
+      const fechaSolicitada = fecha.value;
+      const d = await api("/api/registro?panaderia_id=" + bakery.id + "&fecha_registro=" + fechaSolicitada);
+      diasEditables = Number(d.dias_editables ?? diasEditables);
+      horasEditables = Number(d.horas_editables ?? 0);
+      adminPrincipal = d.admin_principal === true;
+      actualizarLimitesFecha();
+      if (fecha.value !== fechaSolicitada) return await cargar();
       cierre = d.cierre;
       seleccionados = new Map();
       (d.lineas || []).forEach(linea => {
@@ -158,7 +169,7 @@
               ? linea.precio_unitario : productoBase.precio
           };
           seleccionados.set(String(producto.id), {
-            producto,
+            producto: {...producto, precio: linea.precio_unitario ?? producto.precio, usuario_nombre: linea.usuario_nombre || null},
             cantidad: Number(linea.cantidad)
           });
         }
@@ -253,15 +264,21 @@
       aviso("Escribe una cantidad entera de cero o más.");
       return;
     }
-    seleccionados.set(String(producto.id), { producto, cantidad });
-    inputBusqueda.value = "";
-    delete inputBusqueda.dataset.productoId;
-    inputCantidad.value = "";
-    captura.classList.add("oculto");
-    sugerencias.classList.add("oculto");
-    dibujar();
-    try { await persistirRegistro(); aviso("Registro guardado automáticamente.", "exito"); }
-    catch (error) { aviso("No se pudo guardar el registro: " + error.message); await cargar(); }
+    botonAgregar.disabled = true;
+    try {
+      const productoGuardado = await guardarLinea(producto, cantidad);
+      seleccionados.set(String(producto.id), {producto:productoGuardado,cantidad});
+      inputBusqueda.value = "";
+      delete inputBusqueda.dataset.productoId;
+      inputCantidad.value = "";
+      captura.classList.add("oculto");
+      sugerencias.classList.add("oculto");
+      dibujar();
+      aviso("Producto guardado automáticamente.", "exito");
+    } catch (error) {
+      aviso("No se pudo guardar el producto: " + error.message);
+      await cargar();
+    } finally { botonAgregar.disabled = false; }
   });
 
   function actualizarResumen() {
@@ -287,11 +304,9 @@
       filas.textContent = "Primero agrega productos en el catálogo.";
       return;
     }
-
     const titulo = document.createElement("h4");
     titulo.textContent = "Productos registrados";
     filas.appendChild(titulo);
-
     if (!seleccionados.size) {
       const nota = document.createElement("p");
       nota.className = "nota";
@@ -300,67 +315,79 @@
       return;
     }
 
-    seleccionados.forEach(({ producto, cantidad }, id) => {
-      const row = document.createElement("div");
-      row.className = "panel";
-      const top = document.createElement("div");
-      top.className = "barra";
-      const nombre = document.createElement("strong");
-      nombre.textContent = producto.nombre;
-      const precio = document.createElement("span");
-      precio.textContent = "$" + Number(producto.precio).toFixed(2) + " por pieza";
-      top.append(nombre, precio);
-
-      const campo = document.createElement("div");
-      campo.className = "campo";
-      const label = document.createElement("label");
-      label.textContent = "Cantidad";
-      const input = document.createElement("input");
-      input.type = "number";
-      input.min = "0";
-      input.step = "1";
-      input.inputMode = "numeric";
-      input.value = String(cantidad);
-      input.setAttribute("aria-label", "Cantidad de " + producto.nombre);
-      input.disabled = !!(cierre && cierre.estado === "cerrado");
-      input.addEventListener("change", async () => {
-        const n = Number(input.value);
-        if (Number.isInteger(n) && n >= 0) {
-          seleccionados.set(id, { producto, cantidad: n });
-          subtotal.textContent = "Subtotal: $" + (Number(producto.precio) * n).toFixed(2);
-          actualizarResumen();
-          try { await persistirRegistro(); aviso("Cantidad guardada automáticamente.", "exito"); }
-          catch (error) { aviso("No se pudo guardar la cantidad: " + error.message); await cargar(); }
-        } else {
-          input.value = String(cantidad);
-          aviso("La cantidad debe ser un número entero de cero o más.");
-        }
-      });
-      campo.append(label, input);
-
-      const subtotal = document.createElement("p");
-      subtotal.className = "nota";
-      subtotal.textContent = "Subtotal: $" + (Number(producto.precio) * cantidad).toFixed(2);
-      const quitar = document.createElement("button");
-      quitar.type = "button";
-      quitar.className = "secundario";
-      quitar.textContent = "Quitar";
-      quitar.disabled = !!(cierre && cierre.estado === "cerrado");
-      quitar.addEventListener("click", async () => {
-        seleccionados.delete(id);
-        dibujar();
-        try { await persistirRegistro(); aviso("Producto retirado del registro.", "exito"); }
-        catch (error) { aviso("No se pudo actualizar el registro: " + error.message); await cargar(); }
-      });
-      row.append(top, campo, subtotal, quitar);
-      filas.appendChild(row);
+    const tabla = document.createElement("table");
+    tabla.style.minWidth = "760px";
+    const thead = document.createElement("thead");
+    const encabezado = document.createElement("tr");
+    ["Producto","Registró","Precio unitario","Cantidad","Importe","Acciones"].forEach(texto=>{
+      const th=document.createElement("th");th.textContent=texto;encabezado.appendChild(th);
     });
+    thead.appendChild(encabezado);
+    const tbody = document.createElement("tbody");
+
+    seleccionados.forEach(({producto,cantidad},id)=>{
+      const row=document.createElement("tr");
+      const nombre=document.createElement("td");nombre.textContent=producto.nombre;
+      const responsable=document.createElement("td");responsable.textContent=producto.usuario_nombre || "No disponible";
+      const precio=document.createElement("td");precio.textContent="$"+Number(producto.precio||0).toFixed(2);
+      const cantidadCelda=document.createElement("td");
+      const input=document.createElement("input");
+      input.type="number";input.min="0";input.step="1";input.inputMode="numeric";input.value=String(cantidad);
+      input.style.width="100px";input.setAttribute("aria-label","Cantidad de "+producto.nombre);
+      input.disabled=!!(cierre&&cierre.estado==="cerrado");
+      const importe=document.createElement("td");
+      importe.textContent="$"+(Number(producto.precio||0)*cantidad).toFixed(2);
+      input.addEventListener("change",async()=>{
+        const n=Number(input.value);
+        if(!Number.isInteger(n)||n<0){input.value=String(cantidad);aviso("La cantidad debe ser un número entero de cero o más.");return;}
+        input.disabled=true;
+        try{
+          const guardado=await guardarLinea(producto,n);
+          seleccionados.set(id,{producto:guardado,cantidad:n});
+          responsable.textContent=guardado.usuario_nombre||"No disponible";
+          importe.textContent="$"+(Number(guardado.precio||0)*n).toFixed(2);
+          actualizarResumen();
+          aviso("Cantidad guardada automáticamente.","exito");
+        }catch(error){aviso("No se pudo guardar la cantidad: "+error.message);await cargar();}
+        finally{input.disabled=!!(cierre&&cierre.estado==="cerrado");}
+      });
+      cantidadCelda.appendChild(input);
+      const acciones=document.createElement("td");
+      const quitar=document.createElement("button");
+      quitar.type="button";quitar.className="secundario";quitar.textContent="Quitar";
+      quitar.disabled=!!(cierre&&cierre.estado==="cerrado");
+      quitar.addEventListener("click",async()=>{
+        quitar.disabled=true;
+        try{
+          await api("/api/registro/linea?panaderia_id="+encodeURIComponent(bakery.id)+
+            "&fecha="+encodeURIComponent(fecha.value)+"&producto_id="+encodeURIComponent(producto.id),{method:"DELETE"});
+          seleccionados.delete(id);dibujar();aviso("Producto retirado del registro.","exito");
+        }catch(error){aviso("No se pudo retirar el producto: "+error.message);await cargar();}
+        finally{quitar.disabled=!!(cierre&&cierre.estado==="cerrado");}
+      });
+      acciones.appendChild(quitar);
+      row.append(nombre,responsable,precio,cantidadCelda,importe,acciones);
+      tbody.appendChild(row);
+    });
+
+    const tfoot=document.createElement("tfoot");
+    const totalRow=document.createElement("tr");
+    const totalLabel=document.createElement("th");totalLabel.textContent="TOTAL";totalRow.appendChild(totalLabel);
+    const vacia=document.createElement("th");vacia.textContent="—";totalRow.appendChild(vacia);
+    const precioVacio=document.createElement("th");precioVacio.textContent="—";totalRow.appendChild(precioVacio);
+    const totalCantidad=document.createElement("th");totalCantidad.textContent=String([...seleccionados.values()].reduce((s,x)=>s+Number(x.cantidad||0),0));totalRow.appendChild(totalCantidad);
+    const totalImporte=document.createElement("th");totalImporte.textContent="$"+[...seleccionados.values()].reduce((s,x)=>s+Number(x.cantidad||0)*Number(x.producto.precio||0),0).toFixed(2);totalRow.appendChild(totalImporte);
+    const accionesVacias=document.createElement("th");accionesVacias.textContent="";totalRow.appendChild(accionesVacias);
+    tfoot.appendChild(totalRow);
+    tabla.append(thead,tbody,tfoot);
+    const wrapper=document.createElement("div");wrapper.style.cssText="max-width:100%;overflow-x:auto";
+    wrapper.appendChild(tabla);filas.appendChild(wrapper);
   }
 
   fecha.addEventListener("change", () => {
     actualizarLimitesFecha();
     if (fecha.value < fecha.min || fecha.value > fecha.max) {
-      aviso("Selecciona hoy o uno de los dos días calendario anteriores.");
+      aviso("La fecha seleccionada está fuera del plazo configurado para este registro.");
       return;
     }
     seleccionados.clear();
@@ -368,22 +395,11 @@
   });
 
   document.getElementById("botonCerrarDia").addEventListener("click", async () => {
-    if (!confirm("¿Cerrar el día? Se guardarán automáticamente las cantidades capturadas antes de cerrar.")) return;
+    if (!confirm("¿Cerrar el día? Todas las líneas se guardan automáticamente al capturarlas.")) return;
     const botonCerrar = document.getElementById("botonCerrarDia");
     botonCerrar.disabled = true;
     try {
-      // Primero persistir el contenido actual de la captura. Si falla, no cerrar el día.
-      const lineas = [...seleccionados.values()].map(x => ({
-        producto_id: Number(x.producto.id),
-        cantidad: Number(x.cantidad)
-      }));
-      if (lineas.some(x => !Number.isInteger(x.cantidad) || x.cantidad < 0)) {
-        throw new Error("Las cantidades deben ser números enteros de cero o más.");
-      }
-      await api("/api/registro", {
-        method: "PUT",
-        body: JSON.stringify({ panaderia_id: bakery.id, fecha: fecha.value, lineas })
-      });
+      // Cada línea ya está guardada al momento de capturarla o modificarla.
       await api("/api/registro/cerrar?panaderia_id=" + bakery.id + "&fecha_registro=" + fecha.value, { method: "POST" });
       aviso("Registro guardado y día cerrado correctamente.", "exito");
       await cargar();

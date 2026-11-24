@@ -243,11 +243,104 @@
     return wrapper;
   }
 
+  function downloadHistoryTicket(venta) {
+    const lineas=venta.lineas||[];
+    const canvas=document.createElement("canvas");canvas.width=640;canvas.height=350+lineas.length*42;
+    const ctx=canvas.getContext("2d");ctx.fillStyle="#fff";ctx.fillRect(0,0,640,canvas.height);
+    ctx.fillStyle="#222";ctx.textAlign="center";ctx.font="bold 30px Arial";ctx.fillText("PANADERÍA",320,42);
+    ctx.font="bold 25px Arial";ctx.fillText("TICKET DE VENTA",320,82);
+    ctx.textAlign="left";ctx.font="20px Arial";
+    const hora=venta.creado_en?new Intl.DateTimeFormat("es-MX",{timeZone:"America/Mexico_City",hour:"2-digit",minute:"2-digit",hourCycle:"h23"}).format(new Date(venta.creado_en)):"";
+    ctx.fillText("Venta "+venta.numero_venta+"   "+(venta.fecha||"")+"   "+hora,36,124);
+    ctx.fillText("Atendió: "+(venta.usuario_nombre||"Usuario"),36,157);
+    ctx.beginPath();ctx.moveTo(32,178);ctx.lineTo(608,178);ctx.stroke();
+    let y=214;ctx.font="bold 18px Arial";ctx.fillText("Producto",36,y);ctx.fillText("Cant.",390,y);ctx.textAlign="right";ctx.fillText("Importe",604,y);
+    ctx.textAlign="left";ctx.font="18px Arial";
+    lineas.forEach(linea=>{y+=38;const nombre=String(linea.producto_nombre||"Producto");ctx.fillText(nombre.length>30?nombre.slice(0,27)+"…":nombre,36,y);ctx.fillText(String(linea.cantidad),400,y);ctx.textAlign="right";ctx.fillText(formatMoney(linea.importe),604,y);ctx.textAlign="left";});
+    y+=24;ctx.beginPath();ctx.moveTo(32,y);ctx.lineTo(608,y);ctx.stroke();y+=42;
+    ctx.font="bold 25px Arial";ctx.textAlign="right";ctx.fillText("TOTAL: "+formatMoney(venta.total),604,y);
+    y+=42;ctx.font="16px Arial";ctx.textAlign="center";ctx.fillText("Gracias por su compra",320,y);
+    canvas.toBlob(blob=>{
+      if(!blob)return;
+      const url=URL.createObjectURL(blob),a=document.createElement("a");
+      a.href=url;a.download="ticket_venta_"+venta.numero_venta+".png";document.body.appendChild(a);a.click();a.remove();
+      setTimeout(()=>URL.revokeObjectURL(url),1500);
+    },"image/png");
+  }
+
+  function renderSalesCorrections(host, ventas) {
+    const section=document.createElement("section");
+    section.className="panel";
+    const heading=document.createElement("h4");heading.textContent="Corrección de ventas";
+    const help=document.createElement("p");help.className="nota";
+    help.textContent="Puedes corregir cantidades dentro de la tolerancia configurada. Se conservan los precios unitarios originales.";
+    section.append(heading,help);
+    (ventas||[]).forEach(venta=>{
+      const card=document.createElement("div");card.className="barra";
+      const info=document.createElement("span");
+      info.textContent="Venta #"+venta.numero_venta+" · "+venta.fecha+" · "+formatMoney(venta.total)+" · "+(venta.usuario_nombre||"Usuario");
+      const actions=document.createElement("div");actions.className="barra";
+      const ticket=document.createElement("button");ticket.type="button";ticket.className="secundario";ticket.textContent="Descargar PNG";
+      ticket.addEventListener("click",()=>downloadHistoryTicket(venta));
+      const button=document.createElement("button");button.type="button";button.className="secundario";button.textContent="Corregir";
+      button.disabled=!(venta.lineas||[]).length || (venta.lineas||[]).some(x=>!x.producto_id);
+      button.title=button.disabled?"Esta venta no tiene identificadores de producto para corregir.":"Corregir cantidades de esta venta";
+      actions.append(ticket,button);
+      button.addEventListener("click",()=>{
+        card.replaceChildren();
+        const editor=document.createElement("div");editor.style.cssText="width:100%;display:grid;gap:10px";
+        const title=document.createElement("strong");title.textContent="Editar venta #"+venta.numero_venta;editor.appendChild(title);
+        const inputs=[];
+        (venta.lineas||[]).forEach(linea=>{
+          const row=document.createElement("div");row.className="barra";
+          const label=document.createElement("label");label.textContent=linea.producto_nombre+" · "+formatMoney(linea.precio_unitario);
+          const input=document.createElement("input");input.type="number";input.min="0";input.step="1";input.value=String(linea.cantidad);
+          input.style.width="100px";input.setAttribute("aria-label","Cantidad de "+linea.producto_nombre);
+          row.append(label,input);editor.appendChild(row);inputs.push({linea,input});
+        });
+        const actions=document.createElement("div");actions.className="barra";
+        const save=document.createElement("button");save.type="button";save.textContent="Guardar corrección";
+        const cancel=document.createElement("button");cancel.type="button";cancel.className="secundario";cancel.textContent="Cancelar";
+        const message=document.createElement("p");message.className="nota";
+        cancel.addEventListener("click",()=>consult());
+        save.addEventListener("click",async()=>{
+          const lineas=[];
+          for(const item of inputs){
+            const cantidad=Number(item.input.value);
+            if(!Number.isInteger(cantidad)||cantidad<0||cantidad>100000){message.textContent="Las cantidades deben ser enteros entre 0 y 100,000.";return;}
+            if(cantidad>0)lineas.push({producto_id:Number(item.linea.producto_id),cantidad});
+          }
+          if(!lineas.length){message.textContent="La venta debe conservar al menos un producto.";return;}
+          save.disabled=true;
+          try{
+            const response=await fetch("/api/ventas/"+encodeURIComponent(venta.id),{
+              method:"PATCH",
+              headers:{"Authorization":"Bearer "+token,"Content-Type":"application/json","Accept":"application/json"},
+              body:JSON.stringify({lineas})
+            });
+            const payload=await response.json().catch(()=>({}));
+            if(!response.ok)throw new Error(payload.detail||"No se pudo corregir la venta.");
+            await consult();
+          }catch(error){message.textContent=error.message;save.disabled=false;}
+        });
+        actions.append(save,cancel);editor.append(actions,message);card.append(editor);
+      });
+      card.append(info,actions);section.appendChild(card);
+    });
+    host.appendChild(section);
+  }
+
   function renderTables(data) {
     const host = el("div", null, "historial-tablas");
     if (category === "ventas") {
-      addTable(host, "Ventas por producto", ["Producto", "Cantidad", "Importe"],
+      const operaciones = el("p", (data.total_ventas || data.operaciones || 0) + " operaciones · " +
+        formatNumber(data.cantidad_total) + " piezas · " + formatMoney(data.importe_total), "nota");
+      host.appendChild(operaciones);
+      addTable(host, "Ventas por tipo de pan", ["Producto", "Cantidad", "Importe"],
         (data.resumen || []).map(x => [x.producto, formatNumber(x.cantidad), formatMoney(x.importe)]),
+        ["TOTAL", formatNumber(data.cantidad_total), formatMoney(data.importe_total)]);
+      addTable(host, "Ventas por precio", ["Precio unitario", "Cantidad", "Importe"],
+        (data.por_precio || []).map(x => [formatMoney(x.precio), formatNumber(x.cantidad), formatMoney(x.importe)]),
         ["TOTAL", formatNumber(data.cantidad_total), formatMoney(data.importe_total)]);
       const rows = [];
       (data.ventas || []).forEach(venta => {
@@ -258,6 +351,7 @@
         ]));
       });
       addTable(host, "Detalle de ventas", ["Fecha", "Venta", "Hora", "Registró", "Producto", "Cantidad", "Precio unitario", "Importe"], rows);
+      renderSalesCorrections(host, data.ventas || []);
       return host;
     }
     const inv = data.inventario, prod = data.produccion;
@@ -270,15 +364,16 @@
         ["TOTAL", formatNumber(inv.total_piezas), formatMoney(inv.total_importe)]);
     }
     if (category === "produccion" || category === "analisis") {
-      addTable(host, "Producción por tipo de pan", ["Pan", "Cantidad producida"],
-        prod.por_pan.map(x => [x.pan, formatNumber(x.cantidad)]),
-        ["TOTAL PRODUCIDO", formatNumber(prod.total)]);
+      addTable(host, "Producción por tipo de pan", ["Pan", "Cantidad producida", "Importe"],
+        prod.por_pan.map(x => [x.pan, formatNumber(x.cantidad), x.importe == null ? "N/D" : formatMoney(x.importe)]),
+        ["TOTAL PRODUCIDO", formatNumber(prod.total), prod.total_importe == null ? "N/D" : formatMoney(prod.total_importe)]);
     }
     if (category === "analisis") {
-      addTable(host, "Producción y sobrantes", ["Pan", "Producido", "Sobrante", "% sobrante"],
-        data.analisis.por_pan.map(x => [x.pan, formatNumber(x.producido), formatNumber(x.sobrante),
-          x.porcentaje_sobrante == null ? "N/D" : Number(x.porcentaje_sobrante).toFixed(2) + "%"]));
-      host.appendChild(el("p", "El porcentaje compara los sobrantes registrados con la producción del mismo pan y periodo. No representa ventas.", "nota"));
+      addTable(host, "Producción, ventas e inventario final", ["Pan", "Producido", "Vendido", "Importe de ventas", "Inventario final", "Producción − ventas (referencia)"],
+        data.analisis.por_pan.map(x => [x.pan, formatNumber(x.producido), formatNumber(x.vendido),
+          formatMoney(x.importe_ventas), x.inventario_final == null ? "N/D" : formatNumber(x.inventario_final),
+          x.diferencia_produccion_ventas == null ? "N/D" : formatNumber(x.diferencia_produccion_ventas)]));
+      host.appendChild(el("p", "El inventario final corresponde al último cierre disponible del periodo. La diferencia producción − ventas es solo una referencia aritmética: no representa merma ni considera existencias iniciales, devoluciones o ajustes.", "nota"));
     }
     if (period === "anio") {
       const monthly = new Map();
@@ -299,11 +394,11 @@
         addTable(host, "Resumen mensual del año", ["Mes", "Inventario", "Importe"],
           items.map(([mes,x]) => [mes, formatNumber(x.inventario_cantidad), formatMoney(x.inventario_importe)]));
       } else if (category === "produccion") {
-        addTable(host, "Resumen mensual del año", ["Mes", "Producción"],
-          items.map(([mes,x]) => [mes, formatNumber(x.produccion_cantidad)]));
+        addTable(host, "Resumen mensual del año", ["Mes", "Producción", "Importe"],
+          items.map(([mes,x]) => [mes, formatNumber(x.produccion_cantidad), x.produccion_importe == null ? "N/D" : formatMoney(x.produccion_importe)]));
       } else {
-        addTable(host, "Resumen mensual del año", ["Mes", "Inventario", "Importe", "Producción"],
-          items.map(([mes,x]) => [mes, formatNumber(x.inventario_cantidad), formatMoney(x.inventario_importe), formatNumber(x.produccion_cantidad)]));
+        addTable(host, "Resumen mensual del año", ["Mes", "Inventario registrado", "Importe inventario", "Producción", "Importe producción", "Ventas", "Importe ventas"],
+          items.map(([mes,x]) => [mes, formatNumber(x.inventario_cantidad), formatMoney(x.inventario_importe), formatNumber(x.produccion_cantidad), x.produccion_importe == null ? "N/D" : formatMoney(x.produccion_importe), formatNumber(x.ventas_cantidad), formatMoney(x.ventas_importe)]));
       }
     } else if (period !== "dia" && !data.resumen_only) {
       const items = data.resumen_diario.filter(x => x.tiene_inventario || x.tiene_produccion);
@@ -311,22 +406,22 @@
         addTable(host, "Resumen diario", ["Fecha", "Inventario", "Importe"],
           items.map(x => [x.fecha, formatNumber(x.inventario_cantidad), formatMoney(x.inventario_importe)]));
       } else if (category === "produccion") {
-        addTable(host, "Resumen diario", ["Fecha", "Producción"],
-          items.map(x => [x.fecha, formatNumber(x.produccion_cantidad)]));
+        addTable(host, "Resumen diario", ["Fecha", "Producción", "Importe"],
+          items.map(x => [x.fecha, formatNumber(x.produccion_cantidad), x.produccion_importe == null ? "N/D" : formatMoney(x.produccion_importe)]));
       } else {
-        addTable(host, "Resumen diario", ["Fecha", "Inventario", "Importe", "Producción"],
-          items.map(x => [x.fecha, formatNumber(x.inventario_cantidad), formatMoney(x.inventario_importe), formatNumber(x.produccion_cantidad)]));
+        addTable(host, "Resumen diario", ["Fecha", "Inventario registrado", "Importe inventario", "Producción", "Importe producción", "Ventas", "Importe ventas"],
+          items.map(x => [x.fecha, formatNumber(x.inventario_cantidad), formatMoney(x.inventario_importe), formatNumber(x.produccion_cantidad), x.produccion_importe == null ? "N/D" : formatMoney(x.produccion_importe), formatNumber(x.ventas_cantidad), formatMoney(x.ventas_importe)]));
       }
     } else if (data.resumen_only) {
       if (category === "inventario") {
         addTable(host, "Resumen mensual del periodo", ["Mes", "Inventario", "Importe"],
           data.resumen_mensual.map(x => [x.mes, formatNumber(x.inventario_cantidad), formatMoney(x.inventario_importe)]));
       } else if (category === "produccion") {
-        addTable(host, "Resumen mensual del periodo", ["Mes", "Producción"],
-          data.resumen_mensual.map(x => [x.mes, formatNumber(x.produccion_cantidad)]));
+        addTable(host, "Resumen mensual del periodo", ["Mes", "Producción", "Importe"],
+          data.resumen_mensual.map(x => [x.mes, formatNumber(x.produccion_cantidad), x.produccion_importe == null ? "N/D" : formatMoney(x.produccion_importe)]));
       } else {
-        addTable(host, "Resumen mensual del periodo", ["Mes", "Inventario", "Importe", "Producción"],
-          data.resumen_mensual.map(x => [x.mes, formatNumber(x.inventario_cantidad), formatMoney(x.inventario_importe), formatNumber(x.produccion_cantidad)]));
+        addTable(host, "Resumen mensual del periodo", ["Mes", "Inventario registrado", "Importe inventario", "Producción", "Importe producción", "Ventas", "Importe ventas"],
+          data.resumen_mensual.map(x => [x.mes, formatNumber(x.inventario_cantidad), formatMoney(x.inventario_importe), formatNumber(x.produccion_cantidad), x.produccion_importe == null ? "N/D" : formatMoney(x.produccion_importe), formatNumber(x.ventas_cantidad), formatMoney(x.ventas_importe)]));
       }
     }
     return host;
@@ -353,10 +448,18 @@
         data.produccion.por_pan.map(x => x.pan)));
     }
     if (category === "analisis") {
-      host.appendChild(chartSVG("Producción frente a sobrantes", [
+      host.appendChild(chartSVG("Producción frente a ventas", [
         { name: "Producido", values: data.analisis.por_pan.map(x => x.producido) },
-        { name: "Sobrante", values: data.analisis.por_pan.map(x => x.sobrante) }
+        { name: "Vendido", values: data.analisis.por_pan.map(x => x.vendido) }
       ], data.analisis.por_pan.map(x => x.pan)));
+      const conInventarioFinal = data.analisis.por_pan.filter(x => x.inventario_final != null);
+      if (conInventarioFinal.length) {
+        host.appendChild(chartSVG("Inventario final por pan", [
+          { name: "Inventario final", values: conInventarioFinal.map(x => x.inventario_final) }
+        ], conInventarioFinal.map(x => x.pan)));
+      } else {
+        host.appendChild(el("p","No hay un cierre de inventario disponible para mostrar existencias finales en este periodo.","nota"));
+      }
     }
     if (category === "analisis" && (period === "anio" || data.resumen_only)) {
       const monthly = new Map();
@@ -403,7 +506,7 @@
     const empty = category === "ventas" ? !(data.resumen || []).length :
       category === "inventario" ? !data.inventario.por_producto.length :
       category === "produccion" ? !data.produccion.por_pan.length :
-      !data.inventario.por_producto.length && !data.produccion.por_pan.length;
+      !data.inventario.por_producto.length && !data.produccion.por_pan.length && !(data.ventas?.por_producto || []).length;
     if (empty) {
       result.appendChild(el("div", "No hay registros para la categoría y las fechas seleccionadas.", "historial-vacio"));
     } else {

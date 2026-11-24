@@ -460,7 +460,7 @@ def eliminar_o_desactivar_producto(
         raise HTTPException(status_code=503, detail="No se pudo eliminar o desactivar el producto.")
 
 
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timezone, timedelta
 from pydantic import model_validator
 
 
@@ -515,6 +515,67 @@ def obtener_o_crear_cierre(panaderia_id: int, fecha_registro: date, usuario_id: 
     return reintento.data[0]
 
 
+class LineaRegistroIndividual(BaseModel):
+    panaderia_id: int = Field(gt=0)
+    fecha: date
+    producto_id: int = Field(gt=0)
+    cantidad: int = Field(ge=0)
+
+
+@app.put("/api/registro/linea")
+def guardar_linea_registro(datos: LineaRegistroIndividual, authorization: str | None = Header(default=None)):
+    usuario = obtener_usuario_autenticado(authorization)
+    perfil = obtener_perfil(str(usuario.id))
+    comprobar_permiso_local(str(usuario.id), perfil, datos.panaderia_id, "inventarios")
+    hoy = datetime.now(TZ_PRODUCCION).date()
+    if datos.fecha > hoy:
+        raise HTTPException(status_code=422, detail="No puedes registrar una fecha futura.")
+    config = obtener_configuracion_edicion()
+    if not plazo_edicion_vigente(datos.fecha, config["dias_inventario"], config["horas_inventario"]) and not es_admin_principal(perfil):
+        raise HTTPException(status_code=403, detail="Terminó el plazo configurado para editar inventario.")
+    try:
+        resultado = supabase.rpc("guardar_linea_inventario", {
+            "p_panaderia_id": datos.panaderia_id,
+            "p_fecha": datos.fecha.isoformat(),
+            "p_producto_id": datos.producto_id,
+            "p_cantidad": datos.cantidad,
+            "p_usuario_id": str(usuario.id),
+        }).execute().data
+        return {"guardado": True, "linea": resultado}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        mensaje = str(exc).lower()
+        if "cerrado" in mensaje:
+            raise HTTPException(status_code=409, detail="El día está cerrado. Reábrelo antes de modificarlo.")
+        if "producto" in mensaje:
+            raise HTTPException(status_code=422, detail="El producto no existe o está inactivo en este local.")
+        raise HTTPException(status_code=503, detail="No se pudo guardar el producto del registro.")
+
+
+@app.delete("/api/registro/linea")
+def eliminar_linea_registro(
+    panaderia_id: int, fecha: date, producto_id: int,
+    authorization: str | None = Header(default=None)
+):
+    usuario = obtener_usuario_autenticado(authorization)
+    perfil = obtener_perfil(str(usuario.id))
+    comprobar_permiso_local(str(usuario.id), perfil, panaderia_id, "inventarios")
+    config = obtener_configuracion_edicion()
+    if not plazo_edicion_vigente(fecha, config["dias_inventario"], config["horas_inventario"]) and not es_admin_principal(perfil):
+        raise HTTPException(status_code=403, detail="Terminó el plazo configurado para editar inventario.")
+    try:
+        eliminado = supabase.rpc("eliminar_linea_inventario", {
+            "p_panaderia_id": panaderia_id, "p_fecha": fecha.isoformat(),
+            "p_producto_id": producto_id, "p_usuario_id": str(usuario.id)
+        }).execute().data
+        return {"eliminado": bool(eliminado)}
+    except Exception as exc:
+        if "cerrado" in str(exc).lower():
+            raise HTTPException(status_code=409, detail="El día está cerrado. Reábrelo antes de modificarlo.")
+        raise HTTPException(status_code=503, detail="No se pudo retirar el producto del registro.")
+
+
 @app.get("/api/registro")
 def consultar_registro(
     panaderia_id: int,
@@ -523,22 +584,27 @@ def consultar_registro(
 ):
     usuario = obtener_usuario_autenticado(authorization)
     perfil = obtener_perfil(str(usuario.id))
-    comprobar_acceso_panaderia(str(usuario.id), perfil, panaderia_id)
+    comprobar_permiso_local(str(usuario.id), perfil, panaderia_id, "inventarios")
     try:
         cierre = (
             supabase.table("cierres_diarios").select("*")
             .eq("panaderia_id", panaderia_id)
             .eq("fecha", fecha_registro.isoformat()).limit(1).execute()
         )
+        config_edicion = obtener_configuracion_edicion()
+        admin_principal = es_admin_principal(perfil)
         if not cierre.data:
-            return {"cierre": None, "lineas": []}
+            return {"cierre": None, "lineas": [], "dias_editables": config_edicion["dias_inventario"],
+                    "horas_editables": config_edicion["horas_inventario"], "admin_principal": admin_principal}
         datos_cierre = cierre.data[0]
         lineas = (
             supabase.table("inventario_detalles")
-            .select("id,producto_id,cantidad,precio_unitario,producto_nombre")
+            .select("id,producto_id,cantidad,precio_unitario,producto_nombre,usuario_id,usuario_nombre")
             .eq("cierre_id", datos_cierre["id"]).execute()
         )
-        return {"cierre": datos_cierre, "lineas": lineas.data}
+        return {"cierre": datos_cierre, "lineas": lineas.data,
+                "dias_editables": config_edicion["dias_inventario"],
+                "horas_editables": config_edicion["horas_inventario"], "admin_principal": admin_principal}
     except HTTPException:
         raise
     except Exception:
@@ -550,96 +616,36 @@ def guardar_registro(
     registro: GuardarRegistro,
     authorization: str | None = Header(default=None),
 ):
+    """Compatibilidad con clientes anteriores: actualiza solo las líneas enviadas; nunca reemplaza la tabla completa."""
     usuario = obtener_usuario_autenticado(authorization)
     perfil = obtener_perfil(str(usuario.id))
-    comprobar_acceso_panaderia(str(usuario.id), perfil, registro.panaderia_id)
+    comprobar_permiso_local(str(usuario.id), perfil, registro.panaderia_id, "inventarios")
     hoy_local = datetime.now(TZ_PRODUCCION).date()
     if registro.fecha > hoy_local:
         raise HTTPException(status_code=422, detail="No puedes registrar una fecha futura.")
-    dias_inventario = obtener_configuracion_edicion()["dias_inventario"]
-    dias_transcurridos = (hoy_local - registro.fecha).days
-    if dias_transcurridos > dias_inventario and not es_admin_principal(perfil):
-        raise HTTPException(status_code=403, detail=f"El plazo para editar inventario es de {dias_inventario} días.")
+    config_edicion = obtener_configuracion_edicion()
+    if not plazo_edicion_vigente(registro.fecha, config_edicion["dias_inventario"], config_edicion["horas_inventario"]) and not es_admin_principal(perfil):
+        raise HTTPException(status_code=403, detail="Terminó el plazo configurado para editar inventario.")
     ids = [linea.producto_id for linea in registro.lineas]
     if len(ids) != len(set(ids)):
         raise HTTPException(status_code=422, detail="No repitas el mismo producto en el registro.")
     try:
         cierre = obtener_o_crear_cierre(registro.panaderia_id, registro.fecha, str(usuario.id))
         if cierre["estado"] == "cerrado":
-            dias_inventario = obtener_configuracion_edicion()["dias_inventario"]
-            dias_transcurridos = (datetime.now(TZ_PRODUCCION).date() - registro.fecha).days
-            es_admin_principal = perfil["rol"] == "admin" and perfil["es_admin_principal"]
-            if (dias_transcurridos > dias_inventario or dias_transcurridos < 0) and not es_admin_principal:
-                raise HTTPException(status_code=403, detail=f"El plazo para editar inventario es de {dias_inventario} días. Solo la dueña puede reabrirlo fuera de ese plazo.")
-            # Todo cierre debe reabrirse por el endpoint específico antes de editar.
-            # Así se exige motivo y auditoría en correcciones administrativas tardías.
-            raise HTTPException(
-                status_code=409,
-                detail="El día está cerrado. Usa la opción de reabrir antes de modificarlo.",
-            )
-        productos = (
-            supabase.table("productos")
-            .select("id,panaderia_id,nombre,precio,activo")
-            .eq("panaderia_id", registro.panaderia_id).execute()
-        )
-        por_id = {int(p["id"]): p for p in productos.data}
-        # Conserva el precio histórico ya guardado para cada producto.
-        # Solo los productos nuevos en este registro toman el precio actual.
-        anteriores = (
-            supabase.table("inventario_detalles")
-            .select("producto_id,precio_unitario,producto_nombre")
-            .eq("cierre_id", cierre["id"])
-            .execute()
-        )
-        precios_anteriores = {
-            int(item["producto_id"]): item.get("precio_unitario")
-            for item in anteriores.data
-        }
-        nombres_anteriores = {
-            int(item["producto_id"]): item.get("producto_nombre")
-            for item in anteriores.data
-        }
-        nuevas = []
+            raise HTTPException(status_code=409, detail="El día está cerrado. Usa la opción de reabrir antes de modificarlo.")
         for linea in registro.lineas:
-            producto = por_id.get(linea.producto_id)
-            if not producto or not producto["activo"]:
-                raise HTTPException(status_code=422, detail="Uno de los productos no existe o está inactivo.")
-            nuevas.append({                "cierre_id": cierre["id"],
-                "producto_id": linea.producto_id,
-                "cantidad": linea.cantidad,
-                "producto_nombre": (
-                    nombres_anteriores.get(linea.producto_id)
-                    or next(
-                        (p["nombre"] for p in productos.data if int(p["id"]) == linea.producto_id),
-                        "Producto",
-                    )
-                ),
-                "precio_unitario": str(
-                    precios_anteriores.get(linea.producto_id)
-                    if precios_anteriores.get(linea.producto_id) is not None
-                    else producto["precio"]
-                ),
-            })
-        lineas_rpc = [
-            {
-                "producto_id": linea["producto_id"],
-                "cantidad": linea["cantidad"],
-                "precio_unitario": linea["precio_unitario"],
-                "producto_nombre": linea["producto_nombre"],
-            }
-            for linea in nuevas
-        ]
-        # Una sola función SQL reemplaza las líneas dentro de una transacción.
-        supabase.rpc("reemplazar_lineas_cierre", {
-            "p_cierre_id": cierre["id"],
-            "p_lineas": lineas_rpc,
-            "p_usuario_id": str(usuario.id),
-        }).execute()
-        return {"guardado": True, "cierre_id": cierre["id"], "cantidad_lineas": len(nuevas)}
+            supabase.rpc("guardar_linea_inventario", {
+                "p_panaderia_id": registro.panaderia_id,
+                "p_fecha": registro.fecha.isoformat(),
+                "p_producto_id": linea.producto_id,
+                "p_cantidad": linea.cantidad,
+                "p_usuario_id": str(usuario.id),
+            }).execute()
+        return {"guardado": True, "cierre_id": cierre["id"], "cantidad_lineas": len(registro.lineas)}
     except HTTPException:
         raise
     except Exception:
-        raise HTTPException(status_code=503, detail="No se pudo guardar el registro. Verifica que la migración esté aplicada.")
+        raise HTTPException(status_code=503, detail="No se pudo guardar el registro.")
 
 
 @app.post("/api/registro/cerrar")
@@ -650,7 +656,7 @@ def cerrar_registro(
 ):
     usuario = obtener_usuario_autenticado(authorization)
     perfil = obtener_perfil(str(usuario.id))
-    comprobar_acceso_panaderia(str(usuario.id), perfil, panaderia_id)
+    comprobar_permiso_local(str(usuario.id), perfil, panaderia_id, "inventarios")
     if fecha_registro > datetime.now(TZ_PRODUCCION).date():
         raise HTTPException(status_code=422, detail="No puedes cerrar una fecha futura.")
     try:
@@ -720,12 +726,12 @@ def reabrir_registro(
             return {"reabierto": True, "mensaje": "El día ya está abierto."}
         if solicitud.fecha > datetime.now(TZ_PRODUCCION).date():
             raise HTTPException(status_code=422, detail="No puedes reabrir una fecha futura.")
-        ahora_local = datetime.now(TZ_PRODUCCION).date()
-        dias_inventario = obtener_configuracion_edicion()["dias_inventario"]
-        dentro_del_plazo = 0 <= (ahora_local - solicitud.fecha).days <= dias_inventario
+        config_edicion = obtener_configuracion_edicion()
+        dentro_del_plazo = plazo_edicion_vigente(solicitud.fecha, config_edicion["dias_inventario"], config_edicion["horas_inventario"])
         admin = es_admin_principal(perfil)
         if not dentro_del_plazo and not admin:
-            raise HTTPException(status_code=403, detail=f"El plazo para editar inventario es de {dias_inventario} días. Solo la dueña puede reabrir registros anteriores.")
+            plazo = f"{config_edicion['dias_inventario']} días y {config_edicion['horas_inventario']} horas"
+            raise HTTPException(status_code=403, detail=f"Terminó el plazo de edición configurado ({plazo}). Solo la administradora puede reabrir registros anteriores.")
         motivo = (solicitud.motivo or "").strip()
         if not dentro_del_plazo and admin and len(motivo) < 5:
             raise HTTPException(status_code=422, detail="Para una corrección fuera del plazo configurado, escribe un motivo de al menos 5 caracteres.")
@@ -734,7 +740,7 @@ def reabrir_registro(
             "p_usuario_id": str(usuario.id),
             "p_motivo": motivo or "",
             "p_dentro_de_48h": dentro_del_plazo,
-            "p_fecha": ahora.isoformat(),
+            "p_fecha": datetime.now(TZ_PRODUCCION).isoformat(),
         }).execute()
         return {"reabierto": True, "cierre": resultado.data}
     except HTTPException:
@@ -1096,96 +1102,59 @@ def descargar_historial_excel(
 
 @app.get("/api/productos/precios/excel")
 def descargar_lista_precios(
+    panaderia_id: int,
     authorization: str | None = Header(default=None),
 ):
-    """Descarga bajo demanda el historial de precios que sí quedó registrado."""
+    """Descarga exclusivamente el catálogo y los precios históricos del local seleccionado."""
     usuario = obtener_usuario_autenticado(authorization)
     perfil = obtener_perfil(str(usuario.id))
-    permisos = perfil.get("permisos") or (["produccion"] if perfil.get("rol") == "produccion" else ["inventarios"])
-    if "inventarios" not in permisos and not es_admin_principal(perfil):
-        raise HTTPException(status_code=403, detail="Tu cuenta no tiene acceso al catálogo de inventarios.")
+    comprobar_permiso_local(str(usuario.id), perfil, panaderia_id, "inventarios")
     try:
-        if es_admin_principal(perfil):
-            panaderias = (
-                supabase.table("panaderias")
-                .select("id,nombre")
-                .order("nombre")
-                .execute()
-            ).data
-        else:
-            accesos = (
-                supabase.table("accesos_panaderias")
-                .select("panaderia_id")
-                .eq("usuario_id", str(usuario.id))
-                .execute()
-            ).data
-            ids = [int(x["panaderia_id"]) for x in accesos]
-            if not ids:
-                raise HTTPException(status_code=403, detail="Tu cuenta no tiene panaderías asignadas.")
-            panaderias = (
-                supabase.table("panaderias")
-                .select("id,nombre")
-                .in_("id", ids)
-                .order("nombre")
-                .execute()
-            ).data
-
+        local = (supabase.table("panaderias").select("id,nombre")
+                 .eq("id", panaderia_id).limit(1).execute().data or [])
+        if not local:
+            raise HTTPException(status_code=404, detail="No se encontró la panadería seleccionada.")
+        panaderia = local[0]
+        productos = (supabase.table("productos").select("id,nombre,precio,creado_en")
+                     .eq("panaderia_id", panaderia_id).order("nombre").execute().data or [])
+        ids_productos = [int(p["id"]) for p in productos]
+        detalles = []
+        if ids_productos:
+            detalles = (supabase.table("inventario_detalles")
+                .select("producto_id,precio_unitario,cierre_id,registrado_en")
+                .in_("producto_id", ids_productos).order("registrado_en").execute().data or [])
+        cierres_ids = list({int(d["cierre_id"]) for d in detalles if d.get("cierre_id") is not None})
+        fechas_cierres = {}
+        if cierres_ids:
+            cierres = (supabase.table("cierres_diarios").select("id,fecha")
+                       .in_("id", cierres_ids).execute().data or [])
+            fechas_cierres = {int(x["id"]): x["fecha"] for x in cierres}
+        por_producto = {}
+        for detalle in detalles:
+            pid = int(detalle["producto_id"])
+            fecha = fechas_cierres.get(int(detalle["cierre_id"])) if detalle.get("cierre_id") is not None else None
+            fecha = fecha or str(detalle.get("registrado_en", ""))[:10]
+            por_producto.setdefault(pid, []).append((fecha, detalle.get("precio_unitario")))
         libro = Workbook()
         hoja = libro.active
         hoja.title = "Lista de productos"
         hoja.append(["Panadería", "Producto", "Fecha del precio", "Precio"])
-        for panaderia in panaderias:
-            productos = (
-                supabase.table("productos")
-                .select("id,nombre,precio,creado_en")
-                .eq("panaderia_id", panaderia["id"])
-                .order("nombre")
-                .execute()
-            ).data
-            if not productos:
-                continue
-            ids_productos = [int(p["id"]) for p in productos]
-            detalles = (
-                supabase.table("inventario_detalles")
-                .select("producto_id,precio_unitario,cierre_id,registrado_en")
-                .in_("producto_id", ids_productos)
-                .order("registrado_en")
-                .execute()
-            ).data
-            cierres_ids = list({int(d["cierre_id"]) for d in detalles if d.get("cierre_id") is not None})
-            fechas_cierres = {}
-            if cierres_ids:
-                cierres = (
-                    supabase.table("cierres_diarios")
-                    .select("id,fecha")
-                    .in_("id", cierres_ids)
-                    .execute()
-                ).data
-                fechas_cierres = {int(c["id"]): c["fecha"] for c in cierres}
-
-            por_producto = {}
-            for detalle in detalles:
-                pid = int(detalle["producto_id"])
-                fecha = fechas_cierres.get(int(detalle["cierre_id"])) if detalle.get("cierre_id") is not None else None
-                fecha = fecha or (str(detalle.get("registrado_en", ""))[:10] or "")
-                por_producto.setdefault(pid, []).append((fecha, detalle["precio_unitario"]))
-
-            for producto in productos:
-                historial = por_producto.get(int(producto["id"]), [])
-                if historial:
-                    # Una fila por precio observado en un registro; conserva los cambios históricos.
-                    for fecha, precio in historial:
-                        hoja.append([panaderia["nombre"], producto["nombre"], fecha, float(Decimal(str(precio)))])
-                else:
-                    # Producto existente en catálogo pero nunca incluido en un registro.
-                    fecha = str(producto.get("creado_en", ""))[:10]
-                    hoja.append([panaderia["nombre"], producto["nombre"], fecha, float(Decimal(str(producto["precio"])))])
+        for producto in productos:
+            historial = por_producto.get(int(producto["id"]), [])
+            if historial:
+                for fecha, precio in historial:
+                    hoja.append([panaderia["nombre"], producto["nombre"], fecha,
+                                 float(Decimal(str(precio))) if precio is not None else None])
+            else:
+                hoja.append([panaderia["nombre"], producto["nombre"],
+                             str(producto.get("creado_en", ""))[:10],
+                             float(Decimal(str(producto["precio"])))])
         hoja.freeze_panes = "A2"
         hoja.auto_filter.ref = hoja.dimensions
-        for col, width in {"A": 24, "B": 36, "C": 20, "D": 16}.items():
+        for col, width in {"A":24,"B":36,"C":20,"D":16}.items():
             hoja.column_dimensions[col].width = width
-        for fila in range(2, hoja.max_row + 1):
-            hoja.cell(fila, 4).number_format = '"$"#,##0.00'
+        for row in range(2, hoja.max_row + 1):
+            hoja.cell(row, 4).number_format = '"$"#,##0.00'
         salida = BytesIO()
         libro.save(salida)
         salida.seek(0)
@@ -1288,18 +1257,31 @@ def exigir_admin_principal(authorization: str | None):
 
 class ConfiguracionEdicionCambio(BaseModel):
     dias_inventario: int = Field(ge=0, le=365)
+    horas_inventario: int = Field(default=0, ge=0, le=23)
     dias_produccion: int = Field(ge=0, le=365)
+    horas_produccion: int = Field(default=0, ge=0, le=23)
+    dias_ventas: int = Field(default=0, ge=0, le=365)
+    horas_ventas: int = Field(default=0, ge=0, le=23)
 
 
 def obtener_configuracion_edicion():
     try:
-        filas = supabase.table("configuracion_edicion").select("dias_inventario,dias_produccion").eq("id", 1).limit(1).execute().data or []
+        columnas = "dias_inventario,horas_inventario,dias_produccion,horas_produccion,dias_ventas,horas_ventas"
+        filas = supabase.table("configuracion_edicion").select(columnas).eq("id", 1).limit(1).execute().data or []
         if filas:
-            return {"dias_inventario": int(filas[0]["dias_inventario"]), "dias_produccion": int(filas[0]["dias_produccion"])}
-        supabase.table("configuracion_edicion").insert({"id": 1, "dias_inventario": 2, "dias_produccion": 1}).execute()
-        return {"dias_inventario": 2, "dias_produccion": 1}
+            return {k: int(filas[0].get(k) or 0) for k in ("dias_inventario","horas_inventario","dias_produccion","horas_produccion","dias_ventas","horas_ventas")}
+        valores = {"id":1,"dias_inventario":2,"horas_inventario":0,"dias_produccion":1,"horas_produccion":0,"dias_ventas":0,"horas_ventas":0}
+        supabase.table("configuracion_edicion").insert(valores).execute()
+        return {k:v for k,v in valores.items() if k != "id"}
     except Exception:
-        raise HTTPException(status_code=503, detail="No se pudo consultar la configuración de días editables.")
+        raise HTTPException(status_code=503, detail="No se pudo consultar la configuración de tolerancias de edición.")
+
+
+def plazo_edicion_vigente(fecha_registro: date, dias: int, horas: int = 0) -> bool:
+    ahora = datetime.now(TZ_PRODUCCION)
+    limite = datetime.combine(fecha_registro + timedelta(days=dias + 1), datetime.min.time()).replace(tzinfo=TZ_PRODUCCION)
+    limite += timedelta(hours=horas)
+    return fecha_registro <= ahora.date() and ahora < limite
 
 
 @app.get("/api/admin/configuracion-edicion")
@@ -1313,8 +1295,9 @@ def admin_guardar_configuracion_edicion(datos: ConfiguracionEdicionCambio, autho
     usuario, _ = exigir_admin_principal(authorization)
     try:
         supabase.table("configuracion_edicion").upsert({
-            "id": 1, "dias_inventario": datos.dias_inventario,
-            "dias_produccion": datos.dias_produccion,
+            "id": 1, "dias_inventario": datos.dias_inventario, "horas_inventario": datos.horas_inventario,
+            "dias_produccion": datos.dias_produccion, "horas_produccion": datos.horas_produccion,
+            "dias_ventas": datos.dias_ventas, "horas_ventas": datos.horas_ventas,
             "actualizado_por": str(usuario.id), "actualizado_en": datetime.now(timezone.utc).isoformat(),
         }, on_conflict="id").execute()
         return {"guardado": True, **obtener_configuracion_edicion()}
@@ -1585,6 +1568,7 @@ class ProduccionNueva(BaseModel):
     panaderia_id: int = Field(gt=0)
     fecha_produccion: date
     pan_nombre: str = Field(min_length=1, max_length=120)
+    producto_id: int | None = Field(default=None, gt=0)
     cantidad: int = Field(ge=0)
     observaciones: str | None = Field(default=None, max_length=1000)
 
@@ -1620,9 +1604,10 @@ def _perfil_con_acceso_produccion(usuario_id: str, perfil: dict, panaderia_id: i
 
 def _produccion_es_editable(fecha_produccion: str | date, dias_editables: int | None = None) -> bool:
     fecha = fecha_produccion if isinstance(fecha_produccion, date) else date.fromisoformat(str(fecha_produccion)[:10])
-    dias = obtener_configuracion_edicion()["dias_produccion"] if dias_editables is None else dias_editables
-    transcurridos = (datetime.now(TZ_PRODUCCION).date() - fecha).days
-    return 0 <= transcurridos <= dias
+    config = obtener_configuracion_edicion()
+    dias = config["dias_produccion"] if dias_editables is None else dias_editables
+    horas = config["horas_produccion"] if dias_editables is None else 0
+    return plazo_edicion_vigente(fecha, dias, horas)
 
 
 def _normalizar_pan_produccion(nombre: str) -> str:
@@ -1643,7 +1628,7 @@ def consultar_produccion(
     try:
         filas = (
             supabase.table("produccion_registros")
-            .select("id,panaderia_id,fecha_produccion,pan_nombre,cantidad,observaciones,usuario_id,usuario_nombre,registrado_en,actualizado_en")
+            .select("id,panaderia_id,fecha_produccion,pan_nombre,cantidad,precio_unitario,importe,observaciones,usuario_id,usuario_nombre,registrado_en,actualizado_en")
             .eq("panaderia_id", panaderia_id)
             .eq("fecha_produccion", fecha_produccion.isoformat())
             .order("registrado_en")
@@ -1655,11 +1640,21 @@ def consultar_produccion(
             if ids else []
         )
         nombres = {str(p["id"]): p["nombre"] for p in perfiles}
-        dias_editables = obtener_configuracion_edicion()["dias_produccion"]
+        config_edicion = obtener_configuracion_edicion()
+        total_cantidad = 0
+        total_importe = Decimal("0")
+        importe_completo = True
         for fila in filas:
             fila["usuario_nombre"] = fila.get("usuario_nombre") or nombres.get(str(fila.get("usuario_id")), "Usuario")
-            fila["editable"] = _produccion_es_editable(fila["fecha_produccion"], dias_editables)
-        return {"registros": filas, "total": len(filas), "dias_editables": dias_editables}
+            fila["editable"] = _produccion_es_editable(fila["fecha_produccion"])
+            total_cantidad += int(fila.get("cantidad") or 0)
+            if fila.get("importe") is None:
+                importe_completo = False
+            else:
+                total_importe += Decimal(str(fila["importe"]))
+        return {"registros": filas, "total": len(filas), "dias_editables": config_edicion["dias_produccion"],
+                "horas_editables": config_edicion["horas_produccion"], "total_cantidad": total_cantidad,
+                "total_importe": str(total_importe.quantize(Decimal("0.01"))) if importe_completo else None}
     except HTTPException:
         raise
     except Exception:
@@ -1675,26 +1670,42 @@ def crear_registro_produccion(
     perfil = obtener_perfil(str(usuario.id))
     _perfil_con_acceso_produccion(str(usuario.id), perfil, datos.panaderia_id)
     ahora_local = datetime.now(TZ_PRODUCCION).date()
-    dias_produccion = obtener_configuracion_edicion()["dias_produccion"]
-    dias_transcurridos = (ahora_local - datos.fecha_produccion).days
-    if dias_transcurridos < 0:
+    config_edicion = obtener_configuracion_edicion()
+    if datos.fecha_produccion > ahora_local:
         raise HTTPException(status_code=422, detail="No puedes registrar producción en una fecha futura.")
-    if dias_transcurridos > dias_produccion:
-        raise HTTPException(status_code=403, detail=f"El plazo para registrar o editar producción es de {dias_produccion} días.")
+    if not plazo_edicion_vigente(datos.fecha_produccion, config_edicion["dias_produccion"], config_edicion["horas_produccion"]):
+        raise HTTPException(status_code=403, detail="Terminó el plazo configurado para registrar o editar producción.")
     pan = _normalizar_pan_produccion(datos.pan_nombre)
     if not pan:
         raise HTTPException(status_code=422, detail="Escribe el nombre del pan.")
     try:
+        producto = None
+        if datos.producto_id:
+            productos_encontrados = (supabase.table("productos").select("id,nombre,precio,activo")
+                .eq("id", datos.producto_id).eq("panaderia_id", datos.panaderia_id).limit(1).execute().data or [])
+            producto = productos_encontrados[0] if productos_encontrados else None
+            if not producto or not producto.get("activo"):
+                raise HTTPException(status_code=422, detail="El producto seleccionado no está activo en este local.")
+        else:
+            productos_encontrados = (supabase.table("productos").select("id,nombre,precio,activo")
+                .eq("panaderia_id", datos.panaderia_id).ilike("nombre", pan).limit(10).execute().data or [])
+            producto = next((x for x in productos_encontrados if _normalizar_pan_produccion(x["nombre"]).casefold() == pan.casefold()), None)
+        precio_unitario = Decimal(str(producto["precio"])) if producto and producto.get("activo") else None
+        importe = (precio_unitario * datos.cantidad).quantize(Decimal("0.01")) if precio_unitario is not None else None
         fila = supabase.table("produccion_registros").insert({
             "panaderia_id": datos.panaderia_id,
             "fecha_produccion": datos.fecha_produccion.isoformat(),
             "pan_nombre": pan,
             "cantidad": datos.cantidad,
+            "precio_unitario": str(precio_unitario) if precio_unitario is not None else None,
+            "importe": str(importe) if importe is not None else None,
             "observaciones": (datos.observaciones or "").strip() or None,
             "usuario_id": str(usuario.id),
             "usuario_nombre": obtener_perfil(str(usuario.id))["nombre"],
         }).execute().data[0]
         return {"creado": True, "registro": fila}
+    except HTTPException:
+        raise
     except Exception:
         raise HTTPException(status_code=503, detail="No se pudo guardar el registro de producción.")
 
@@ -1710,7 +1721,7 @@ def actualizar_registro_produccion(
     try:
         encontrado = (
             supabase.table("produccion_registros")
-            .select("id,panaderia_id,fecha_produccion")
+            .select("id,panaderia_id,fecha_produccion,precio_unitario")
             .eq("id", registro_id).limit(1).execute().data
         )
         if not encontrado:
@@ -1727,6 +1738,7 @@ def actualizar_registro_produccion(
             .update({
                 "pan_nombre": pan,
                 "cantidad": datos.cantidad,
+                "importe": (str((Decimal(str(actual["precio_unitario"])) * datos.cantidad).quantize(Decimal("0.01"))) if actual.get("precio_unitario") is not None else None),
                 "observaciones": (datos.observaciones or "").strip() or None,
                 "actualizado_en": datetime.now(timezone.utc).isoformat(),
             })
@@ -1795,7 +1807,7 @@ def descargar_produccion_excel(
         hoja.append(["Fecha", fecha_produccion.isoformat()])
         hoja.append(["Panadería", nombre_local])
         hoja.append([])
-        hoja.append(["Pan", "Cantidad", "Observaciones", "Registró", "Fecha y hora de captura"])
+        hoja.append(["Pan", "Cantidad", "Precio unitario", "Importe", "Observaciones", "Registró", "Fecha y hora de captura"])
         for registro in datos["registros"]:
             marca_captura = registro.get("registrado_en")
             fecha_hora_captura = None
@@ -1809,14 +1821,26 @@ def descargar_produccion_excel(
             hoja.append([
                 registro["pan_nombre"],
                 int(registro["cantidad"]),
+                float(Decimal(str(registro["precio_unitario"]))) if registro.get("precio_unitario") is not None else None,
+                float(Decimal(str(registro["importe"]))) if registro.get("importe") is not None else None,
                 registro.get("observaciones") or "",
                 registro.get("usuario_nombre") or "Usuario",
                 fecha_hora_captura,
             ])
-            hoja.cell(row=hoja.max_row, column=5).number_format = "dd/mm/yy hh:mm"
+            hoja.cell(row=hoja.max_row, column=3).number_format = '"$"#,##0.00'
+            hoja.cell(row=hoja.max_row, column=4).number_format = '"$"#,##0.00'
+            hoja.cell(row=hoja.max_row, column=7).number_format = "dd/mm/yy hh:mm"
+        total_row = hoja.max_row + 1
+        hoja.cell(total_row, 1, "TOTAL")
+        hoja.cell(total_row, 2, datos.get("total_cantidad", 0))
+        if datos.get("total_importe") is None:
+            hoja.cell(total_row, 4, "N/D")
+        else:
+            hoja.cell(total_row, 4, float(Decimal(str(datos["total_importe"]))))
+            hoja.cell(total_row, 4).number_format = '"$"#,##0.00'
         hoja.freeze_panes = "A5"
-        hoja.auto_filter.ref = f"A4:E{max(4, hoja.max_row)}"
-        for col, width in {"A": 34, "B": 14, "C": 42, "D": 24, "E": 28}.items():
+        hoja.auto_filter.ref = f"A4:G{max(4, total_row - 1)}"
+        for col, width in {"A": 34, "B": 14, "C": 18, "D": 18, "E": 42, "F": 24, "G": 28}.items():
             hoja.column_dimensions[col].width = width
         salida = BytesIO()
         libro.save(salida)
@@ -1989,6 +2013,44 @@ def ventas_registrar(datos: VentaPosNueva, authorization: str | None = Header(de
         raise HTTPException(status_code=503, detail="No se pudo registrar la venta. Verifica la disponibilidad e inténtalo de nuevo.")
 
 
+class VentaPosCorreccion(BaseModel):
+    lineas: list[VentaPosLineaNueva] = Field(min_length=1, max_length=200)
+
+
+@app.patch("/api/ventas/{venta_id}")
+def ventas_corregir(venta_id: int, datos: VentaPosCorreccion, authorization: str | None = Header(default=None)):
+    usuario = obtener_usuario_autenticado(authorization)
+    perfil = obtener_perfil(str(usuario.id))
+    try:
+        filas = (supabase.table("ventas_pos").select("id,panaderia_id,fecha,total")
+                 .eq("id",venta_id).limit(1).execute().data or [])
+        if not filas:
+            raise HTTPException(status_code=404, detail="No se encontró la venta.")
+        venta = filas[0]
+        panaderia_id = int(venta["panaderia_id"])
+        comprobar_permiso_local(str(usuario.id), perfil, panaderia_id, "ventas")
+        config = obtener_configuracion_edicion()
+        fecha_venta = date.fromisoformat(str(venta["fecha"])[:10])
+        if not plazo_edicion_vigente(fecha_venta, config["dias_ventas"], config["horas_ventas"]) and not es_admin_principal(perfil):
+            raise HTTPException(status_code=403, detail="Terminó el plazo configurado para corregir esta venta.")
+        ids = [x.producto_id for x in datos.lineas]
+        if len(ids) != len(set(ids)):
+            raise HTTPException(status_code=422, detail="No repitas productos en una misma venta.")
+        resultado = supabase.rpc("actualizar_venta_pos", {
+            "p_venta_id": venta_id,
+            "p_usuario_id": str(usuario.id),
+            "p_lineas": [{"producto_id":x.producto_id,"cantidad":x.cantidad} for x in datos.lineas]
+        }).execute().data
+        return {"actualizada":True,"venta":resultado}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        mensaje=str(exc).lower()
+        if "producto" in mensaje or "cantidad" in mensaje or "repet" in mensaje:
+            raise HTTPException(status_code=422,detail="La corrección contiene productos o cantidades no válidos.")
+        raise HTTPException(status_code=503, detail="No se pudo corregir la venta.")
+
+
 def obtener_ventas_pos_dia(panaderia_id: int, fecha: date):
     ventas = (supabase.table("ventas_pos")
         .select("id,numero_venta,fecha,usuario_nombre,total,creado_en")
@@ -2021,6 +2083,62 @@ def ventas_consultar_dia(panaderia_id: int, authorization: str | None = Header(d
         raise
     except Exception:
         raise HTTPException(status_code=503, detail="No se pudieron consultar las ventas del día.")
+
+
+@app.get("/api/ventas/dia/excel")
+def ventas_descargar_dia_excel(panaderia_id: int, authorization: str | None = Header(default=None)):
+    usuario = obtener_usuario_autenticado(authorization)
+    perfil = obtener_perfil(str(usuario.id))
+    comprobar_permiso_local(str(usuario.id), perfil, panaderia_id, "ventas")
+    try:
+        fecha = fecha_operativa_hoy()
+        ventas = obtener_ventas_pos_dia(panaderia_id, fecha)
+        local = (supabase.table("panaderias").select("nombre").eq("id",panaderia_id).limit(1).execute().data or [])
+        nombre_local = local[0]["nombre"] if local else "Panadería"
+        libro = Workbook()
+        hoja = libro.active
+        hoja.title = "Ventas del día"
+        hoja.append(["Panadería", nombre_local])
+        hoja.append(["Fecha", fecha.isoformat()])
+        hoja.append([])
+        hoja.append(["Venta", "Hora", "Cuenta", "Producto", "Cantidad", "Precio unitario", "Importe", "Total de venta"])
+        cantidad_total = 0
+        importe_total = Decimal("0")
+        for venta in ventas:
+            hora = datetime.fromisoformat(str(venta["creado_en"]).replace("Z","+00:00")).astimezone(TZ_PRODUCCION).replace(tzinfo=None) if venta.get("creado_en") else None
+            for indice, linea in enumerate(venta.get("lineas", [])):
+                cantidad = int(linea.get("cantidad") or 0)
+                precio = Decimal(str(linea.get("precio_unitario") or 0))
+                importe = Decimal(str(linea.get("importe") or 0))
+                cantidad_total += cantidad
+                importe_total += importe
+                hoja.append([
+                    "Venta " + str(venta["numero_venta"]), hora,
+                    venta.get("usuario_nombre") or "Usuario",
+                    linea.get("producto_nombre") or "Producto", cantidad,
+                    float(precio), float(importe), float(Decimal(str(venta.get("total") or 0))) if indice == 0 else None
+                ])
+                hoja.cell(row=hoja.max_row,column=2).number_format = "hh:mm"
+                for col in (6,7,8): hoja.cell(row=hoja.max_row,column=col).number_format = '"$"#,##0.00'
+        total_row = hoja.max_row + 1
+        hoja.cell(total_row,4,"TOTAL DEL DÍA")
+        hoja.cell(total_row,5,cantidad_total)
+        hoja.cell(total_row,7,float(importe_total.quantize(Decimal("0.01"))))
+        hoja.cell(total_row,7).number_format = '"$"#,##0.00'
+        hoja.freeze_panes = "A5"
+        hoja.auto_filter.ref = f"A4:H{max(4,total_row-1)}"
+        for col,width in {"A":16,"B":14,"C":22,"D":34,"E":14,"F":18,"G":18,"H":18}.items():
+            hoja.column_dimensions[col].width = width
+        salida = BytesIO()
+        libro.save(salida)
+        salida.seek(0)
+        nombre = "ventas_" + str(panaderia_id) + "_" + fecha.isoformat() + ".xlsx"
+        return StreamingResponse(salida,media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition":f'attachment; filename="{nombre}"'})
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=503, detail="No se pudo generar el Excel de ventas del día.")
 
 
 @app.get("/api/ventas/resumen")
@@ -2129,6 +2247,7 @@ def obtener_ventas_pos_periodo(panaderia_id: int, desde: date, hasta: date):
 
 def construir_resumen_ventas(ventas: list[dict]):
     resumen = {}
+    por_precio = {}
     cantidad_total = 0
     importe_total = Decimal("0")
     for venta in ventas:
@@ -2138,17 +2257,25 @@ def construir_resumen_ventas(ventas: list[dict]):
             if clave not in resumen:
                 resumen[clave] = {"producto": nombre, "cantidad": 0, "importe": Decimal("0")}
             cantidad = int(linea.get("cantidad") or 0)
+            precio = Decimal(str(linea.get("precio_unitario") or "0")).quantize(Decimal("0.01"))
             importe = Decimal(str(linea.get("importe") or "0"))
             resumen[clave]["cantidad"] += cantidad
             resumen[clave]["importe"] += importe
+            if precio not in por_precio:
+                por_precio[precio] = {"precio":precio,"cantidad":0,"importe":Decimal("0")}
+            por_precio[precio]["cantidad"] += cantidad
+            por_precio[precio]["importe"] += importe
             cantidad_total += cantidad
             importe_total += importe
     filas = sorted(resumen.values(), key=lambda x: x["producto"].casefold())
     for fila in filas:
         fila["importe"] = str(fila["importe"].quantize(Decimal("0.01")))
-    return {"resumen": filas, "cantidad_total": cantidad_total,
-            "importe_total": str(importe_total.quantize(Decimal("0.01"))),
-            "total_ventas": len(ventas)}
+    filas_precio = [{"precio":str(x["precio"]), "cantidad":x["cantidad"],
+                     "importe":str(x["importe"].quantize(Decimal("0.01")))}
+                    for x in sorted(por_precio.values(), key=lambda x:x["precio"])]
+    return {"resumen":filas,"por_precio":filas_precio,"cantidad_total":cantidad_total,
+            "importe_total":str(importe_total.quantize(Decimal("0.01"))),
+            "total_ventas":len(ventas),"operaciones":len(ventas)}
 
 
 def validar_periodo_ventas(desde: date, hasta: date):

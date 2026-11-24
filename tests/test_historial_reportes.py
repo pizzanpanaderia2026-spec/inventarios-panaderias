@@ -25,13 +25,27 @@ class HistorialReportesTests(unittest.TestCase):
         }]
 
     def test_summary_aggregates_inventory_and_production(self):
-        data = _agregar([self.inv], self.prod, date(2026, 3, 1), date(2026, 3, 1))
+        data = _agregar([self.inv], self.prod, date(2026, 3, 1), date(2026, 3, 1), ventas=[])
         self.assertEqual(data["inventario"]["total_piezas"], 14)
         self.assertEqual(data["produccion"]["total"], 20)
-        self.assertEqual(data["analisis"]["por_pan"][0]["porcentaje_sobrante"], 50.0)
+        bolillo = next(x for x in data["analisis"]["por_pan"] if x["pan"] == "Bolillo")
+        self.assertEqual(bolillo["producido"], 20)
+        self.assertIsNone(bolillo["diferencia_produccion_ventas"])
+        self.assertEqual(bolillo["inventario_final"], 10)
+        self.assertNotIn("porcentaje_sobrante", bolillo)
+
+    def test_analysis_integrates_sales_without_calling_difference_merma(self):
+        ventas = [{"fecha":"2026-03-01","numero_venta":1,"lineas":[
+            {"producto_nombre":"Bolillo","cantidad":8,"importe":"16.00"}]}]
+        data = _agregar([self.inv], self.prod, date(2026,3,1), date(2026,3,1), ventas=ventas)
+        bolillo = next(x for x in data["analisis"]["por_pan"] if x["pan"] == "Bolillo")
+        self.assertEqual(bolillo["vendido"], 8)
+        self.assertEqual(bolillo["importe_ventas"], "16.00")
+        self.assertEqual(bolillo["inventario_final"], 10)
+        self.assertEqual(bolillo["diferencia_produccion_ventas"], 12)
 
     def test_day_excel_has_native_charts(self):
-        data = _agregar([self.inv], self.prod, date(2026, 3, 1), date(2026, 3, 1))
+        data = _agregar([self.inv], self.prod, date(2026, 3, 1), date(2026, 3, 1), ventas=[])
         output = _crear_excel("analisis", "dia", date(2026, 3, 1), date(2026, 3, 1), data, False)
         book = load_workbook(BytesIO(output.getvalue()))
         self.assertEqual(book.sheetnames, ["Resumen"])
@@ -39,7 +53,7 @@ class HistorialReportesTests(unittest.TestCase):
 
     def test_month_excel_adds_only_days_with_records(self):
         end = date(2026, 3, 31)
-        data = _agregar([self.inv], self.prod, date(2026, 3, 1), end)
+        data = _agregar([self.inv], self.prod, date(2026, 3, 1), end, ventas=[])
         output = _crear_excel("analisis", "mes", date(2026, 3, 1), end, data, False)
         book = load_workbook(BytesIO(output.getvalue()))
         self.assertEqual(book.sheetnames, ["Resumen", "01-mar-2026"])
@@ -58,7 +72,7 @@ class HistorialReportesTests(unittest.TestCase):
 
     def test_long_period_exports_summary_only(self):
         start, end = date(2024, 1, 1), date(2025, 1, 1)
-        data = _agregar([self.inv], self.prod, start, end)
+        data = _agregar([self.inv], self.prod, start, end, ventas=[])
         data["resumen_mensual"] = [{"mes": "2024-01", "inventario_cantidad": 14,
             "inventario_importe": "70.00", "produccion_cantidad": 20}]
         output = _crear_excel("analisis", "periodo", start, end, data, True)

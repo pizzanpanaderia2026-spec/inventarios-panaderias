@@ -91,7 +91,7 @@ def _leer_produccion(panaderia_id: int, desde: date, hasta: date):
     if supabase is None:
         raise RuntimeError("Supabase no está disponible.")
     filas = _paginar(lambda: supabase.table("produccion_registros")
-        .select("id,fecha_produccion,pan_nombre,cantidad,observaciones,usuario_id,registrado_en")
+        .select("id,fecha_produccion,pan_nombre,cantidad,precio_unitario,importe,observaciones,usuario_id,registrado_en")
         .eq("panaderia_id", panaderia_id)
         .gte("fecha_produccion", desde.isoformat()).lte("fecha_produccion", hasta.isoformat())
         .order("fecha_produccion"))
@@ -100,26 +100,43 @@ def _leer_produccion(panaderia_id: int, desde: date, hasta: date):
         por_fecha[str(fila["fecha_produccion"])[:10]].append({
             "pan": " ".join(str(fila.get("pan_nombre") or "Pan sin nombre").split()),
             "cantidad": int(fila.get("cantidad") or 0),
+            "precio_unitario": str(fila["precio_unitario"]) if fila.get("precio_unitario") is not None else None,
+            "importe": str(fila["importe"]) if fila.get("importe") is not None else None,
             "observaciones": fila.get("observaciones"),
         })
     salida = []
     for fecha, registros in sorted(por_fecha.items()):
-        por_pan = defaultdict(int)
+        por_pan = defaultdict(lambda: {"cantidad":0,"importe":Decimal("0"),"importe_completo":True})
         for r in registros:
-            por_pan[r["pan"]] += r["cantidad"]
-        salida.append({"fecha": fecha, "registros": registros,
-            "por_pan": [{"pan": k, "cantidad": v} for k, v in sorted(por_pan.items(), key=lambda x: x[0].casefold())],
-            "total": sum(por_pan.values())})
+            item = por_pan[r["pan"]]
+            item["cantidad"] += r["cantidad"]
+            if r["importe"] is None:
+                item["importe_completo"] = False
+            else:
+                item["importe"] += Decimal(str(r["importe"]))
+        lista_pan = [{"pan":k,"cantidad":v["cantidad"],
+            "importe":str(v["importe"].quantize(Decimal("0.01"))) if v["importe_completo"] else None}
+            for k,v in sorted(por_pan.items(),key=lambda x:x[0].casefold())]
+        importe_completo = all(x["importe"] is not None for x in lista_pan)
+        total_importe = sum((Decimal(x["importe"]) for x in lista_pan if x["importe"] is not None),Decimal("0"))
+        salida.append({"fecha":fecha,"registros":registros,"por_pan":lista_pan,
+            "total":sum(x["cantidad"] for x in lista_pan),
+            "total_importe":str(total_importe.quantize(Decimal("0.01"))) if importe_completo else None})
     return salida
-
 
 def _clave(texto):
     normal = unicodedata.normalize("NFD", str(texto or ""))
     return "".join(c for c in normal if unicodedata.category(c) != "Mn").casefold().strip()
 
 
-def _agregar(inventario, produccion, desde, hasta, resumen_only=False):
-    productos, precios, panes = defaultdict(lambda: [0, Decimal("0")]), defaultdict(lambda: [0, Decimal("0")]), defaultdict(int)
+def _agregar(inventario, produccion, desde, hasta, resumen_only=False, ventas=None):
+    analisis_activo = ventas is not None
+    ventas = ventas or []
+    productos = defaultdict(lambda: [0, Decimal("0")])
+    precios = defaultdict(lambda: [0, Decimal("0")])
+    panes = defaultdict(lambda: {"cantidad":0,"importe":Decimal("0"),"importe_completo":True})
+    ventas_producto = defaultdict(lambda: {"cantidad":0,"importe":Decimal("0")})
+    ventas_fecha = defaultdict(lambda: {"cantidad":0,"importe":Decimal("0")})
     inv_por_fecha = {d["cierre"]["fecha"]: d for d in inventario}
     prod_por_fecha = {d["fecha"]: d for d in produccion}
     for dia in inventario:
@@ -134,57 +151,121 @@ def _agregar(inventario, produccion, desde, hasta, resumen_only=False):
             precios[precio][1] += importe
     for dia in produccion:
         for item in dia["por_pan"]:
-            panes[item["pan"]] += int(item["cantidad"])
+            actual = panes[item["pan"]]
+            actual["cantidad"] += int(item["cantidad"])
+            if item.get("importe") is None:
+                actual["importe_completo"] = False
+            else:
+                actual["importe"] += Decimal(str(item["importe"]))
+    for venta in ventas:
+        fecha_venta = str(venta.get("fecha") or "")[:10]
+        for linea in venta.get("lineas", []):
+            nombre = str(linea.get("producto_nombre") or "Producto")
+            cantidad = int(linea.get("cantidad") or 0)
+            importe = Decimal(str(linea.get("importe") or "0"))
+            ventas_producto[nombre]["cantidad"] += cantidad
+            ventas_producto[nombre]["importe"] += importe
+            ventas_fecha[fecha_venta]["cantidad"] += cantidad
+            ventas_fecha[fecha_venta]["importe"] += importe
+
+    # Para análisis operativo se toma el último inventario cerrado del periodo,
+    # no la suma de cierres diarios, que contaría varias veces las mismas existencias.
+    if analisis_activo and inventario:
+        ultimo = max(inventario, key=lambda x: x["cierre"]["fecha"])
+        productos = defaultdict(lambda: [0, Decimal("0")])
+        precios = defaultdict(lambda: [0, Decimal("0")])
+        for linea in ultimo["lineas"]:
+            nombre = linea["producto"]
+            cantidad = int(linea["cantidad"])
+            precio = Decimal(str(linea["precio_unitario"]))
+            importe = Decimal(str(linea["total"]))
+            productos[nombre][0] += cantidad
+            productos[nombre][1] += importe
+            precios[precio][0] += cantidad
+            precios[precio][1] += importe
+
     total_inv = sum(v[0] for v in productos.values())
     importe_inv = sum((v[1] for v in productos.values()), Decimal("0"))
-    total_prod = sum(panes.values())
+    total_prod = sum(v["cantidad"] for v in panes.values())
+    total_prod_importe = sum((v["importe"] for v in panes.values()), Decimal("0"))
+    produccion_importe_completo = all(v["importe_completo"] for v in panes.values())
     por_producto = [{"producto": k, "cantidad": v[0], "importe": str(v[1])}
         for k, v in sorted(productos.items(), key=lambda x: x[0].casefold())]
     por_precio = [{"precio": str(k), "cantidad": v[0], "importe": str(v[1])}
         for k, v in sorted(precios.items())]
-    por_pan = [{"pan": k, "cantidad": v} for k, v in sorted(panes.items(), key=lambda x: x[0].casefold())]
+    por_pan = [{"pan": k, "cantidad": v["cantidad"],
+        "importe": str(v["importe"].quantize(Decimal("0.01"))) if v["importe_completo"] else None}
+        for k, v in sorted(panes.items(), key=lambda x: x[0].casefold())]
+
     inventario_normalizado = {}
     for nombre, valores in productos.items():
         clave = _clave(nombre)
         actual = inventario_normalizado.setdefault(clave, {"nombre": nombre, "cantidad": 0})
         actual["cantidad"] += valores[0]
     produccion_normalizada = {}
-    for nombre, cantidad in panes.items():
+    for nombre, valores in panes.items():
         clave = _clave(nombre)
         actual = produccion_normalizada.setdefault(clave, {"nombre": nombre, "cantidad": 0})
-        actual["cantidad"] += cantidad
+        actual["cantidad"] += valores["cantidad"]
+    ventas_normalizadas = {}
+    for nombre, valores in ventas_producto.items():
+        clave = _clave(nombre)
+        actual = ventas_normalizadas.setdefault(clave, {"nombre":nombre,"cantidad":0,"importe":Decimal("0")})
+        actual["cantidad"] += valores["cantidad"]
+        actual["importe"] += valores["importe"]
+
     comparacion = []
-    for clave in sorted(set(inventario_normalizado) | set(produccion_normalizada)):
-        inv_item = inventario_normalizado.get(clave, {"nombre": "", "cantidad": 0})
-        prod_item = produccion_normalizada.get(clave, {"nombre": "", "cantidad": 0})
-        nombre = inv_item["nombre"] or prod_item["nombre"]
-        producido = prod_item["cantidad"]
-        sobrante = inv_item["cantidad"]
-        comparacion.append({"pan": nombre, "producido": producido, "sobrante": sobrante,
-            "porcentaje_sobrante": round(sobrante / producido * 100, 2) if producido > 0 else None})
+    for clave in sorted(set(inventario_normalizado) | set(produccion_normalizada) | set(ventas_normalizadas)):
+        inv_item = inventario_normalizado.get(clave)
+        prod_item = produccion_normalizada.get(clave)
+        venta_item = ventas_normalizadas.get(clave)
+        nombre = (inv_item or {}).get("nombre") or (prod_item or {}).get("nombre") or (venta_item or {}).get("nombre")
+        producido = prod_item["cantidad"] if prod_item else 0
+        vendido = venta_item["cantidad"] if venta_item else 0
+        comparacion.append({
+            "pan": nombre,
+            "producido": producido,
+            "vendido": vendido,
+            "importe_ventas": str(venta_item["importe"].quantize(Decimal("0.01"))) if venta_item else "0.00",
+            "inventario_final": inv_item["cantidad"] if inv_item else None,
+            "diferencia_produccion_ventas": producido - vendido if prod_item and venta_item else None,
+        })
+
     dias = []
     cursor = desde
     while cursor <= hasta:
         f = cursor.isoformat()
         inv = inv_por_fecha.get(f)
         prod = prod_por_fecha.get(f)
+        venta = ventas_fecha.get(f)
         dias.append({
             "fecha": f,
             "inventario_cantidad": int(inv["total_piezas"]) if inv else 0,
             "inventario_importe": str(inv["total_importe"]) if inv else "0",
             "produccion_cantidad": int(prod["total"]) if prod else 0,
+            "produccion_importe": prod.get("total_importe") if prod else "0",
+            "ventas_cantidad": int(venta["cantidad"]) if venta else 0,
+            "ventas_importe": str(venta["importe"].quantize(Decimal("0.01"))) if venta else "0.00",
             "tiene_inventario": bool(inv),
             "tiene_produccion": bool(prod),
+            "tiene_ventas": bool(venta),
         })
         cursor += timedelta(days=1)
     return {
         "inventario": {"por_producto": por_producto, "por_precio": por_precio,
             "total_piezas": total_inv, "total_importe": str(importe_inv), "dias": inventario},
-        "produccion": {"por_pan": por_pan, "total": total_prod, "dias": produccion},
+        "produccion": {"por_pan": por_pan, "total": total_prod,
+            "total_importe": str(total_prod_importe.quantize(Decimal("0.01"))) if produccion_importe_completo else None,
+            "dias": produccion},
+        "ventas": {"por_producto":[{"producto":k,"cantidad":v["cantidad"],"importe":str(v["importe"].quantize(Decimal("0.01")))}
+            for k,v in sorted(ventas_producto.items(),key=lambda x:x[0].casefold())],
+            "cantidad_total":sum(v["cantidad"] for v in ventas_producto.values()),
+            "importe_total":str(sum((v["importe"] for v in ventas_producto.values()),Decimal("0")).quantize(Decimal("0.01"))),
+            "total_ventas":len(ventas)},
+        "ventas_detalle": ventas,
         "analisis": {"por_pan": comparacion},
         "resumen_diario": dias,
     }
-
 
 def _reporte(panaderia_id, categoria, tipo, desde, hasta, authorization, incluir_detalle=True):
     from main import (obtener_usuario_autenticado, obtener_perfil,
@@ -231,18 +312,27 @@ def _reporte(panaderia_id, categoria, tipo, desde, hasta, authorization, incluir
     try:
         inventario = _leer_inventario(panaderia_id, desde, hasta) if categoria in ("inventario", "analisis") else []
         produccion = _leer_produccion(panaderia_id, desde, hasta) if categoria in ("produccion", "analisis") else []
-        resumen = _agregar(inventario, produccion, desde, hasta)
+        ventas_analisis = obtener_ventas_pos_periodo(panaderia_id, desde, hasta) if categoria == "analisis" else None
+        resumen = _agregar(inventario, produccion, desde, hasta, ventas=ventas_analisis)
         resumen_only = tipo == "periodo" and dias > MAX_DIAS_DETALLE
         if resumen_only:
             # Para intervalos largos se conservan los agregados y la serie mensual, no cientos de hojas.
-            mensual = defaultdict(lambda: {"inventario_cantidad": 0, "inventario_importe": Decimal("0"), "produccion_cantidad": 0})
+            mensual = defaultdict(lambda: {"inventario_cantidad": 0, "inventario_importe": Decimal("0"), "produccion_cantidad": 0, "produccion_importe":Decimal("0"), "produccion_importe_completo":True, "ventas_cantidad":0, "ventas_importe":Decimal("0")})
             for item in resumen["resumen_diario"]:
                 mes = item["fecha"][:7]
                 mensual[mes]["inventario_cantidad"] += item["inventario_cantidad"]
                 mensual[mes]["inventario_importe"] += Decimal(item["inventario_importe"])
                 mensual[mes]["produccion_cantidad"] += item["produccion_cantidad"]
+                if item.get("produccion_importe") is None:
+                    mensual[mes]["produccion_importe_completo"] = False
+                else:
+                    mensual[mes]["produccion_importe"] += Decimal(item.get("produccion_importe","0"))
+                mensual[mes]["ventas_cantidad"] += item.get("ventas_cantidad",0)
+                mensual[mes]["ventas_importe"] += Decimal(item.get("ventas_importe","0"))
             resumen["resumen_mensual"] = [{"mes": k, "inventario_cantidad": v["inventario_cantidad"],
-                "inventario_importe": str(v["inventario_importe"]), "produccion_cantidad": v["produccion_cantidad"]}
+                "inventario_importe": str(v["inventario_importe"]), "produccion_cantidad": v["produccion_cantidad"],
+                "produccion_importe":str(v["produccion_importe"]) if v["produccion_importe_completo"] else None,
+                "ventas_cantidad":v["ventas_cantidad"],"ventas_importe":str(v["ventas_importe"])}
                 for k, v in sorted(mensual.items())]
             resumen["resumen_diario"] = []
             resumen["inventario"]["dias"] = []
@@ -342,17 +432,27 @@ def _hoja_informe(libro, nombre_hoja, titulo, categoria, inventario, produccion,
         inicio_producto = fin_producto = inicio_precio = fin_precio = 0
     if categoria in ("produccion", "analisis"):
         inicio_prod = fila + 2
-        fila = _tabla(hoja, fila, "PRODUCCIÓN POR TIPO DE PAN", ["Pan", "Cantidad producida"],
-            [[x["pan"], x["cantidad"]] for x in filas_prod])
+        fila = _tabla(hoja, fila, "PRODUCCIÓN POR TIPO DE PAN", ["Pan", "Cantidad producida", "Importe"],
+            [[x["pan"], x["cantidad"], float(Decimal(x["importe"])) if x.get("importe") is not None else "N/D"] for x in filas_prod],
+            {3: '"$"#,##0.00'})
+        total_fila = fila - 1
+        for columna, valor in enumerate(["TOTAL PRODUCIDO", produccion.get("total",0),
+            float(Decimal(produccion["total_importe"])) if produccion.get("total_importe") is not None else "N/D"], 1):
+            hoja.cell(total_fila, columna, valor).font = Font(bold=True)
+        if produccion.get("total_importe") is not None:
+            hoja.cell(total_fila, 3).number_format = '"$"#,##0.00'
         fin_prod = fila - 2
     else:
         inicio_prod = fin_prod = 0
     if categoria == "analisis":
         inicio_analisis = fila + 2
         filas_analisis = (analisis or {}).get("por_pan", [])
-        fila = _tabla(hoja, fila, "PRODUCCIÓN Y SOBRANTES", ["Pan", "Producido", "Sobrante", "% sobrante"],
-            [[x["pan"], x["producido"], x["sobrante"], x["porcentaje_sobrante"] if x["porcentaje_sobrante"] is not None else "N/D"] for x in filas_analisis])
-        hoja.cell(fila, 1, "El porcentaje compara sobrantes registrados con producción del mismo pan; no representa ventas.")
+        fila = _tabla(hoja, fila, "PRODUCCIÓN, VENTAS E INVENTARIO FINAL", ["Pan", "Producido", "Vendido", "Importe ventas", "Inventario final", "Producción - ventas (referencia)"],
+            [[x["pan"], x["producido"], x["vendido"], float(Decimal(x["importe_ventas"])),
+              x["inventario_final"] if x["inventario_final"] is not None else "N/D",
+              x["diferencia_produccion_ventas"] if x["diferencia_produccion_ventas"] is not None else "N/D"] for x in filas_analisis],
+            {4: '"$"#,##0.00'})
+        hoja.cell(fila, 1, "El inventario final corresponde al último cierre disponible del periodo. La diferencia producción - ventas es referencial y no representa merma; no considera existencias iniciales, devoluciones ni ajustes.")
         hoja.cell(fila, 1).font = Font(italic=True, color="666666")
         fin_analisis = fila - 2
     else:
@@ -362,11 +462,11 @@ def _hoja_informe(libro, nombre_hoja, titulo, categoria, inventario, produccion,
             datos = [[x["fecha"], x["inventario_cantidad"], float(Decimal(x["inventario_importe"]))] for x in resumen_diario]
             fila = _tabla(hoja, fila, "RESUMEN DIARIO", ["Fecha", "Inventario", "Importe"], datos, {3: '"$"#,##0.00'})
         elif categoria == "produccion":
-            datos = [[x["fecha"], x["produccion_cantidad"]] for x in resumen_diario]
-            fila = _tabla(hoja, fila, "RESUMEN DIARIO", ["Fecha", "Producción"], datos)
+            datos = [[x["fecha"], x["produccion_cantidad"], float(Decimal(x["produccion_importe"])) if x.get("produccion_importe") is not None else "N/D"] for x in resumen_diario]
+            fila = _tabla(hoja, fila, "RESUMEN DIARIO", ["Fecha", "Producción", "Importe producción"], datos, {3: '"$"#,##0.00'})
         else:
-            datos = [[x["fecha"], x["inventario_cantidad"], float(Decimal(x["inventario_importe"])), x["produccion_cantidad"]] for x in resumen_diario]
-            fila = _tabla(hoja, fila, "RESUMEN DIARIO", ["Fecha", "Inventario", "Importe inventario", "Producción"], datos, {3: '"$"#,##0.00'})
+            datos = [[x["fecha"], x["inventario_cantidad"], float(Decimal(x["inventario_importe"])), x["produccion_cantidad"], x["ventas_cantidad"], float(Decimal(x["ventas_importe"]))] for x in resumen_diario]
+            fila = _tabla(hoja, fila, "RESUMEN DIARIO", ["Fecha", "Inventario final", "Importe inventario", "Producción", "Ventas", "Importe ventas"], datos, {3: '"$"#,##0.00', 6: '"$"#,##0.00'})
     inicio_mensual = fin_mensual = 0
     if resumen_mensual:
         inicio_mensual = fila + 2
@@ -374,11 +474,11 @@ def _hoja_informe(libro, nombre_hoja, titulo, categoria, inventario, produccion,
             datos = [[x["mes"], x["inventario_cantidad"], float(Decimal(x["inventario_importe"]))] for x in resumen_mensual]
             fila = _tabla(hoja, fila, "RESUMEN MENSUAL", ["Mes", "Inventario", "Importe"], datos, {3: '"$"#,##0.00'})
         elif categoria == "produccion":
-            datos = [[x["mes"], x["produccion_cantidad"]] for x in resumen_mensual]
-            fila = _tabla(hoja, fila, "RESUMEN MENSUAL", ["Mes", "Producción"], datos)
+            datos = [[x["mes"], x["produccion_cantidad"], float(Decimal(x["produccion_importe"])) if x.get("produccion_importe") is not None else "N/D"] for x in resumen_mensual]
+            fila = _tabla(hoja, fila, "RESUMEN MENSUAL", ["Mes", "Producción", "Importe producción"], datos, {3: '"$"#,##0.00'})
         else:
-            datos = [[x["mes"], x["inventario_cantidad"], float(Decimal(x["inventario_importe"])), x["produccion_cantidad"]] for x in resumen_mensual]
-            fila = _tabla(hoja, fila, "RESUMEN MENSUAL", ["Mes", "Inventario", "Importe inventario", "Producción"], datos, {3: '"$"#,##0.00'})
+            datos = [[x["mes"], x["inventario_cantidad"], float(Decimal(x["inventario_importe"])), x["produccion_cantidad"], float(Decimal(x["produccion_importe"])) if x.get("produccion_importe") is not None else "N/D", x.get("ventas_cantidad",0), float(Decimal(x.get("ventas_importe","0")))] for x in resumen_mensual]
+            fila = _tabla(hoja, fila, "RESUMEN MENSUAL", ["Mes", "Inventario registrado", "Importe inventario", "Producción", "Importe producción", "Ventas", "Importe ventas"], datos, {3: '"$"#,##0.00', 5: '"$"#,##0.00', 7: '"$"#,##0.00'})
         fin_mensual = fila - 2
     if categoria in ("inventario", "analisis") and fin_producto >= inicio_producto:
         _grafica(hoja, "Producto", inicio_producto, fin_producto, 2, "Inventario por tipo de pan", "F3")
@@ -387,7 +487,8 @@ def _hoja_informe(libro, nombre_hoja, titulo, categoria, inventario, produccion,
     if categoria == "produccion" and fin_prod >= inicio_prod:
         _grafica(hoja, "Pan", inicio_prod, fin_prod, 2, "Producción por tipo de pan", "F3")
     if categoria == "analisis" and fin_analisis >= inicio_analisis:
-        _grafica(hoja, "Producido", inicio_analisis, fin_analisis, 2, "Producción frente a sobrantes", "F35", segunda_serie=3)
+        _grafica(hoja, "Producido", inicio_analisis, fin_analisis, 2, "Producción frente a ventas", "F35", segunda_serie=3)
+        _grafica(hoja, "Inventario final", inicio_analisis, fin_analisis, 5, "Inventario final por pan", "F67" if anio else "F51")
     if anio and categoria in ("produccion", "analisis") and fin_mensual >= inicio_mensual:
         _grafica(hoja, "Mes", inicio_mensual, fin_mensual, 2 if categoria == "produccion" else 4, "Producción por mes", "F51")
     _estilizar(hoja)
@@ -429,15 +530,24 @@ def _crear_excel(categoria, tipo, desde, hasta, datos, resumen_only):
     resumen_mensual = datos.get("resumen_mensual")
     titulo = "Resumen " + _titulo_periodo(tipo, desde, hasta)
     if tipo == "anio":
-        mensual = {f"{desde.year}-{mes:02d}": {"inventario_cantidad": 0, "inventario_importe": Decimal("0"), "produccion_cantidad": 0}
+        mensual = {f"{desde.year}-{mes:02d}": {"inventario_cantidad": 0, "inventario_importe": Decimal("0"), "produccion_cantidad": 0, "produccion_importe":Decimal("0"), "produccion_importe_completo":True, "ventas_cantidad":0, "ventas_importe":Decimal("0")}
             for mes in range(1, 13)}
         for x in resumen_diario:
             mes = x["fecha"][:7]
             mensual[mes]["inventario_cantidad"] += x["inventario_cantidad"]
             mensual[mes]["inventario_importe"] += Decimal(x["inventario_importe"])
             mensual[mes]["produccion_cantidad"] += x["produccion_cantidad"]
-        resumen_mensual = [{"mes": k, **{a: (str(v) if isinstance(v, Decimal) else v) for a,v in vals.items()}}
-            for k, vals in sorted(mensual.items())]
+            if x.get("produccion_importe") is None:
+                mensual[mes]["produccion_importe_completo"] = False
+            else:
+                mensual[mes]["produccion_importe"] += Decimal(x["produccion_importe"])
+            mensual[mes]["ventas_cantidad"] += x.get("ventas_cantidad",0)
+            mensual[mes]["ventas_importe"] += Decimal(x.get("ventas_importe","0"))
+        resumen_mensual = [{"mes":k,"inventario_cantidad":v["inventario_cantidad"],
+            "inventario_importe":str(v["inventario_importe"]),"produccion_cantidad":v["produccion_cantidad"],
+            "produccion_importe":str(v["produccion_importe"]) if v["produccion_importe_completo"] else None,
+            "ventas_cantidad":v["ventas_cantidad"],"ventas_importe":str(v["ventas_importe"])}
+            for k,v in sorted(mensual.items())]
     _hoja_informe(libro, "Resumen", titulo, categoria, inv, prod, resumen_diario if tipo in ("mes","periodo") else [], resumen_mensual, datos.get("analisis"), anio=(tipo=="anio"))
     if resumen_only:
         resumen["A2"] = "Informe resumido por la extensión del periodo; se omitieron las hojas diarias para proteger el rendimiento."
@@ -448,18 +558,24 @@ def _crear_excel(categoria, tipo, desde, hasta, datos, resumen_only):
     elif tipo in ("mes", "periodo", "semana"):
         inv_map = {x["cierre"]["fecha"]: x for x in inv["dias"]}
         prod_map = {x["fecha"]: x for x in prod["dias"]}
-        fechas = sorted(set(inv_map) | set(prod_map))
+        ventas_map = defaultdict(list)
+        for venta in datos.get("ventas_detalle", []):
+            ventas_map[str(venta.get("fecha") or "")[:10]].append(venta)
+        fechas = sorted(set(inv_map) | set(prod_map) | set(ventas_map))
         for fecha in fechas:
             inv_dia = inv_map.get(fecha)
             prod_dia = prod_map.get(fecha)
             inv_datos = _agregar([inv_dia] if inv_dia else [], [], date.fromisoformat(fecha), date.fromisoformat(fecha))
             prod_datos = _agregar([], [prod_dia] if prod_dia else [], date.fromisoformat(fecha), date.fromisoformat(fecha))
+            dia_completo = _agregar([inv_dia] if inv_dia else [], [prod_dia] if prod_dia else [],
+                date.fromisoformat(fecha), date.fromisoformat(fecha),
+                ventas=ventas_map.get(fecha, []) if categoria == "analisis" else None)
             combinado = {
                 "inventario": inv_datos["inventario"],
                 "produccion": prod_datos["produccion"],
-                "resumen_diario": inv_datos["resumen_diario"],
+                "resumen_diario": dia_completo["resumen_diario"],
             }
-            combinado["analisis"] = _agregar([inv_dia] if inv_dia else [], [prod_dia] if prod_dia else [], date.fromisoformat(fecha), date.fromisoformat(fecha))["analisis"]
+            combinado["analisis"] = dia_completo["analisis"]
             fecha_obj = date.fromisoformat(fecha)
             nombre = f"{fecha_obj.day:02d}-{MESES_ES[fecha_obj.month-1][:3]}-{fecha_obj.year}"
             titulo_dia = f"{fecha_obj.day:02d} de {MESES_ES[fecha_obj.month-1]} de {fecha_obj.year}"

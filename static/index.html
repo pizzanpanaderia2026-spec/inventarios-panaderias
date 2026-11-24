@@ -621,7 +621,7 @@
           <div class="barra"><h4>Registros del día</h4><button id="botonExcelProduccion" class="secundario" type="button">Descargar Excel del día</button></div>
           <div id="tablaProduccion"></div>
         </section>
-        <section id="panelRegistro" class="panel panel-seccion oculto"><h3>Registro diario</h3><div class="campo"><label for="fechaRegistro">Fecha</label><input id="fechaRegistro" type="date"></div><div class="barra"><strong id="estadoRegistro">Día abierto</strong></div><div id="mensajeRegistro" class="mensaje oculto" role="alert"></div><div id="filasRegistro"></div><button id="botonGuardarRegistro" type="button">Guardar registro</button> <button id="botonCerrarDia" type="button">Cerrar día</button> <button id="botonReabrirDia" class="secundario" type="button">Reabrir día</button></section>
+        <section id="panelRegistro" class="panel panel-seccion oculto"><h3>Registro diario</h3><div class="campo"><label for="fechaRegistro">Fecha</label><input id="fechaRegistro" type="date"></div><div class="barra"><strong id="estadoRegistro">Día abierto</strong></div><div id="mensajeRegistro" class="mensaje oculto" role="alert"></div><div id="filasRegistro"></div><button id="botonCerrarDia" type="button">Cerrar día</button> <button id="botonReabrirDia" class="secundario" type="button">Reabrir día</button></section>
 
         <section id="panelVentas" class="panel panel-seccion oculto">
           <h3>Ventas</h3>
@@ -642,7 +642,11 @@
             </div>
           </section>
           <section id="posVistaDia" class="pos-vista oculto">
-            <div class="barra"><div><h4>Ventas del día</h4><p id="posFechaDia" class="nota"></p></div><button type="button" class="secundario" id="posActualizarDia">Actualizar</button></div>
+            <div class="barra"><div><h4>Ventas del día</h4><p id="posFechaDia" class="nota"></p></div><div><button type="button" class="secundario" id="posActualizarDia">Actualizar</button> <button type="button" class="secundario" id="posDescargarExcelDia">Descargar Excel</button></div></div>
+            <div class="barra" role="group" aria-label="Presentación de ventas">
+              <button type="button" class="activo" id="posVerTickets" aria-pressed="true">Tickets</button>
+              <button type="button" class="secundario" id="posVerTabla" aria-pressed="false">Tabla</button>
+            </div>
             <div id="posListaVentasDia"></div>
           </section>
           <section id="posVistaResumen" class="pos-vista oculto">
@@ -791,11 +795,14 @@
             <button id="adminColoresGuardar" type="button">Guardar colores</button>
           </div>
           <div id="adminVistaEdicion" class="oculto">
-            <div class="barra"><h4>Configuración de días editables</h4><button id="adminEdicionVolver" class="secundario" type="button">Volver a Administración</button></div>
-            <p class="nota">Define cuántos días anteriores se podrán corregir. El plazo se cuenta por días naturales según la fecha local de México.</p>
-            <div class="campo"><label for="adminDiasInventario">Días editables para inventario (cierre del día)</label><input id="adminDiasInventario" type="number" min="0" max="365" step="1" value="2" required></div>
+            <div class="barra"><h4>Configuración de tolerancias de edición</h4><button id="adminEdicionVolver" class="secundario" type="button">Volver a Administración</button></div>
+            <p class="nota">Configura el plazo máximo para corregir registros. Los días incluyen la fecha actual y los días naturales anteriores; las horas amplían ese límite.</p>
+            <div class="campo"><label for="adminDiasInventario">Días editables para inventario</label><input id="adminDiasInventario" type="number" min="0" max="365" step="1" value="2" required></div>
+            <div class="campo"><label for="adminHorasInventario">Horas adicionales para inventario</label><input id="adminHorasInventario" type="number" min="0" max="23" step="1" value="0" required></div>
             <div class="campo"><label for="adminDiasProduccion">Días editables para producción</label><input id="adminDiasProduccion" type="number" min="0" max="365" step="1" value="1" required></div>
-            <p class="nota">Con 2 días en inventario se puede corregir hoy, ayer y antier. Con 1 día en producción se puede corregir hoy y ayer.</p>
+            <div class="campo"><label for="adminHorasProduccion">Horas adicionales para producción</label><input id="adminHorasProduccion" type="number" min="0" max="23" step="1" value="0" required></div>
+            <div class="campo"><label for="adminDiasVentas">Días editables para ventas</label><input id="adminDiasVentas" type="number" min="0" max="365" step="1" value="0" required></div>
+            <div class="campo"><label for="adminHorasVentas">Horas adicionales para ventas</label><input id="adminHorasVentas" type="number" min="0" max="23" step="1" value="0" required></div>
             <button id="adminEdicionGuardar" type="button">Guardar configuración</button>
           </div>
           <div id="adminVistaArchivado" class="oculto">
@@ -1241,7 +1248,7 @@
       const mensaje = document.getElementById("mensajeListaPrecios");
       boton.disabled = true;
       try {
-        const respuesta = await fetch("/api/productos/precios/excel", { headers: { "Authorization": "Bearer " + sesionActual.access_token } });
+        const respuesta = await fetch("/api/productos/precios/excel?panaderia_id=" + encodeURIComponent(panaderiaSeleccionada.id), { headers: { "Authorization": "Bearer " + sesionActual.access_token } });
         if (!respuesta.ok) {
           const datos = await respuesta.json().catch(() => ({}));
           throw new Error(datos.detail || "No se pudo descargar la lista de productos.");
@@ -1692,7 +1699,11 @@
     async function adminCargarDiasEditables() {
       const config = await adminFetch("/api/admin/configuracion-edicion");
       document.getElementById("adminDiasInventario").value = String(config.dias_inventario);
+      document.getElementById("adminHorasInventario").value = String(config.horas_inventario || 0);
       document.getElementById("adminDiasProduccion").value = String(config.dias_produccion);
+      document.getElementById("adminHorasProduccion").value = String(config.horas_produccion || 0);
+      document.getElementById("adminDiasVentas").value = String(config.dias_ventas || 0);
+      document.getElementById("adminHorasVentas").value = String(config.horas_ventas || 0);
     }
     document.getElementById("adminConfiguracionEdicion").addEventListener("click", async () => {
       adminVista("edicion");
@@ -1719,14 +1730,19 @@
     document.getElementById("adminEdicionGuardar").addEventListener("click", async () => {
       const boton = document.getElementById("adminEdicionGuardar");
       const dias_inventario = Number(document.getElementById("adminDiasInventario").value);
+      const horas_inventario = Number(document.getElementById("adminHorasInventario").value);
       const dias_produccion = Number(document.getElementById("adminDiasProduccion").value);
-      if (![dias_inventario, dias_produccion].every(n => Number.isInteger(n) && n >= 0 && n <= 365)) {
-        adminMensaje("Los días editables deben ser números enteros entre 0 y 365."); return;
+      const horas_produccion = Number(document.getElementById("adminHorasProduccion").value);
+      const dias_ventas = Number(document.getElementById("adminDiasVentas").value);
+      const horas_ventas = Number(document.getElementById("adminHorasVentas").value);
+      if (![dias_inventario,dias_produccion,dias_ventas].every(n => Number.isInteger(n) && n >= 0 && n <= 365) ||
+          ![horas_inventario,horas_produccion,horas_ventas].every(n => Number.isInteger(n) && n >= 0 && n <= 23)) {
+        adminMensaje("Los días deben ser enteros entre 0 y 365 y las horas entre 0 y 23."); return;
       }
       boton.disabled = true;
       try {
-        await adminFetch("/api/admin/configuracion-edicion", {method:"PUT", body:JSON.stringify({dias_inventario, dias_produccion})});
-        adminMensaje("Configuración de días editables guardada.", "exito");
+        await adminFetch("/api/admin/configuracion-edicion", {method:"PUT", body:JSON.stringify({dias_inventario,horas_inventario,dias_produccion,horas_produccion,dias_ventas,horas_ventas})});
+        adminMensaje("Tolerancias de edición guardadas.", "exito");
         await adminCargarDiasEditables();
       } catch (e) { adminMensaje(e.message); }
       finally { boton.disabled = false; }
