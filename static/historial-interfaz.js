@@ -360,11 +360,18 @@
         data.produccion.por_pan.map(x => x.pan)));
     }
     if (category === "analisis") {
-      host.appendChild(chartSVG("Producción, ventas e inventario final", [
+      host.appendChild(chartSVG("Producción frente a ventas", [
         { name: "Producido", values: data.analisis.por_pan.map(x => x.producido) },
-        { name: "Vendido", values: data.analisis.por_pan.map(x => x.vendido) },
-        { name: "Inventario final", values: data.analisis.por_pan.map(x => x.inventario_final == null ? 0 : x.inventario_final) }
+        { name: "Vendido", values: data.analisis.por_pan.map(x => x.vendido) }
       ], data.analisis.por_pan.map(x => x.pan)));
+      const conInventarioFinal = data.analisis.por_pan.filter(x => x.inventario_final != null);
+      if (conInventarioFinal.length) {
+        host.appendChild(chartSVG("Inventario final por pan", [
+          { name: "Inventario final", values: conInventarioFinal.map(x => x.inventario_final) }
+        ], conInventarioFinal.map(x => x.pan)));
+      } else {
+        host.appendChild(el("p","No hay un cierre de inventario disponible para mostrar existencias finales en este periodo.","nota"));
+      }
     }
     if (category === "analisis" && (period === "anio" || data.resumen_only)) {
       const monthly = new Map();
