@@ -1840,6 +1840,12 @@ class DisponibilidadVentaCambio(BaseModel):
     disponible: bool
 
 
+class AnclajeVentaCambio(BaseModel):
+    panaderia_id: int = Field(gt=0)
+    producto_id: int = Field(gt=0)
+    anclado: bool
+
+
 class VentaPosLineaNueva(BaseModel):
     producto_id: int = Field(gt=0)
     cantidad: int = Field(gt=0, le=100000)
@@ -1879,7 +1885,7 @@ def ventas_consultar_disponibilidad(panaderia_id: int, authorization: str | None
     fecha = fecha_operativa_hoy()
     try:
         productos = (supabase.table("productos")
-            .select("id,nombre,precio,categoria_id,activo")
+            .select("id,nombre,precio,categoria_id,activo,pos_anclado")
             .eq("panaderia_id", panaderia_id).eq("activo", True).order("nombre").execute().data or [])
         categorias = (supabase.table("categorias_productos")
             .select("id,nombre,activa").eq("panaderia_id", panaderia_id)
@@ -1918,6 +1924,28 @@ def ventas_cambiar_disponibilidad(datos: DisponibilidadVentaCambio, authorizatio
         raise
     except Exception:
         raise HTTPException(status_code=503, detail="No se pudo actualizar la disponibilidad.")
+
+
+@app.put("/api/ventas/anclado")
+def ventas_cambiar_anclaje(datos: AnclajeVentaCambio, authorization: str | None = Header(default=None)):
+    usuario = obtener_usuario_autenticado(authorization)
+    perfil = obtener_perfil(str(usuario.id))
+    comprobar_permiso_local(str(usuario.id), perfil, datos.panaderia_id, "ventas")
+    try:
+        producto = (supabase.table("productos").select("id,panaderia_id,activo")
+            .eq("id", datos.producto_id).eq("panaderia_id", datos.panaderia_id).limit(1).execute().data or [])
+        if not producto or not producto[0].get("activo"):
+            raise HTTPException(status_code=404, detail="El producto no existe o está desactivado.")
+        actualizado = (supabase.table("productos").update({"pos_anclado": datos.anclado})
+            .eq("id", datos.producto_id).eq("panaderia_id", datos.panaderia_id)
+            .execute().data or [])
+        if not actualizado:
+            raise HTTPException(status_code=404, detail="No se pudo actualizar el anclaje del producto.")
+        return {"guardado": True, "anclado": datos.anclado, "producto_id": datos.producto_id}
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=503, detail="No se pudo guardar el anclaje del producto.")
 
 
 @app.post("/api/ventas", status_code=201)
@@ -2018,7 +2046,8 @@ def ventas_consultar_resumen(panaderia_id: int, authorization: str | None = Head
 
 # Personalización visual de módulos: los colores no sustituyen los permisos.
 COLORES_MODULOS_PREDETERMINADOS = {
-    "ventas": "#2563EB", "produccion": "#16A34A", "inventarios": "#D97706"
+    "ventas": "#B9D7EA", "produccion": "#B9DCC6",
+    "inventarios": "#F2C99B", "administracion": "#D8CBE8"
 }
 
 
@@ -2027,7 +2056,7 @@ def consultar_colores(authorization: str | None = Header(default=None)):
     usuario = obtener_usuario_autenticado(authorization)
     obtener_perfil(str(usuario.id))
     try:
-        filas = supabase.table("configuracion_colores").select("ventas,produccion,inventarios").eq("id", 1).limit(1).execute().data or []
+        filas = supabase.table("configuracion_colores").select("ventas,produccion,inventarios,administracion").eq("id", 1).limit(1).execute().data or []
         return filas[0] if filas else COLORES_MODULOS_PREDETERMINADOS
     except Exception:
         raise HTTPException(status_code=503, detail="No se pudo consultar la personalización de colores.")
@@ -2037,6 +2066,7 @@ class ColoresModulosCambio(BaseModel):
     ventas: str = Field(pattern="^#[0-9A-Fa-f]{6}$")
     produccion: str = Field(pattern="^#[0-9A-Fa-f]{6}$")
     inventarios: str = Field(pattern="^#[0-9A-Fa-f]{6}$")
+    administracion: str = Field(default="#D8CBE8", pattern="^#[0-9A-Fa-f]{6}$")
 
 
 @app.put("/api/admin/colores")
@@ -2044,9 +2074,10 @@ def guardar_colores(datos: ColoresModulosCambio, authorization: str | None = Hea
     usuario, perfil = exigir_admin_principal(authorization)
     try:
         fila = {"id": 1, "ventas": datos.ventas.upper(), "produccion": datos.produccion.upper(),
-                "inventarios": datos.inventarios.upper(), "actualizado_por": str(usuario.id)}
+                "inventarios": datos.inventarios.upper(), "administracion": datos.administracion.upper(),
+                "actualizado_por": str(usuario.id)}
         supabase.table("configuracion_colores").upsert(fila, on_conflict="id").execute()
-        return {"guardado": True, "colores": {k: fila[k] for k in ("ventas", "produccion", "inventarios")}}
+        return {"guardado": True, "colores": {k: fila[k] for k in ("ventas", "produccion", "inventarios", "administracion")}}
     except Exception:
         raise HTTPException(status_code=503, detail="No se pudieron guardar los colores.")
 
