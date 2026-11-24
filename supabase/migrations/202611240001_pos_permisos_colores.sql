@@ -92,7 +92,7 @@ CREATE OR REPLACE FUNCTION public.registrar_venta_pos(
 )
 RETURNS jsonb
 LANGUAGE plpgsql
-SECURITY DEFINER
+SECURITY INVOKER
 SET search_path = ''
 AS $$
 DECLARE
