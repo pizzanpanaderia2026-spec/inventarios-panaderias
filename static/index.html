@@ -298,12 +298,17 @@
     #panelVentas > h3,#panelProduccion > h3,#panelRegistro > h3 { border-left-color:var(--theme-color)!important; }
     #panelTablas > h3,#panelProductos > h3,#panelHistorial h3 { border-left-color:#C8D5CD!important; }
     input:focus,select:focus,textarea:focus { outline:2px solid #A7BCAF; outline-offset:1px; border-color:#91A99A; }
+    .pos-anclar { padding:8px 12px; min-width:88px; white-space:nowrap; }
     @media(max-width:600px) {
       header { padding:18px 12px; }
       main { width:min(100% - 16px,1200px); margin:14px auto; }
       .panel { padding:14px; border-radius:12px; }
       .menu-secciones { gap:8px; margin:16px 0; }
       .boton-seccion { min-height:50px; padding:10px 8px; }
+      .pos-producto-disponibilidad { flex-wrap:wrap; }
+      .pos-producto-info { flex:1 1 100%; }
+      .pos-switch-label { flex:1 1 auto; }
+      .pos-anclar { flex:0 0 auto; }
     }
   </style>
 <style>
