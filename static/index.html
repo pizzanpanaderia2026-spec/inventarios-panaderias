@@ -1241,7 +1241,7 @@
       const mensaje = document.getElementById("mensajeListaPrecios");
       boton.disabled = true;
       try {
-        const respuesta = await fetch("/api/productos/precios/excel", { headers: { "Authorization": "Bearer " + sesionActual.access_token } });
+        const respuesta = await fetch("/api/productos/precios/excel?panaderia_id=" + encodeURIComponent(panaderiaSeleccionada.id), { headers: { "Authorization": "Bearer " + sesionActual.access_token } });
         if (!respuesta.ok) {
           const datos = await respuesta.json().catch(() => ({}));
           throw new Error(datos.detail || "No se pudo descargar la lista de productos.");
