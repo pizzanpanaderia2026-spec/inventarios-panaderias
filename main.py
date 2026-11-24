@@ -1101,8 +1101,9 @@ def descargar_lista_precios(
     """Descarga bajo demanda el historial de precios que sí quedó registrado."""
     usuario = obtener_usuario_autenticado(authorization)
     perfil = obtener_perfil(str(usuario.id))
-    if perfil.get("rol") == "produccion":
-        raise HTTPException(status_code=403, detail="Tu cuenta solo tiene acceso al módulo de Producción.")
+    permisos = perfil.get("permisos") or (["produccion"] if perfil.get("rol") == "produccion" else ["inventarios"])
+    if "inventarios" not in permisos and not es_admin_principal(perfil):
+        raise HTTPException(status_code=403, detail="Tu cuenta no tiene acceso al catálogo de inventarios.")
     try:
         if es_admin_principal(perfil):
             panaderias = (
@@ -1994,13 +1995,14 @@ def ventas_consultar_resumen(panaderia_id: int, authorization: str | None = Head
         cantidad_total = 0
         for venta in ventas:
             for linea in venta["lineas"]:
-                pid = int(linea["producto_id"])
-                if pid not in resumen:
-                    resumen[pid] = {"producto_id": pid, "producto": linea["producto_nombre"], "cantidad": 0, "importe": Decimal("0")}
+                pid = linea.get("producto_id")
+                clave = int(pid) if pid is not None else str(linea["producto_nombre"])
+                if clave not in resumen:
+                    resumen[clave] = {"producto_id": pid, "producto": linea["producto_nombre"], "cantidad": 0, "importe": Decimal("0")}
                 cantidad = int(linea["cantidad"])
                 importe = Decimal(str(linea["importe"]))
-                resumen[pid]["cantidad"] += cantidad
-                resumen[pid]["importe"] += importe
+                resumen[clave]["cantidad"] += cantidad
+                resumen[clave]["importe"] += importe
                 cantidad_total += cantidad
                 total += importe
         salida = sorted(resumen.values(), key=lambda x: x["producto"].casefold())
