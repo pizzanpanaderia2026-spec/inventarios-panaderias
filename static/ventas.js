@@ -49,8 +49,12 @@
       button.setAttribute("aria-pressed", active ? "true" : "false");
     });
     clearNotice();
-    if (view === "productos") drawProducts();
-    if (view === "nueva") drawNewSale();
+    if (view === "productos" || view === "nueva") {
+      loadAvailability().then(() => {
+        if (view === "productos") drawProducts();
+        if (view === "nueva") drawNewSale();
+      }).catch(error => notice(error.message));
+    }
     if (view === "dia") loadSales();
     if (view === "resumen") loadSummary();
   }
