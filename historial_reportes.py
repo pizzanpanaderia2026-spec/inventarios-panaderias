@@ -468,11 +468,11 @@ def _hoja_informe(libro, nombre_hoja, titulo, categoria, inventario, produccion,
             datos = [[x["mes"], x["inventario_cantidad"], float(Decimal(x["inventario_importe"]))] for x in resumen_mensual]
             fila = _tabla(hoja, fila, "RESUMEN MENSUAL", ["Mes", "Inventario", "Importe"], datos, {3: '"$"#,##0.00'})
         elif categoria == "produccion":
-            datos = [[x["mes"], x["produccion_cantidad"]] for x in resumen_mensual]
-            fila = _tabla(hoja, fila, "RESUMEN MENSUAL", ["Mes", "Producción"], datos)
+            datos = [[x["mes"], x["produccion_cantidad"], float(Decimal(x["produccion_importe"])) if x.get("produccion_importe") is not None else "N/D"] for x in resumen_mensual]
+            fila = _tabla(hoja, fila, "RESUMEN MENSUAL", ["Mes", "Producción", "Importe producción"], datos, {3: '"$"#,##0.00'})
         else:
-            datos = [[x["mes"], x["inventario_cantidad"], float(Decimal(x["inventario_importe"])), x["produccion_cantidad"], x.get("ventas_cantidad",0), float(Decimal(x.get("ventas_importe","0")))] for x in resumen_mensual]
-            fila = _tabla(hoja, fila, "RESUMEN MENSUAL", ["Mes", "Inventario final", "Importe inventario", "Producción", "Ventas", "Importe ventas"], datos, {3: '"$"#,##0.00', 6: '"$"#,##0.00'})
+            datos = [[x["mes"], x["inventario_cantidad"], float(Decimal(x["inventario_importe"])), x["produccion_cantidad"], float(Decimal(x["produccion_importe"])) if x.get("produccion_importe") is not None else "N/D", x.get("ventas_cantidad",0), float(Decimal(x.get("ventas_importe","0")))] for x in resumen_mensual]
+            fila = _tabla(hoja, fila, "RESUMEN MENSUAL", ["Mes", "Inventario final", "Importe inventario", "Producción", "Importe producción", "Ventas", "Importe ventas"], datos, {3: '"$"#,##0.00', 5: '"$"#,##0.00', 7: '"$"#,##0.00'})
         fin_mensual = fila - 2
     if categoria in ("inventario", "analisis") and fin_producto >= inicio_producto:
         _grafica(hoja, "Producto", inicio_producto, fin_producto, 2, "Inventario por tipo de pan", "F3")
@@ -523,13 +523,15 @@ def _crear_excel(categoria, tipo, desde, hasta, datos, resumen_only):
     resumen_mensual = datos.get("resumen_mensual")
     titulo = "Resumen " + _titulo_periodo(tipo, desde, hasta)
     if tipo == "anio":
-        mensual = {f"{desde.year}-{mes:02d}": {"inventario_cantidad": 0, "inventario_importe": Decimal("0"), "produccion_cantidad": 0, "ventas_cantidad":0, "ventas_importe":Decimal("0")}
+        mensual = {f"{desde.year}-{mes:02d}": {"inventario_cantidad": 0, "inventario_importe": Decimal("0"), "produccion_cantidad": 0, "produccion_importe":Decimal("0"), "ventas_cantidad":0, "ventas_importe":Decimal("0")}
             for mes in range(1, 13)}
         for x in resumen_diario:
             mes = x["fecha"][:7]
             mensual[mes]["inventario_cantidad"] += x["inventario_cantidad"]
             mensual[mes]["inventario_importe"] += Decimal(x["inventario_importe"])
             mensual[mes]["produccion_cantidad"] += x["produccion_cantidad"]
+            if x.get("produccion_importe") is not None:
+                mensual[mes]["produccion_importe"] += Decimal(x["produccion_importe"])
             mensual[mes]["ventas_cantidad"] += x.get("ventas_cantidad",0)
             mensual[mes]["ventas_importe"] += Decimal(x.get("ventas_importe","0"))
         resumen_mensual = [{"mes": k, **{a: (str(v) if isinstance(v, Decimal) else v) for a,v in vals.items()}}
