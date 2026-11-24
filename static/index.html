@@ -241,6 +241,20 @@
       .menu-secciones { grid-template-columns: 1fr 1fr; }
       .boton-seccion { padding: 12px 8px; font-size: 14px; }
     }
+    @media (min-width: 900px) {
+      main { width: min(100% - 40px, 1400px); }
+      .menu-secciones { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 9px; margin: 14px 0; }
+      .boton-seccion { min-height: 48px; padding: 10px 12px; }
+      #filasRegistro { display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:10px; }
+      #filasRegistro > h4, #filasRegistro > p { grid-column:1/-1; }
+      #filasRegistro > .panel { margin:0; padding:13px; }
+      #panelRegistro > .campo { max-width:320px; }
+    }
+    @media (max-width: 600px) {
+      #filasRegistro > .panel { padding:12px; }
+      #filasRegistro .barra { align-items:flex-start; }
+      #panelRegistro > button { margin:4px 2px 0 0; }
+    }
     #panelHistorial .historial-grafica { margin: 14px 0 22px; padding: 12px; border: 1px solid #e7ded2; border-radius: 12px; background: #fff; overflow: hidden; }
     #panelHistorial .historial-grafica svg { display: block; width: 100%; height: auto; min-height: 80px; overflow: visible; }
     #panelHistorial .historial-grafica svg text { fill: #43372d; font-family: Arial, sans-serif; }
