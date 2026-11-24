@@ -43,8 +43,8 @@ jobs:
           import re
           from pathlib import Path
           html = Path("static/index.html").read_text(encoding="utf-8")
-          scripts = re.findall(r"<script(?:\\s[^>]*)?>(.*?)</script>", html, flags=re.S)
-          Path("/tmp/index-inline.js").write_text("\\n".join(scripts), encoding="utf-8")
+          scripts = re.findall(r"<script(?:\s[^>]*)?>(.*?)</script>", html, flags=re.S)
+          Path("/tmp/index-inline.js").write_text("\n".join(scripts), encoding="utf-8")
           PY
           node --check /tmp/index-inline.js
       - name: Verificar archivos de interfaz
