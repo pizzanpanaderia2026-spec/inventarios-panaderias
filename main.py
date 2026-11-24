@@ -515,6 +515,67 @@ def obtener_o_crear_cierre(panaderia_id: int, fecha_registro: date, usuario_id: 
     return reintento.data[0]
 
 
+class LineaRegistroIndividual(BaseModel):
+    panaderia_id: int = Field(gt=0)
+    fecha: date
+    producto_id: int = Field(gt=0)
+    cantidad: int = Field(ge=0)
+
+
+@app.put("/api/registro/linea")
+def guardar_linea_registro(datos: LineaRegistroIndividual, authorization: str | None = Header(default=None)):
+    usuario = obtener_usuario_autenticado(authorization)
+    perfil = obtener_perfil(str(usuario.id))
+    comprobar_acceso_panaderia(str(usuario.id), perfil, datos.panaderia_id)
+    hoy = datetime.now(TZ_PRODUCCION).date()
+    if datos.fecha > hoy:
+        raise HTTPException(status_code=422, detail="No puedes registrar una fecha futura.")
+    config = obtener_configuracion_edicion()
+    if not plazo_edicion_vigente(datos.fecha, config["dias_inventario"], config["horas_inventario"]) and not es_admin_principal(perfil):
+        raise HTTPException(status_code=403, detail="Terminó el plazo configurado para editar inventario.")
+    try:
+        resultado = supabase.rpc("guardar_linea_inventario", {
+            "p_panaderia_id": datos.panaderia_id,
+            "p_fecha": datos.fecha.isoformat(),
+            "p_producto_id": datos.producto_id,
+            "p_cantidad": datos.cantidad,
+            "p_usuario_id": str(usuario.id),
+        }).execute().data
+        return {"guardado": True, "linea": resultado}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        mensaje = str(exc).lower()
+        if "cerrado" in mensaje:
+            raise HTTPException(status_code=409, detail="El día está cerrado. Reábrelo antes de modificarlo.")
+        if "producto" in mensaje:
+            raise HTTPException(status_code=422, detail="El producto no existe o está inactivo en este local.")
+        raise HTTPException(status_code=503, detail="No se pudo guardar el producto del registro.")
+
+
+@app.delete("/api/registro/linea")
+def eliminar_linea_registro(
+    panaderia_id: int, fecha: date, producto_id: int,
+    authorization: str | None = Header(default=None)
+):
+    usuario = obtener_usuario_autenticado(authorization)
+    perfil = obtener_perfil(str(usuario.id))
+    comprobar_acceso_panaderia(str(usuario.id), perfil, panaderia_id)
+    config = obtener_configuracion_edicion()
+    if not plazo_edicion_vigente(fecha, config["dias_inventario"], config["horas_inventario"]) and not es_admin_principal(perfil):
+        raise HTTPException(status_code=403, detail="Terminó el plazo configurado para editar inventario.")
+    try:
+        eliminado = supabase.rpc("eliminar_linea_inventario", {
+            "p_panaderia_id": panaderia_id, "p_fecha": fecha.isoformat(),
+            "p_producto_id": producto_id, "p_usuario_id": str(usuario.id)
+        }).execute().data
+        return {"eliminado": bool(eliminado)}
+    except Exception as exc:
+        if "cerrado" in str(exc).lower():
+            raise HTTPException(status_code=409, detail="El día está cerrado. Reábrelo antes de modificarlo.")
+        raise HTTPException(status_code=503, detail="No se pudo retirar el producto del registro.")
+
+
 @app.get("/api/registro")
 def consultar_registro(
     panaderia_id: int,
