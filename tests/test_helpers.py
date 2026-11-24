@@ -52,6 +52,26 @@ class HelpersTests(unittest.TestCase):
         # que el payload se conserva para que el endpoint pueda rechazarlo.
         self.assertEqual([x.producto_id for x in registro.lineas], [4, 4])
 
+    def test_resumen_ventas_agrupa_por_producto_y_precio(self):
+        ventas = [{
+            "lineas": [
+                {"producto_id": 1, "producto_nombre": "Bolillo", "cantidad": 2, "precio_unitario": "5.00", "importe": "10.00"},
+                {"producto_id": 2, "producto_nombre": "Concha", "cantidad": 3, "precio_unitario": "5.00", "importe": "15.00"},
+                {"producto_id": 3, "producto_nombre": "Oreja", "cantidad": 1, "precio_unitario": "7.00", "importe": "7.00"},
+            ]
+        }]
+        resumen = main.construir_resumen_ventas(ventas)
+        self.assertEqual(resumen["total_ventas"], 1)
+        self.assertEqual(resumen["cantidad_total"], 6)
+        self.assertEqual(resumen["importe_total"], "32.00")
+        precio_cinco = next(x for x in resumen["por_precio"] if x["precio"] == "5.00")
+        self.assertEqual(precio_cinco["cantidad"], 5)
+        self.assertEqual(precio_cinco["importe"], "25.00")
+
+    def test_correccion_venta_requiere_al_menos_un_producto(self):
+        with self.assertRaises(ValidationError):
+            main.VentaPosCorreccion(lineas=[])
+
     def test_cierre_debe_existir_para_buscarlo(self):
         class Query:
             def select(self, *_args):
