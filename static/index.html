@@ -642,7 +642,11 @@
             </div>
           </section>
           <section id="posVistaDia" class="pos-vista oculto">
-            <div class="barra"><div><h4>Ventas del día</h4><p id="posFechaDia" class="nota"></p></div><button type="button" class="secundario" id="posActualizarDia">Actualizar</button></div>
+            <div class="barra"><div><h4>Ventas del día</h4><p id="posFechaDia" class="nota"></p></div><div><button type="button" class="secundario" id="posActualizarDia">Actualizar</button> <button type="button" class="secundario" id="posDescargarExcelDia">Descargar Excel</button></div></div>
+            <div class="barra" role="group" aria-label="Presentación de ventas">
+              <button type="button" class="activo" id="posVerTickets" aria-pressed="true">Tickets</button>
+              <button type="button" class="secundario" id="posVerTabla" aria-pressed="false">Tabla</button>
+            </div>
             <div id="posListaVentasDia"></div>
           </section>
           <section id="posVistaResumen" class="pos-vista oculto">
