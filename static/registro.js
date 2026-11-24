@@ -135,6 +135,12 @@
     return catalogo.find(p => String(p.id) === String(id));
   }
 
+  async function persistirRegistro() {
+    const lineas = [...seleccionados.values()].map(x => ({producto_id:Number(x.producto.id), cantidad:Number(x.cantidad)}));
+    if (lineas.some(x => !Number.isInteger(x.cantidad) || x.cantidad < 0)) throw new Error("Las cantidades deben ser números enteros de cero o más.");
+    await api("/api/registro", {method:"PUT", body:JSON.stringify({panaderia_id:Number(bakery.id), fecha:fecha.value, lineas})});
+  }
+
   async function cargar() {
     actualizarLimitesFecha();
     if (!token || !bakery || !fecha.value) return;
@@ -159,7 +165,6 @@
       });
       dibujar();
       const cerrado = cierre && cierre.estado === "cerrado";
-      document.getElementById("botonGuardarRegistro").disabled = !!cerrado;
       document.getElementById("botonCerrarDia").disabled = !!cerrado;
       document.getElementById("botonReabrirDia").disabled = !cerrado;
       document.getElementById("estadoRegistro").textContent = cerrado ? "Día cerrado" : "Día abierto";
@@ -237,7 +242,7 @@
     }
   });
 
-  botonAgregar.addEventListener("click", () => {
+  botonAgregar.addEventListener("click", async () => {
     const producto = productoPorId(inputBusqueda.dataset.productoId);
     const cantidad = Number(inputCantidad.value);
     if (!producto) {
@@ -255,7 +260,8 @@
     captura.classList.add("oculto");
     sugerencias.classList.add("oculto");
     dibujar();
-    aviso("Producto agregado al registro.", "exito");
+    try { await persistirRegistro(); aviso("Registro guardado automáticamente.", "exito"); }
+    catch (error) { aviso("No se pudo guardar el registro: " + error.message); await cargar(); }
   });
 
   function actualizarResumen() {
@@ -317,12 +323,14 @@
       input.value = String(cantidad);
       input.setAttribute("aria-label", "Cantidad de " + producto.nombre);
       input.disabled = !!(cierre && cierre.estado === "cerrado");
-      input.addEventListener("change", () => {
+      input.addEventListener("change", async () => {
         const n = Number(input.value);
         if (Number.isInteger(n) && n >= 0) {
           seleccionados.set(id, { producto, cantidad: n });
           subtotal.textContent = "Subtotal: $" + (Number(producto.precio) * n).toFixed(2);
           actualizarResumen();
+          try { await persistirRegistro(); aviso("Cantidad guardada automáticamente.", "exito"); }
+          catch (error) { aviso("No se pudo guardar la cantidad: " + error.message); await cargar(); }
         } else {
           input.value = String(cantidad);
           aviso("La cantidad debe ser un número entero de cero o más.");
@@ -338,9 +346,11 @@
       quitar.className = "secundario";
       quitar.textContent = "Quitar";
       quitar.disabled = !!(cierre && cierre.estado === "cerrado");
-      quitar.addEventListener("click", () => {
+      quitar.addEventListener("click", async () => {
         seleccionados.delete(id);
         dibujar();
+        try { await persistirRegistro(); aviso("Producto retirado del registro.", "exito"); }
+        catch (error) { aviso("No se pudo actualizar el registro: " + error.message); await cargar(); }
       });
       row.append(top, campo, subtotal, quitar);
       filas.appendChild(row);
@@ -355,27 +365,6 @@
     }
     seleccionados.clear();
     cargar();
-  });
-
-  document.getElementById("botonGuardarRegistro").addEventListener("click", async () => {
-    try {
-      const lineas = [...seleccionados.values()].map(x => ({
-        producto_id: Number(x.producto.id),
-        cantidad: Number(x.cantidad)
-      }));
-      if (lineas.some(x => !Number.isInteger(x.cantidad) || x.cantidad < 0)) {
-        aviso("Las cantidades deben ser números enteros de cero o más.");
-        return;
-      }
-      await api("/api/registro", {
-        method: "PUT",
-        body: JSON.stringify({ panaderia_id: bakery.id, fecha: fecha.value, lineas })
-      });
-      aviso("Registro guardado. Aún no has cerrado el día.", "exito");
-      await cargar();
-    } catch (e) {
-      aviso(e.message);
-    }
   });
 
   document.getElementById("botonCerrarDia").addEventListener("click", async () => {
