@@ -243,6 +243,31 @@
     return wrapper;
   }
 
+  function downloadHistoryTicket(venta) {
+    const lineas=venta.lineas||[];
+    const canvas=document.createElement("canvas");canvas.width=640;canvas.height=350+lineas.length*42;
+    const ctx=canvas.getContext("2d");ctx.fillStyle="#fff";ctx.fillRect(0,0,640,canvas.height);
+    ctx.fillStyle="#222";ctx.textAlign="center";ctx.font="bold 30px Arial";ctx.fillText("PANADERÍA",320,42);
+    ctx.font="bold 25px Arial";ctx.fillText("TICKET DE VENTA",320,82);
+    ctx.textAlign="left";ctx.font="20px Arial";
+    const hora=venta.creado_en?new Intl.DateTimeFormat("es-MX",{timeZone:"America/Mexico_City",hour:"2-digit",minute:"2-digit",hourCycle:"h23"}).format(new Date(venta.creado_en)):"";
+    ctx.fillText("Venta "+venta.numero_venta+"   "+(venta.fecha||"")+"   "+hora,36,124);
+    ctx.fillText("Atendió: "+(venta.usuario_nombre||"Usuario"),36,157);
+    ctx.beginPath();ctx.moveTo(32,178);ctx.lineTo(608,178);ctx.stroke();
+    let y=214;ctx.font="bold 18px Arial";ctx.fillText("Producto",36,y);ctx.fillText("Cant.",390,y);ctx.textAlign="right";ctx.fillText("Importe",604,y);
+    ctx.textAlign="left";ctx.font="18px Arial";
+    lineas.forEach(linea=>{y+=38;const nombre=String(linea.producto_nombre||"Producto");ctx.fillText(nombre.length>30?nombre.slice(0,27)+"…":nombre,36,y);ctx.fillText(String(linea.cantidad),400,y);ctx.textAlign="right";ctx.fillText(formatMoney(linea.importe),604,y);ctx.textAlign="left";});
+    y+=24;ctx.beginPath();ctx.moveTo(32,y);ctx.lineTo(608,y);ctx.stroke();y+=42;
+    ctx.font="bold 25px Arial";ctx.textAlign="right";ctx.fillText("TOTAL: "+formatMoney(venta.total),604,y);
+    y+=42;ctx.font="16px Arial";ctx.textAlign="center";ctx.fillText("Gracias por su compra",320,y);
+    canvas.toBlob(blob=>{
+      if(!blob)return;
+      const url=URL.createObjectURL(blob),a=document.createElement("a");
+      a.href=url;a.download="ticket_venta_"+venta.numero_venta+".png";document.body.appendChild(a);a.click();a.remove();
+      setTimeout(()=>URL.revokeObjectURL(url),1500);
+    },"image/png");
+  }
+
   function renderSalesCorrections(host, ventas) {
     const section=document.createElement("section");
     section.className="panel";
@@ -254,9 +279,13 @@
       const card=document.createElement("div");card.className="barra";
       const info=document.createElement("span");
       info.textContent="Venta #"+venta.numero_venta+" · "+venta.fecha+" · "+formatMoney(venta.total)+" · "+(venta.usuario_nombre||"Usuario");
+      const actions=document.createElement("div");actions.className="barra";
+      const ticket=document.createElement("button");ticket.type="button";ticket.className="secundario";ticket.textContent="Descargar PNG";
+      ticket.addEventListener("click",()=>downloadHistoryTicket(venta));
       const button=document.createElement("button");button.type="button";button.className="secundario";button.textContent="Corregir";
       button.disabled=!(venta.lineas||[]).length || (venta.lineas||[]).some(x=>!x.producto_id);
       button.title=button.disabled?"Esta venta no tiene identificadores de producto para corregir.":"Corregir cantidades de esta venta";
+      actions.append(ticket,button);
       button.addEventListener("click",()=>{
         card.replaceChildren();
         const editor=document.createElement("div");editor.style.cssText="width:100%;display:grid;gap:10px";
@@ -296,7 +325,7 @@
         });
         actions.append(save,cancel);editor.append(actions,message);card.append(editor);
       });
-      card.append(info,button);section.appendChild(card);
+      card.append(info,actions);section.appendChild(card);
     });
     host.appendChild(section);
   }
