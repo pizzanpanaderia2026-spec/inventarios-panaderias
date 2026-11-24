@@ -36,12 +36,13 @@
   }
 
   let diasEditables = 1;
+  let horasEditables = 0;
   function puedeAgregarEnFecha(valor) {
     if (!valor || valor > fechaLocal()) return false;
     const inicio = new Date(valor + "T00:00:00");
-    const hoy = new Date(fechaLocal() + "T00:00:00");
-    const dias = Math.round((hoy.getTime() - inicio.getTime()) / 86400000);
-    return dias >= 0 && dias <= diasEditables;
+    const limite = new Date(inicio.getTime() + (diasEditables + 1) * 86400000 + horasEditables * 3600000);
+    const ahora = new Date();
+    return inicio <= ahora && ahora < limite;
   }
 
   function aviso(texto, tipo = "error") {
@@ -347,6 +348,7 @@
         "&fecha_produccion=" + encodeURIComponent(fecha.value)
       );
       diasEditables = Number.isInteger(Number(datos.dias_editables)) ? Number(datos.dias_editables) : 1;
+      horasEditables = Number.isInteger(Number(datos.horas_editables)) ? Number(datos.horas_editables) : 0;
       const registros = datos.registros || [];
       totalCantidadDia = Number(datos.total_cantidad || 0);
       totalImporteDia = datos.total_importe == null ? null : Number(datos.total_importe);
