@@ -67,13 +67,21 @@
     return data;
   }
 
-  function drawProducts(query = "") {
+  function drawProducts(query = $("posBuscarProducto")?.value || "") {
     const root = $("posListaProductos");
     if (!root) return;
     root.replaceChildren();
     const q = query.trim().toLocaleLowerCase("es");
-    const categories = state.categories.filter(category => {
-      const rows = state.products.filter(p => String(p.categoria_id) === String(category.id));
+    const categoriesBase = state.categories.slice();
+    const categoryIds = new Set(categoriesBase.map(c => String(c.id)));
+    if (state.products.some(p => !p.categoria_id || !categoryIds.has(String(p.categoria_id)))) {
+      categoriesBase.push({ id: "__sin_categoria", nombre: "Sin categoría" });
+    }
+    const productsForCategory = category => category.id === "__sin_categoria"
+      ? state.products.filter(p => !p.categoria_id || !categoryIds.has(String(p.categoria_id)))
+      : state.products.filter(p => String(p.categoria_id) === String(category.id));
+    const categories = categoriesBase.filter(category => {
+      const rows = productsForCategory(category);
       return !q || category.nombre.toLocaleLowerCase("es").includes(q) || rows.some(p => p.nombre.toLocaleLowerCase("es").includes(q));
     });
     if (!categories.length) {
@@ -84,7 +92,7 @@
       return;
     }
     categories.forEach(category => {
-      const rows = state.products.filter(p => String(p.categoria_id) === String(category.id))
+      const rows = productsForCategory(category)
         .filter(p => !q || category.nombre.toLocaleLowerCase("es").includes(q) || p.nombre.toLocaleLowerCase("es").includes(q));
       const section = document.createElement("section");
       section.className = "pos-categoria";
