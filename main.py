@@ -1212,10 +1212,11 @@ def descargar_lista_precios(
         salida = BytesIO()
         libro.save(salida)
         salida.seek(0)
-        nombre = "lista_productos_" + str(panaderia_id) + ".xlsx"
-        return StreamingResponse(salida,
+        return StreamingResponse(
+            salida,
             media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            headers={"Content-Disposition": f'attachment; filename="{nombre}"'})
+            headers={"Content-Disposition": 'attachment; filename="lista_de_productos.xlsx"'},
+        )
     except HTTPException:
         raise
     except Exception:
