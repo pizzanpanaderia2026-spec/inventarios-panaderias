@@ -309,8 +309,8 @@
         addTable(host, "Resumen mensual del año", ["Mes", "Producción", "Importe"],
           items.map(([mes,x]) => [mes, formatNumber(x.produccion_cantidad), x.produccion_importe == null ? "N/D" : formatMoney(x.produccion_importe)]));
       } else {
-        addTable(host, "Resumen mensual del año", ["Mes", "Inventario final diario acumulado", "Importe inventario", "Producción", "Ventas", "Importe ventas"],
-          items.map(([mes,x]) => [mes, formatNumber(x.inventario_cantidad), formatMoney(x.inventario_importe), formatNumber(x.produccion_cantidad), formatNumber(x.ventas_cantidad), formatMoney(x.ventas_importe)]));
+        addTable(host, "Resumen mensual del año", ["Mes", "Inventario registrado", "Importe inventario", "Producción", "Importe producción", "Ventas", "Importe ventas"],
+          items.map(([mes,x]) => [mes, formatNumber(x.inventario_cantidad), formatMoney(x.inventario_importe), formatNumber(x.produccion_cantidad), x.produccion_importe == null ? "N/D" : formatMoney(x.produccion_importe), formatNumber(x.ventas_cantidad), formatMoney(x.ventas_importe)]));
       }
     } else if (period !== "dia" && !data.resumen_only) {
       const items = data.resumen_diario.filter(x => x.tiene_inventario || x.tiene_produccion);
@@ -321,8 +321,8 @@
         addTable(host, "Resumen diario", ["Fecha", "Producción", "Importe"],
           items.map(x => [x.fecha, formatNumber(x.produccion_cantidad), x.produccion_importe == null ? "N/D" : formatMoney(x.produccion_importe)]));
       } else {
-        addTable(host, "Resumen diario", ["Fecha", "Inventario", "Importe", "Producción", "Ventas", "Importe ventas"],
-          items.map(x => [x.fecha, formatNumber(x.inventario_cantidad), formatMoney(x.inventario_importe), formatNumber(x.produccion_cantidad), formatNumber(x.ventas_cantidad), formatMoney(x.ventas_importe)]));
+        addTable(host, "Resumen diario", ["Fecha", "Inventario", "Importe", "Producción", "Importe producción", "Ventas", "Importe ventas"],
+          items.map(x => [x.fecha, formatNumber(x.inventario_cantidad), formatMoney(x.inventario_importe), formatNumber(x.produccion_cantidad), x.produccion_importe == null ? "N/D" : formatMoney(x.produccion_importe), formatNumber(x.ventas_cantidad), formatMoney(x.ventas_importe)]));
       }
     } else if (data.resumen_only) {
       if (category === "inventario") {
@@ -332,8 +332,8 @@
         addTable(host, "Resumen mensual del periodo", ["Mes", "Producción", "Importe"],
           data.resumen_mensual.map(x => [x.mes, formatNumber(x.produccion_cantidad), x.produccion_importe == null ? "N/D" : formatMoney(x.produccion_importe)]));
       } else {
-        addTable(host, "Resumen mensual del periodo", ["Mes", "Inventario", "Importe", "Producción", "Ventas", "Importe ventas"],
-          data.resumen_mensual.map(x => [x.mes, formatNumber(x.inventario_cantidad), formatMoney(x.inventario_importe), formatNumber(x.produccion_cantidad), formatNumber(x.ventas_cantidad), formatMoney(x.ventas_importe)]));
+        addTable(host, "Resumen mensual del periodo", ["Mes", "Inventario", "Importe", "Producción", "Importe producción", "Ventas", "Importe ventas"],
+          data.resumen_mensual.map(x => [x.mes, formatNumber(x.inventario_cantidad), formatMoney(x.inventario_importe), formatNumber(x.produccion_cantidad), x.produccion_importe == null ? "N/D" : formatMoney(x.produccion_importe), formatNumber(x.ventas_cantidad), formatMoney(x.ventas_importe)]));
       }
     }
     return host;
