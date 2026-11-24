@@ -523,19 +523,24 @@ def _crear_excel(categoria, tipo, desde, hasta, datos, resumen_only):
     resumen_mensual = datos.get("resumen_mensual")
     titulo = "Resumen " + _titulo_periodo(tipo, desde, hasta)
     if tipo == "anio":
-        mensual = {f"{desde.year}-{mes:02d}": {"inventario_cantidad": 0, "inventario_importe": Decimal("0"), "produccion_cantidad": 0, "produccion_importe":Decimal("0"), "ventas_cantidad":0, "ventas_importe":Decimal("0")}
+        mensual = {f"{desde.year}-{mes:02d}": {"inventario_cantidad": 0, "inventario_importe": Decimal("0"), "produccion_cantidad": 0, "produccion_importe":Decimal("0"), "produccion_importe_completo":True, "ventas_cantidad":0, "ventas_importe":Decimal("0")}
             for mes in range(1, 13)}
         for x in resumen_diario:
             mes = x["fecha"][:7]
             mensual[mes]["inventario_cantidad"] += x["inventario_cantidad"]
             mensual[mes]["inventario_importe"] += Decimal(x["inventario_importe"])
             mensual[mes]["produccion_cantidad"] += x["produccion_cantidad"]
-            if x.get("produccion_importe") is not None:
+            if x.get("produccion_importe") is None:
+                mensual[mes]["produccion_importe_completo"] = False
+            else:
                 mensual[mes]["produccion_importe"] += Decimal(x["produccion_importe"])
             mensual[mes]["ventas_cantidad"] += x.get("ventas_cantidad",0)
             mensual[mes]["ventas_importe"] += Decimal(x.get("ventas_importe","0"))
-        resumen_mensual = [{"mes": k, **{a: (str(v) if isinstance(v, Decimal) else v) for a,v in vals.items()}}
-            for k, vals in sorted(mensual.items())]
+        resumen_mensual = [{"mes":k,"inventario_cantidad":v["inventario_cantidad"],
+            "inventario_importe":str(v["inventario_importe"]),"produccion_cantidad":v["produccion_cantidad"],
+            "produccion_importe":str(v["produccion_importe"]) if v["produccion_importe_completo"] else None,
+            "ventas_cantidad":v["ventas_cantidad"],"ventas_importe":str(v["ventas_importe"])}
+            for k,v in sorted(mensual.items())]
     _hoja_informe(libro, "Resumen", titulo, categoria, inv, prod, resumen_diario if tipo in ("mes","periodo") else [], resumen_mensual, datos.get("analisis"), anio=(tipo=="anio"))
     if resumen_only:
         resumen["A2"] = "Informe resumido por la extensión del periodo; se omitieron las hojas diarias para proteger el rendimiento."
