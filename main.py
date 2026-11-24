@@ -526,7 +526,7 @@ class LineaRegistroIndividual(BaseModel):
 def guardar_linea_registro(datos: LineaRegistroIndividual, authorization: str | None = Header(default=None)):
     usuario = obtener_usuario_autenticado(authorization)
     perfil = obtener_perfil(str(usuario.id))
-    comprobar_acceso_panaderia(str(usuario.id), perfil, datos.panaderia_id)
+    comprobar_permiso_local(str(usuario.id), perfil, datos.panaderia_id, "inventarios")
     hoy = datetime.now(TZ_PRODUCCION).date()
     if datos.fecha > hoy:
         raise HTTPException(status_code=422, detail="No puedes registrar una fecha futura.")
@@ -560,7 +560,7 @@ def eliminar_linea_registro(
 ):
     usuario = obtener_usuario_autenticado(authorization)
     perfil = obtener_perfil(str(usuario.id))
-    comprobar_acceso_panaderia(str(usuario.id), perfil, panaderia_id)
+    comprobar_permiso_local(str(usuario.id), perfil, panaderia_id, "inventarios")
     config = obtener_configuracion_edicion()
     if not plazo_edicion_vigente(fecha, config["dias_inventario"], config["horas_inventario"]) and not es_admin_principal(perfil):
         raise HTTPException(status_code=403, detail="Terminó el plazo configurado para editar inventario.")
