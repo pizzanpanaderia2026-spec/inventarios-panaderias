@@ -2090,6 +2090,62 @@ def ventas_consultar_dia(panaderia_id: int, authorization: str | None = Header(d
         raise HTTPException(status_code=503, detail="No se pudieron consultar las ventas del día.")
 
 
+@app.get("/api/ventas/dia/excel")
+def ventas_descargar_dia_excel(panaderia_id: int, authorization: str | None = Header(default=None)):
+    usuario = obtener_usuario_autenticado(authorization)
+    perfil = obtener_perfil(str(usuario.id))
+    comprobar_permiso_local(str(usuario.id), perfil, panaderia_id, "ventas")
+    try:
+        fecha = fecha_operativa_hoy()
+        ventas = obtener_ventas_pos_dia(panaderia_id, fecha)
+        local = (supabase.table("panaderias").select("nombre").eq("id",panaderia_id).limit(1).execute().data or [])
+        nombre_local = local[0]["nombre"] if local else "Panadería"
+        libro = Workbook()
+        hoja = libro.active
+        hoja.title = "Ventas del día"
+        hoja.append(["Panadería", nombre_local])
+        hoja.append(["Fecha", fecha.isoformat()])
+        hoja.append([])
+        hoja.append(["Venta", "Hora", "Cuenta", "Producto", "Cantidad", "Precio unitario", "Importe", "Total de venta"])
+        cantidad_total = 0
+        importe_total = Decimal("0")
+        for venta in ventas:
+            hora = datetime.fromisoformat(str(venta["creado_en"]).replace("Z","+00:00")).astimezone(TZ_PRODUCCION).replace(tzinfo=None) if venta.get("creado_en") else None
+            for indice, linea in enumerate(venta.get("lineas", [])):
+                cantidad = int(linea.get("cantidad") or 0)
+                precio = Decimal(str(linea.get("precio_unitario") or 0))
+                importe = Decimal(str(linea.get("importe") or 0))
+                cantidad_total += cantidad
+                importe_total += importe
+                hoja.append([
+                    "Venta " + str(venta["numero_venta"]), hora,
+                    venta.get("usuario_nombre") or "Usuario",
+                    linea.get("producto_nombre") or "Producto", cantidad,
+                    float(precio), float(importe), float(Decimal(str(venta.get("total") or 0))) if indice == 0 else None
+                ])
+                hoja.cell(row=hoja.max_row,column=2).number_format = "hh:mm"
+                for col in (6,7,8): hoja.cell(row=hoja.max_row,column=col).number_format = '"$"#,##0.00'
+        total_row = hoja.max_row + 1
+        hoja.cell(total_row,4,"TOTAL DEL DÍA")
+        hoja.cell(total_row,5,cantidad_total)
+        hoja.cell(total_row,7,float(importe_total.quantize(Decimal("0.01"))))
+        hoja.cell(total_row,7).number_format = '"$"#,##0.00'
+        hoja.freeze_panes = "A5"
+        hoja.auto_filter.ref = f"A4:H{max(4,total_row-1)}"
+        for col,width in {"A":16,"B":14,"C":22,"D":34,"E":14,"F":18,"G":18,"H":18}.items():
+            hoja.column_dimensions[col].width = width
+        salida = BytesIO()
+        libro.save(salida)
+        salida.seek(0)
+        nombre = "ventas_" + str(panaderia_id) + "_" + fecha.isoformat() + ".xlsx"
+        return StreamingResponse(salida,media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition":f'attachment; filename="{nombre}"'})
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=503, detail="No se pudo generar el Excel de ventas del día.")
+
+
 @app.get("/api/ventas/resumen")
 def ventas_consultar_resumen(panaderia_id: int, authorization: str | None = Header(default=None)):
     usuario = obtener_usuario_autenticado(authorization)
