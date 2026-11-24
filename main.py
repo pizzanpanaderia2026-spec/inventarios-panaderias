@@ -1736,6 +1736,8 @@ def crear_registro_produccion(
             productos_encontrados = (supabase.table("productos").select("id,nombre,precio,activo")
                 .eq("id", datos.producto_id).eq("panaderia_id", datos.panaderia_id).limit(1).execute().data or [])
             producto = productos_encontrados[0] if productos_encontrados else None
+            if not producto or not producto.get("activo"):
+                raise HTTPException(status_code=422, detail="El producto seleccionado no está activo en este local.")
         else:
             productos_encontrados = (supabase.table("productos").select("id,nombre,precio,activo")
                 .eq("panaderia_id", datos.panaderia_id).ilike("nombre", pan).limit(10).execute().data or [])
