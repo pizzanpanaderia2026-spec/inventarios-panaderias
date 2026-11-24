@@ -294,9 +294,7 @@
     button:not(.secundario):not(.boton-ver-contrasena):hover { filter:brightness(.97); }
     .boton-seccion { background:#E9EFEB!important; color:#43534A!important; }
     .boton-seccion.activo { background:var(--theme-color)!important; color:#2F4038!important; outline:2px solid #82998B; outline-offset:2px; }
-    .boton-seccion[data-seccion="panelVentas"],.boton-seccion[data-seccion="panelProduccion"],
-    .boton-seccion[data-seccion="panelRegistro"],.boton-seccion[data-seccion="panelTablas"],
-    .boton-seccion[data-seccion="panelProductos"],.boton-seccion[data-seccion="panelHistorial"] { background:#E9EFEB!important; }
+    .boton-seccion:not(.activo) { background:#E9EFEB!important; }
     #panelVentas > h3,#panelProduccion > h3,#panelRegistro > h3 { border-left-color:var(--theme-color)!important; }
     #panelTablas > h3,#panelProductos > h3,#panelHistorial h3 { border-left-color:#C8D5CD!important; }
     input:focus,select:focus,textarea:focus { outline:2px solid #A7BCAF; outline-offset:1px; border-color:#91A99A; }
