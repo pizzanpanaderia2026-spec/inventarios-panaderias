@@ -1209,7 +1209,8 @@
       if(id==="panelRegistro") return tieneModulo("inventarios");
       if(id==="panelProduccion") return tieneModulo("produccion");
       if(id==="panelVentas") return tieneModulo("ventas");
-      if(["panelTablas","panelProductos","panelHistorial"].includes(id)) return tieneModulo("inventarios")||tieneModulo("produccion");
+      if(["panelTablas","panelProductos"].includes(id)) return tieneModulo("inventarios")||tieneModulo("produccion");
+      if(id==="panelHistorial") return tieneModulo("inventarios")||tieneModulo("produccion")||tieneModulo("ventas");
       return false;
     }
     function configurarMenuPorRol() {
@@ -1241,10 +1242,10 @@
           catalogo=window.iniciarCatalogoProductos?await window.iniciarCatalogoProductos(sesionActual,autorizada,!esAdministrador()):{productos:[],categorias:[]};
           if(!catalogo)throw new Error("No se pudo cargar el catálogo. Actualiza la página e inténtalo de nuevo.");
           if(window.iniciarTablasHistorial)await window.iniciarTablasHistorial(sesionActual,autorizada);
-          if(window.iniciarHistorial)window.iniciarHistorial(sesionActual,autorizada,perfilActual);
         }
         if(inv&&window.iniciarRegistroDiario)await window.iniciarRegistroDiario(sesionActual,autorizada,catalogo.productos,catalogo.categorias);
         if(prod&&window.iniciarProduccion)await window.iniciarProduccion(sesionActual,autorizada);
+        if((inv||prod||ventas)&&window.iniciarHistorial)window.iniciarHistorial(sesionActual,autorizada,perfilActual);
         if(ventas&&window.iniciarVentas)await window.iniciarVentas(sesionActual,autorizada);
       }catch(error){
         const target=ventas&&!inv&&!prod?"posMensaje":prod&&!inv?"mensajeProduccion":"mensajeRegistro";
