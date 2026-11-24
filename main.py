@@ -710,7 +710,7 @@ def cerrar_registro(
 ):
     usuario = obtener_usuario_autenticado(authorization)
     perfil = obtener_perfil(str(usuario.id))
-    comprobar_acceso_panaderia(str(usuario.id), perfil, panaderia_id)
+    comprobar_permiso_local(str(usuario.id), perfil, panaderia_id, "inventarios")
     if fecha_registro > datetime.now(TZ_PRODUCCION).date():
         raise HTTPException(status_code=422, detail="No puedes cerrar una fecha futura.")
     try:
