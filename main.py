@@ -1853,7 +1853,7 @@ def descargar_produccion_excel(
         hoja.append(["Fecha", fecha_produccion.isoformat()])
         hoja.append(["Panadería", nombre_local])
         hoja.append([])
-        hoja.append(["Pan", "Cantidad", "Observaciones", "Registró", "Fecha y hora de captura"])
+        hoja.append(["Pan", "Cantidad", "Precio unitario", "Importe", "Observaciones", "Registró", "Fecha y hora de captura"])
         for registro in datos["registros"]:
             marca_captura = registro.get("registrado_en")
             fecha_hora_captura = None
@@ -1867,14 +1867,23 @@ def descargar_produccion_excel(
             hoja.append([
                 registro["pan_nombre"],
                 int(registro["cantidad"]),
+                float(Decimal(str(registro["precio_unitario"]))) if registro.get("precio_unitario") is not None else None,
+                float(Decimal(str(registro["importe"]))) if registro.get("importe") is not None else None,
                 registro.get("observaciones") or "",
                 registro.get("usuario_nombre") or "Usuario",
                 fecha_hora_captura,
             ])
-            hoja.cell(row=hoja.max_row, column=5).number_format = "dd/mm/yy hh:mm"
+            hoja.cell(row=hoja.max_row, column=3).number_format = '"$"#,##0.00'
+            hoja.cell(row=hoja.max_row, column=4).number_format = '"$"#,##0.00'
+            hoja.cell(row=hoja.max_row, column=7).number_format = "dd/mm/yy hh:mm"
+        total_row = hoja.max_row + 1
+        hoja.cell(total_row, 1, "TOTAL")
+        hoja.cell(total_row, 2, datos.get("total_cantidad", 0))
+        hoja.cell(total_row, 4, float(Decimal(str(datos.get("total_importe") or 0))))
+        hoja.cell(total_row, 4).number_format = '"$"#,##0.00'
         hoja.freeze_panes = "A5"
-        hoja.auto_filter.ref = f"A4:E{max(4, hoja.max_row)}"
-        for col, width in {"A": 34, "B": 14, "C": 42, "D": 24, "E": 28}.items():
+        hoja.auto_filter.ref = f"A4:G{max(4, total_row - 1)}"
+        for col, width in {"A": 34, "B": 14, "C": 18, "D": 18, "E": 42, "F": 24, "G": 28}.items():
             hoja.column_dimensions[col].width = width
         salida = BytesIO()
         libro.save(salida)
