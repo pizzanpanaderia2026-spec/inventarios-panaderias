@@ -130,6 +130,7 @@ def _clave(texto):
 
 
 def _agregar(inventario, produccion, desde, hasta, resumen_only=False, ventas=None):
+    analisis_activo = ventas is not None
     ventas = ventas or []
     productos = defaultdict(lambda: [0, Decimal("0")])
     precios = defaultdict(lambda: [0, Decimal("0")])
@@ -169,7 +170,7 @@ def _agregar(inventario, produccion, desde, hasta, resumen_only=False, ventas=No
 
     # Para análisis operativo se toma el último inventario cerrado del periodo,
     # no la suma de cierres diarios, que contaría varias veces las mismas existencias.
-    if ventas is not None and inventario:
+    if analisis_activo and inventario:
         ultimo = max(inventario, key=lambda x: x["cierre"]["fecha"])
         productos = defaultdict(lambda: [0, Decimal("0")])
         precios = defaultdict(lambda: [0, Decimal("0")])
@@ -310,18 +311,22 @@ def _reporte(panaderia_id, categoria, tipo, desde, hasta, authorization, incluir
     try:
         inventario = _leer_inventario(panaderia_id, desde, hasta) if categoria in ("inventario", "analisis") else []
         produccion = _leer_produccion(panaderia_id, desde, hasta) if categoria in ("produccion", "analisis") else []
-        resumen = _agregar(inventario, produccion, desde, hasta)
+        ventas_analisis = obtener_ventas_pos_periodo(panaderia_id, desde, hasta) if categoria == "analisis" else None
+        resumen = _agregar(inventario, produccion, desde, hasta, ventas=ventas_analisis)
         resumen_only = tipo == "periodo" and dias > MAX_DIAS_DETALLE
         if resumen_only:
             # Para intervalos largos se conservan los agregados y la serie mensual, no cientos de hojas.
-            mensual = defaultdict(lambda: {"inventario_cantidad": 0, "inventario_importe": Decimal("0"), "produccion_cantidad": 0})
+            mensual = defaultdict(lambda: {"inventario_cantidad": 0, "inventario_importe": Decimal("0"), "produccion_cantidad": 0, "ventas_cantidad":0, "ventas_importe":Decimal("0")})
             for item in resumen["resumen_diario"]:
                 mes = item["fecha"][:7]
                 mensual[mes]["inventario_cantidad"] += item["inventario_cantidad"]
                 mensual[mes]["inventario_importe"] += Decimal(item["inventario_importe"])
                 mensual[mes]["produccion_cantidad"] += item["produccion_cantidad"]
+                mensual[mes]["ventas_cantidad"] += item.get("ventas_cantidad",0)
+                mensual[mes]["ventas_importe"] += Decimal(item.get("ventas_importe","0"))
             resumen["resumen_mensual"] = [{"mes": k, "inventario_cantidad": v["inventario_cantidad"],
-                "inventario_importe": str(v["inventario_importe"]), "produccion_cantidad": v["produccion_cantidad"]}
+                "inventario_importe": str(v["inventario_importe"]), "produccion_cantidad": v["produccion_cantidad"],
+                "ventas_cantidad":v["ventas_cantidad"],"ventas_importe":str(v["ventas_importe"])}
                 for k, v in sorted(mensual.items())]
             resumen["resumen_diario"] = []
             resumen["inventario"]["dias"] = []
