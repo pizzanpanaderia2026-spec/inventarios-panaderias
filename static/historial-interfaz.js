@@ -243,6 +243,64 @@
     return wrapper;
   }
 
+  function renderSalesCorrections(host, ventas) {
+    const section=document.createElement("section");
+    section.className="panel";
+    const heading=document.createElement("h4");heading.textContent="Corrección de ventas";
+    const help=document.createElement("p");help.className="nota";
+    help.textContent="Puedes corregir cantidades dentro de la tolerancia configurada. Se conservan los precios unitarios originales.";
+    section.append(heading,help);
+    (ventas||[]).forEach(venta=>{
+      const card=document.createElement("div");card.className="barra";
+      const info=document.createElement("span");
+      info.textContent="Venta #"+venta.numero_venta+" · "+venta.fecha+" · "+formatMoney(venta.total)+" · "+(venta.usuario_nombre||"Usuario");
+      const button=document.createElement("button");button.type="button";button.className="secundario";button.textContent="Corregir";
+      button.disabled=!(venta.lineas||[]).length || (venta.lineas||[]).some(x=>!x.producto_id);
+      button.title=button.disabled?"Esta venta no tiene identificadores de producto para corregir.":"Corregir cantidades de esta venta";
+      button.addEventListener("click",()=>{
+        card.replaceChildren();
+        const editor=document.createElement("div");editor.style.cssText="width:100%;display:grid;gap:10px";
+        const title=document.createElement("strong");title.textContent="Editar venta #"+venta.numero_venta;editor.appendChild(title);
+        const inputs=[];
+        (venta.lineas||[]).forEach(linea=>{
+          const row=document.createElement("div");row.className="barra";
+          const label=document.createElement("label");label.textContent=linea.producto_nombre+" · "+formatMoney(linea.precio_unitario);
+          const input=document.createElement("input");input.type="number";input.min="0";input.step="1";input.value=String(linea.cantidad);
+          input.style.width="100px";input.setAttribute("aria-label","Cantidad de "+linea.producto_nombre);
+          row.append(label,input);editor.appendChild(row);inputs.push({linea,input});
+        });
+        const actions=document.createElement("div");actions.className="barra";
+        const save=document.createElement("button");save.type="button";save.textContent="Guardar corrección";
+        const cancel=document.createElement("button");cancel.type="button";cancel.className="secundario";cancel.textContent="Cancelar";
+        const message=document.createElement("p");message.className="nota";
+        cancel.addEventListener("click",()=>consult());
+        save.addEventListener("click",async()=>{
+          const lineas=[];
+          for(const item of inputs){
+            const cantidad=Number(item.input.value);
+            if(!Number.isInteger(cantidad)||cantidad<0||cantidad>100000){message.textContent="Las cantidades deben ser enteros entre 0 y 100,000.";return;}
+            if(cantidad>0)lineas.push({producto_id:Number(item.linea.producto_id),cantidad});
+          }
+          if(!lineas.length){message.textContent="La venta debe conservar al menos un producto.";return;}
+          save.disabled=true;
+          try{
+            const response=await fetch("/api/ventas/"+encodeURIComponent(venta.id),{
+              method:"PATCH",
+              headers:{"Authorization":"Bearer "+token,"Content-Type":"application/json","Accept":"application/json"},
+              body:JSON.stringify({lineas})
+            });
+            const payload=await response.json().catch(()=>({}));
+            if(!response.ok)throw new Error(payload.detail||"No se pudo corregir la venta.");
+            await consult();
+          }catch(error){message.textContent=error.message;save.disabled=false;}
+        });
+        actions.append(save,cancel);editor.append(actions,message);card.append(editor);
+      });
+      card.append(info,button);section.appendChild(card);
+    });
+    host.appendChild(section);
+  }
+
   function renderTables(data) {
     const host = el("div", null, "historial-tablas");
     if (category === "ventas") {
@@ -264,6 +322,7 @@
         ]));
       });
       addTable(host, "Detalle de ventas", ["Fecha", "Venta", "Hora", "Registró", "Producto", "Cantidad", "Precio unitario", "Importe"], rows);
+      renderSalesCorrections(host, data.ventas || []);
       return host;
     }
     const inv = data.inventario, prod = data.produccion;
