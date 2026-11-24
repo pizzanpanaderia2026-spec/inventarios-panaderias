@@ -9,6 +9,7 @@
 
   <style>
     * { box-sizing: border-box; }
+    :root { --color-ventas:#2563EB; --color-produccion:#16A34A; --color-inventarios:#D97706; }
 
     body {
       margin: 0;
@@ -107,10 +108,13 @@
       background: #713f12;
     }
 
-    .boton-seccion.activo {
-      outline: 3px solid #d6b48a;
-      outline-offset: 2px;
-    }
+    .boton-seccion.activo { outline: 3px solid #d6b48a; outline-offset: 2px; }
+    .boton-seccion[data-seccion="panelVentas"] { background:var(--color-ventas); }
+    .boton-seccion[data-seccion="panelProduccion"] { background:var(--color-produccion); }
+    .boton-seccion[data-seccion="panelRegistro"],.boton-seccion[data-seccion="panelTablas"],.boton-seccion[data-seccion="panelProductos"],.boton-seccion[data-seccion="panelHistorial"] { background:var(--color-inventarios); }
+    #panelVentas > h3 { border-left:5px solid var(--color-ventas); padding-left:10px; }
+    #panelProduccion > h3 { border-left:5px solid var(--color-produccion); padding-left:10px; }
+    #panelRegistro > h3,#panelTablas > h3,#panelProductos > h3,#panelHistorial h3 { border-left:5px solid var(--color-inventarios); padding-left:10px; }
 
     .encabezado-panaderia {
       display: flex;
@@ -171,6 +175,32 @@
     .lista-respaldo { display: grid; gap: 12px; border: 1px solid #e7ded2; border-radius: 10px; padding: 14px; margin: 14px 0; }
     .lista-respaldo label { display: flex; gap: 9px; align-items: flex-start; }
     .boton-peligro { background: #991b1b; }
+    .pos-menu{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin:16px 0}
+    .pos-menu button{background:#e8eefc;color:#1e3a8a;font-weight:700;padding:11px 8px}
+    .pos-menu button.activo{background:var(--color-ventas);color:#fff}
+    .pos-fila-venta,.pos-producto-disponibilidad{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 0;border-bottom:1px solid #eee7df}
+    .pos-venta-info,.pos-producto-info{display:flex;flex-direction:column;gap:4px;min-width:0}
+    .pos-venta-info small,.pos-producto-info small{color:#78716c}
+    .pos-cantidad-controles{display:flex;align-items:center;gap:6px;flex:0 0 auto}
+    .pos-cantidad-controles button{width:38px;height:38px;padding:0;font-size:20px}
+    .pos-cantidad-controles input{width:66px;text-align:center;padding:8px}
+    .pos-total,.pos-resumen-totales{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;background:#f5f0e9;border-radius:12px;padding:14px;margin-top:16px}
+    .pos-total>div,.pos-resumen-totales>div{display:flex;flex-direction:column;gap:4px}
+    .pos-total strong,.pos-resumen-totales strong{font-size:1.2rem}
+    .pos-categoria{border:1px solid #e7ded2;border-radius:10px;padding:10px 14px;margin:10px 0}
+    .pos-categoria h4{margin:4px 0 8px}
+    .pos-switch-label{display:flex;align-items:center;gap:8px;white-space:nowrap;font-size:13px}
+    .pos-switch-label input{width:20px;height:20px;accent-color:var(--color-ventas)}
+    .pos-busqueda{margin:8px 0 14px}
+    .pos-vacio{padding:22px;text-align:center;border:1px dashed #d6c8b8;border-radius:10px;background:#faf7f2}
+    .pos-venta-card{border:1px solid #e7ded2;border-radius:10px;padding:12px;margin:10px 0}
+    .pos-venta-card-head{display:flex;justify-content:space-between;gap:10px}
+    .pos-venta-card ul{margin:8px 0 0;padding-left:20px}
+    .pos-tabla{width:100%;border-collapse:collapse}
+    .pos-tabla th,.pos-tabla td{padding:9px 8px;border:1px solid #e7ddd1;text-align:left}
+    .pos-tabla th{background:#e8eefc}
+    @media(min-width:900px){#panelVentas .pos-vista{max-width:1050px}#panelVentas .pos-total{position:sticky;bottom:8px;z-index:2;box-shadow:0 2px 10px #0001}}
+    @media(max-width:600px){.pos-menu{grid-template-columns:repeat(2,minmax(0,1fr))}.pos-fila-venta,.pos-producto-disponibilidad{gap:8px}.pos-total{align-items:stretch}.pos-total>div{flex:1 1 35%}.pos-total>button{width:100%}.pos-cantidad-controles{gap:4px}.pos-cantidad-controles button{width:34px;height:36px}.pos-cantidad-controles input{width:54px}.pos-switch-label{font-size:12px}}
 
     .barra {
       display: flex;
@@ -515,6 +545,7 @@
 
         <nav id="menuSecciones" class="menu-secciones" aria-label="Secciones de la panadería">
           <button class="boton-seccion" type="button" data-seccion="panelRegistro">Registro</button>
+          <button class="boton-seccion" type="button" data-seccion="panelVentas">Ventas</button>
           <button class="boton-seccion" type="button" data-seccion="panelTablas">Tablas</button>
           <button class="boton-seccion" type="button" data-seccion="panelProductos">Productos</button>
           <button class="boton-seccion" type="button" data-seccion="panelHistorial">Historial</button>
@@ -545,6 +576,45 @@
           <div id="tablaProduccion"></div>
         </section>
         <section id="panelRegistro" class="panel panel-seccion oculto"><h3>Registro diario</h3><div class="campo"><label for="fechaRegistro">Fecha</label><input id="fechaRegistro" type="date"></div><div class="barra"><strong id="estadoRegistro">Día abierto</strong></div><div id="mensajeRegistro" class="mensaje oculto" role="alert"></div><div id="filasRegistro"></div><button id="botonGuardarRegistro" type="button">Guardar registro</button> <button id="botonCerrarDia" type="button">Cerrar día</button> <button id="botonReabrirDia" class="secundario" type="button">Reabrir día</button></section>
+
+        <section id="panelVentas" class="panel panel-seccion oculto">
+          <h3>Ventas</h3>
+          <nav class="pos-menu" aria-label="Opciones del punto de venta">
+            <button type="button" data-pos-vista="nueva" class="activo" aria-pressed="true">Nueva venta</button>
+            <button type="button" data-pos-vista="dia" aria-pressed="false">Ventas del día</button>
+            <button type="button" data-pos-vista="resumen" aria-pressed="false">Resumen</button>
+            <button type="button" data-pos-vista="productos" aria-pressed="false">Productos</button>
+          </nav>
+          <div id="posMensaje" class="mensaje oculto" role="status"></div>
+          <section id="posVistaNueva" class="pos-vista">
+            <h4>Nueva venta</h4><p class="nota">Selecciona las cantidades de los productos disponibles para este local.</p>
+            <div id="posListaVenta"></div>
+            <div class="pos-total">
+              <div><span class="nota">Piezas</span><strong id="posCantidadTotal">0</strong></div>
+              <div><span class="nota">Total de la venta</span><strong id="posImporteTotal">$0.00</strong></div>
+              <button id="posRegistrarVenta" type="button" disabled>Registrar venta</button>
+            </div>
+          </section>
+          <section id="posVistaDia" class="pos-vista oculto">
+            <div class="barra"><div><h4>Ventas del día</h4><p id="posFechaDia" class="nota"></p></div><button type="button" class="secundario" id="posActualizarDia">Actualizar</button></div>
+            <div id="posListaVentasDia"></div>
+          </section>
+          <section id="posVistaResumen" class="pos-vista oculto">
+            <h4>Resumen de ventas</h4><p id="posFechaResumen" class="nota"></p>
+            <div id="posTablaResumen" class="tabla-scroll"></div>
+            <div class="pos-resumen-totales">
+              <div><span class="nota">Ventas registradas</span><strong id="posNumeroVentasResumen">0</strong></div>
+              <div><span class="nota">Piezas vendidas</span><strong id="posTotalCantidadResumen">0</strong></div>
+              <div><span class="nota">Importe total</span><strong id="posTotalImporteResumen">$0.00</strong></div>
+            </div>
+          </section>
+          <section id="posVistaProductos" class="pos-vista oculto">
+            <h4>Productos</h4>
+            <p class="nota">Activa únicamente los productos que estarán disponibles para venta hoy en este local. La selección se reinicia automáticamente al comenzar un nuevo día.</p>
+            <input id="posBuscarProducto" class="pos-busqueda" type="search" placeholder="Buscar categoría o producto..." aria-label="Buscar categoría o producto">
+            <div id="posListaProductos"></div>
+          </section>
+        </section>
         <section id="panelProductos" class="panel panel-seccion oculto">
           <h3>Agregar productos</h3>
           <p class="nota">Administra las categorías y los productos de esta panadería.</p>
@@ -656,8 +726,17 @@
             <button id="adminAgregarUsuario" class="admin-boton-compacto" type="button">Agregar usuario</button>
             <button id="adminConfiguracionArchivado" class="admin-boton-compacto" type="button">Configuración de archivado</button>
             <button id="adminConfiguracionEdicion" class="admin-boton-compacto" type="button">Días editables</button>
+            <button id="adminPersonalizacion" class="admin-boton-compacto" type="button">Personalización</button>
           </div>
           <div id="adminMensaje" class="mensaje oculto" role="status"></div>
+          <div id="adminVistaColores" class="oculto">
+            <div class="barra"><h4>Personalización de módulos</h4><button id="adminColoresVolver" class="secundario" type="button">Volver a Administración</button></div>
+            <p class="nota">Elige un color para identificar cada módulo. El cambio se reflejará en los botones y encabezados de todas las cuentas.</p>
+            <div class="campo"><label for="adminColorVentas">Ventas</label><input id="adminColorVentas" type="color" value="#2563EB"></div>
+            <div class="campo"><label for="adminColorProduccion">Producción</label><input id="adminColorProduccion" type="color" value="#16A34A"></div>
+            <div class="campo"><label for="adminColorInventarios">Inventarios</label><input id="adminColorInventarios" type="color" value="#D97706"></div>
+            <button id="adminColoresGuardar" type="button">Guardar colores</button>
+          </div>
           <div id="adminVistaEdicion" class="oculto">
             <div class="barra"><h4>Configuración de días editables</h4><button id="adminEdicionVolver" class="secundario" type="button">Volver a Administración</button></div>
             <p class="nota">Define cuántos días anteriores se podrán corregir. El plazo se cuenta por días naturales según la fecha local de México.</p>
@@ -712,7 +791,7 @@
             <div class="campo"><label for="adminNombre">Nombre</label><input id="adminNombre" maxlength="120" required></div>
             <div class="campo"><label for="adminUsername">Usuario</label><input id="adminUsername" maxlength="60" autocomplete="off" required></div>
             <div class="campo"><label for="adminPassword">Contraseña</label><input id="adminPassword" type="password" minlength="8" autocomplete="new-password"><p class="nota" id="adminAyudaPassword">Usa una contraseña de al menos 8 caracteres.</p></div>
-            <div class="campo"><label for="adminTipoUsuario">Tipo de usuario</label><select id="adminTipoUsuario" required><option value="encargado">Encargado de inventario</option><option value="produccion">Encargado de producción</option></select></div>
+            <fieldset class="admin-locales"><legend>Módulos autorizados (mínimo uno)</legend><div id="adminOpcionesPermisos"></div></fieldset>
             <fieldset class="admin-locales"><legend>Locales autorizados (mínimo uno)</legend><div id="adminOpcionesLocales"></div></fieldset>
             <button id="adminGuardarUsuario" type="submit">Crear usuario</button>
             <button id="adminCancelarUsuario" class="secundario" type="button">Cancelar</button>
@@ -737,6 +816,7 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
   <script src="/static/productos.js?v=consulta-produccion-20261123-1"></script>
+  <script src="/static/ventas.js?v=pos-20261124-1"></script>
   <script src="/static/registro.js?v=dias-editables-20261123-1"></script>
   <script src="/static/produccion.js?v=dias-editables-20261123-1"></script>
   <script src="/static/tablas.js?v=produccion-tablas-20261123-1"></script>
@@ -1092,120 +1172,68 @@
 
 
     function esAdministrador() {
-      const rol = String(perfilActual?.rol || "").toLowerCase();
-      return rol === "admin" && perfilActual?.es_admin_principal === true;
+      return String(perfilActual?.rol || "").toLowerCase() === "admin" && perfilActual?.es_admin_principal === true;
     }
-
-    function puedeVerProduccion() {
-      return esAdministrador() || String(perfilActual?.rol || "").toLowerCase() === "produccion";
+    function permisosActuales() {
+      if (esAdministrador()) return ["inventarios","produccion","ventas"];
+      if (Array.isArray(perfilActual?.permisos) && perfilActual.permisos.length) return perfilActual.permisos;
+      return String(perfilActual?.rol || "").toLowerCase() === "produccion" ? ["produccion"] : ["inventarios"];
     }
-
+    function tieneModulo(modulo) { return esAdministrador() || permisosActuales().includes(modulo); }
+    function puedeVerProduccion() { return tieneModulo("produccion"); }
+    function aplicarColoresModulos(colores) {
+      const defaults={ventas:"#2563EB",produccion:"#16A34A",inventarios:"#D97706"};
+      Object.entries(defaults).forEach(([key,value])=>document.documentElement.style.setProperty("--color-"+key,colores?.[key]||value));
+    }
+    async function cargarColoresModulos() {
+      try { aplicarColoresModulos(await consultarBackend("/api/colores",sesionActual.access_token)); }
+      catch(e) { aplicarColoresModulos(null); }
+    }
+    function seccionPermitida(id) {
+      if(id==="panelAdministracion") return esAdministrador();
+      if(id==="panelRegistro") return tieneModulo("inventarios");
+      if(id==="panelProduccion") return tieneModulo("produccion");
+      if(id==="panelVentas") return tieneModulo("ventas");
+      if(["panelTablas","panelProductos","panelHistorial"].includes(id)) return tieneModulo("inventarios")||tieneModulo("produccion");
+      return false;
+    }
     function configurarMenuPorRol() {
-      const esProduccion = String(perfilActual?.rol || "").toLowerCase() === "produccion";
-      document.querySelectorAll(".boton-seccion").forEach(boton => {
-        const seccion = boton.dataset.seccion;
-        const ocultarAdmin = seccion === "panelAdministracion" && !esAdministrador();
-        const ocultarProduccion = seccion === "panelProduccion" && !puedeVerProduccion();
-        const seccionesProduccion = ["panelProduccion", "panelHistorial", "panelTablas", "panelProductos"];
-        const ocultarInventario = esProduccion && !seccionesProduccion.includes(seccion);
-        boton.classList.toggle("oculto", ocultarAdmin || ocultarProduccion || ocultarInventario);
-      });
+      document.querySelectorAll(".boton-seccion").forEach(b=>b.classList.toggle("oculto",!seccionPermitida(b.dataset.seccion)));
     }
-
     function mostrarSeccion(idSeccion) {
-      if (idSeccion === "panelProduccion" && !puedeVerProduccion()) return;
-      if (idSeccion === "panelAdministracion" && !esAdministrador()) return;
-      if (String(perfilActual?.rol || "").toLowerCase() === "produccion" && !["panelProduccion", "panelHistorial", "panelTablas", "panelProductos"].includes(idSeccion)) return;
-      const secciones = ["panelRegistro", "panelTablas", "panelProductos", "panelHistorial", "panelAdministracion", "panelProduccion"];
-      secciones.forEach(id => {
-        const panel = document.getElementById(id);
-        if (!panel) return;
-        const activa = id === idSeccion;
-        panel.classList.toggle("seccion-activa", activa);
-        panel.classList.toggle("oculto", !activa);
-        panel.setAttribute("aria-hidden", activa ? "false" : "true");
-      });
-      document.querySelectorAll(".boton-seccion").forEach(boton => {
-        const activo = boton.dataset.seccion === idSeccion;
-        boton.classList.toggle("activo", activo);
-        boton.setAttribute("aria-pressed", activo ? "true" : "false");
-      });
+      if(!seccionPermitida(idSeccion)) return;
+      const secciones=["panelRegistro","panelVentas","panelTablas","panelProductos","panelHistorial","panelAdministracion","panelProduccion"];
+      secciones.forEach(id=>{const panel=document.getElementById(id);if(!panel)return;const activa=id===idSeccion;panel.classList.toggle("seccion-activa",activa);panel.classList.toggle("oculto",!activa);panel.setAttribute("aria-hidden",activa?"false":"true");});
+      document.querySelectorAll(".boton-seccion").forEach(b=>{const activo=b.dataset.seccion===idSeccion;b.classList.toggle("activo",activo);b.setAttribute("aria-pressed",activo?"true":"false");});
     }
-
-    document.querySelectorAll(".boton-seccion").forEach(boton => {
-      boton.addEventListener("click", () => {
-        if (boton.dataset.seccion === "panelAdministracion" && !esAdministrador()) return;
-        if (boton.dataset.seccion === "panelProduccion" && !puedeVerProduccion()) return;
-        if (String(perfilActual?.rol || "").toLowerCase() === "produccion" && !["panelProduccion", "panelHistorial", "panelTablas", "panelProductos"].includes(boton.dataset.seccion)) return;
-        mostrarSeccion(boton.dataset.seccion);
-      });
-    });
+    document.querySelectorAll(".boton-seccion").forEach(boton=>boton.addEventListener("click",()=>mostrarSeccion(boton.dataset.seccion)));
 
     async function abrirPanaderia(panaderia) {
-      const autorizada = panaderiasAutorizadas.find(
-        item => String(item.id) === String(panaderia.id)
-      );
-      if (!autorizada || autorizada.activa === false) {
-        mostrarMensaje(document.getElementById("mensajePanaderias"), "No tienes acceso a esa panadería.");
-        return;
-      }
-
-      panaderiaSeleccionada = autorizada;
-      document.getElementById("nombrePanaderia").textContent = autorizada.nombre;
-      const fotoDetalle = document.getElementById("fotoPanaderiaDetalle");
-      fotoDetalle.replaceChildren();
-      if (autorizada.foto_url) {
-        const imagen = document.createElement("img");
-        imagen.src = autorizada.foto_url;
-        imagen.alt = "Foto de " + autorizada.nombre;
-        fotoDetalle.appendChild(imagen);
-      } else {
-        fotoDetalle.textContent = "Foto";
-      }
-
+      const autorizada=panaderiasAutorizadas.find(item=>String(item.id)===String(panaderia.id));
+      if(!autorizada||autorizada.activa===false){mostrarMensaje(document.getElementById("mensajePanaderias"),"No tienes acceso a esa panadería.");return;}
+      panaderiaSeleccionada=autorizada;
+      document.getElementById("nombrePanaderia").textContent=autorizada.nombre;
+      const fotoDetalle=document.getElementById("fotoPanaderiaDetalle");fotoDetalle.replaceChildren();
+      if(autorizada.foto_url){const imagen=document.createElement("img");imagen.src=autorizada.foto_url;imagen.alt="Foto de "+autorizada.nombre;fotoDetalle.appendChild(imagen);}else fotoDetalle.textContent="Foto";
       configurarMenuPorRol();
-      document.getElementById("detalleUsuario").textContent =
-        "Cuenta: " + (perfilActual.nombre || usuarioActual.email || "Usuario autenticado");
-      mostrarPantalla(pantallaDetalle);
-
-      if (String(perfilActual?.rol || "").toLowerCase() === "produccion") {
-        mostrarSeccion("panelProduccion");
-        try {
-          if (window.iniciarCatalogoProductos) await window.iniciarCatalogoProductos(sesionActual, autorizada, true);
-          if (window.iniciarTablasHistorial) await window.iniciarTablasHistorial(sesionActual, autorizada);
-          if (window.iniciarHistorial) window.iniciarHistorial(sesionActual, autorizada, perfilActual);
-          if (window.iniciarProduccion) await window.iniciarProduccion(sesionActual, autorizada);
-        } catch (error) {
-          mostrarMensaje(document.getElementById("mensajeProduccion"), error.message || "No se pudo iniciar la información de producción.");
+      document.getElementById("detalleUsuario").textContent="Cuenta: "+(perfilActual.nombre||usuarioActual.email||"Usuario autenticado");
+      mostrarPantalla(pantallaDetalle);await cargarColoresModulos();
+      const inv=tieneModulo("inventarios"),prod=tieneModulo("produccion"),ventas=tieneModulo("ventas");
+      mostrarSeccion(inv?"panelRegistro":prod?"panelProduccion":"panelVentas");
+      try{
+        let catalogo=null;
+        if(inv||prod){
+          catalogo=window.iniciarCatalogoProductos?await window.iniciarCatalogoProductos(sesionActual,autorizada,!esAdministrador()):{productos:[],categorias:[]};
+          if(!catalogo)throw new Error("No se pudo cargar el catálogo. Actualiza la página e inténtalo de nuevo.");
+          if(window.iniciarTablasHistorial)await window.iniciarTablasHistorial(sesionActual,autorizada);
+          if(window.iniciarHistorial)window.iniciarHistorial(sesionActual,autorizada,perfilActual);
         }
-        return;
-      }
-
-      mostrarSeccion("panelRegistro");
-      try {
-        const catalogo = window.iniciarCatalogoProductos
-          ? await window.iniciarCatalogoProductos(sesionActual, autorizada, !esAdministrador())
-          : { productos: [], categorias: [] };
-        if (!catalogo) {
-          mostrarMensaje(
-            document.getElementById("mensajeRegistro"),
-            "No se pudo cargar el catálogo después de varios intentos. Toca Actualizar para volver a intentarlo."
-          );
-          return;
-        }
-        if (window.iniciarTablasHistorial) window.iniciarTablasHistorial(sesionActual, autorizada);
-        if (window.iniciarHistorial) window.iniciarHistorial(sesionActual, autorizada, perfilActual);
-        if (window.iniciarRegistroDiario) {
-          await window.iniciarRegistroDiario(sesionActual, autorizada, catalogo.productos, catalogo.categorias);
-        }
-        if (window.iniciarProduccion && esAdministrador()) {
-          await window.iniciarProduccion(sesionActual, autorizada);
-        }
-      } catch (error) {
-        mostrarMensaje(
-          document.getElementById("mensajeRegistro"),
-          "No se pudo cargar la información inicial. " + (error.message || "Intenta actualizar la página.")
-        );
+        if(inv&&window.iniciarRegistroDiario)await window.iniciarRegistroDiario(sesionActual,autorizada,catalogo.productos,catalogo.categorias);
+        if(prod&&window.iniciarProduccion)await window.iniciarProduccion(sesionActual,autorizada);
+        if(ventas&&window.iniciarVentas)await window.iniciarVentas(sesionActual,autorizada);
+      }catch(error){
+        const target=ventas&&!inv&&!prod?"posMensaje":prod&&!inv?"mensajeProduccion":"mensajeRegistro";
+        const node=document.getElementById(target);if(node)mostrarMensaje(node,error.message||"No se pudo cargar la información inicial.");
       }
     }
 
@@ -1361,6 +1389,7 @@
     function adminVista(vista) {
       document.getElementById("adminVistaUsuarios").classList.toggle("oculto", vista !== "usuarios");
       document.getElementById("adminVistaArchivado").classList.toggle("oculto", vista !== "archivado");
+      document.getElementById("adminVistaColores").classList.toggle("oculto", vista !== "colores");
       document.getElementById("adminVistaEdicion").classList.toggle("oculto", vista !== "edicion");
       document.getElementById("adminFormularioUsuario").classList.toggle("oculto", vista !== "formulario");
       document.getElementById("adminFormularioNombre").classList.toggle("oculto", vista !== "nombre");
@@ -1379,7 +1408,9 @@
           const card = document.createElement("div");
           card.className = "admin-usuario";
           const nombre = document.createElement("strong");
-          nombre.textContent = u.nombre + " (" + (u.es_admin_principal ? "Administradora" : u.rol === "produccion" ? "Encargado de producción" : "Encargado de inventario") + ")";
+          const nombresModulos = {inventarios:"Inventarios", produccion:"Producción", ventas:"Ventas"};
+          const modulosUsuario = (u.permisos || (u.rol === "produccion" ? ["produccion"] : ["inventarios"])).map(x => nombresModulos[x] || x).join(", ");
+          nombre.textContent = u.nombre + " (" + (u.es_admin_principal ? "Administradora" : modulosUsuario) + ")";
           card.appendChild(nombre);
           const user = document.createElement("p");
           user.className = "nota";
@@ -1432,13 +1463,24 @@
         label.append(input, span); cont.appendChild(label);
       });
     }
+    async function adminPrepararPermisos(seleccionados = ["inventarios"]) {
+      const cont = document.getElementById("adminOpcionesPermisos");
+      cont.replaceChildren();
+      [["inventarios","Inventarios"],["produccion","Producción"],["ventas","Ventas"]].forEach(([value,labelText]) => {
+        const label = document.createElement("label");
+        const input = document.createElement("input");
+        input.type = "checkbox"; input.value = value; input.checked = seleccionados.includes(value);
+        const span = document.createElement("span"); span.textContent = labelText;
+        label.append(input, span); cont.appendChild(label);
+      });
+    }
     async function adminAbrirEdicion(u) {
       adminEditarId = u.id;
       document.getElementById("adminTituloFormulario").textContent = "Editar usuario";
       document.getElementById("adminNombre").value = u.nombre;
       document.getElementById("adminUsername").value = u.usuario;
       document.getElementById("adminPassword").value = "";
-      document.getElementById("adminTipoUsuario").value = u.rol === "produccion" ? "produccion" : "encargado";
+      await adminPrepararPermisos(u.permisos || (u.rol === "produccion" ? ["produccion"] : ["inventarios"]));
       document.getElementById("adminPassword").required = false;
       document.getElementById("adminAyudaPassword").textContent = "Deja vacío para conservar la contraseña actual.";
       document.getElementById("adminGuardarUsuario").textContent = "Guardar cambios";
@@ -1448,7 +1490,7 @@
     async function adminAbrirAgregar() {
       adminEditarId = null;
       document.getElementById("adminFormularioUsuario").reset();
-      document.getElementById("adminTipoUsuario").value = "encargado";
+      await adminPrepararPermisos(["inventarios"]);
       document.getElementById("adminTituloFormulario").textContent = "Agregar usuario";
       document.getElementById("adminPassword").required = true;
       document.getElementById("adminAyudaPassword").textContent = "Usa una contraseña de al menos 8 caracteres.";
@@ -1559,6 +1601,23 @@
       try { await adminCargarDiasEditables(); } catch (e) { adminMensaje(e.message); }
     });
     document.getElementById("adminEdicionVolver").addEventListener("click", () => adminVista("inicio"));
+    document.getElementById("adminPersonalizacion").addEventListener("click", async () => {
+      adminVista("colores");
+      try {
+        const c = await adminFetch("/api/colores");
+        document.getElementById("adminColorVentas").value = c.ventas || "#2563EB";
+        document.getElementById("adminColorProduccion").value = c.produccion || "#16A34A";
+        document.getElementById("adminColorInventarios").value = c.inventarios || "#D97706";
+      } catch (e) { adminMensaje(e.message); }
+    });
+    document.getElementById("adminColoresVolver").addEventListener("click", () => adminVista("inicio"));
+    document.getElementById("adminColoresGuardar").addEventListener("click", async () => {
+      const colores = {ventas:document.getElementById("adminColorVentas").value,produccion:document.getElementById("adminColorProduccion").value,inventarios:document.getElementById("adminColorInventarios").value};
+      try {
+        await adminFetch("/api/admin/colores", {method:"PUT",body:JSON.stringify(colores)});
+        aplicarColoresModulos(colores); adminMensaje("Colores guardados correctamente.", "exito");
+      } catch (e) { adminMensaje(e.message); }
+    });
     document.getElementById("adminEdicionGuardar").addEventListener("click", async () => {
       const boton = document.getElementById("adminEdicionGuardar");
       const dias_inventario = Number(document.getElementById("adminDiasInventario").value);
@@ -1603,7 +1662,9 @@
       ev.preventDefault();
       const locales = [...document.querySelectorAll("#adminOpcionesLocales input:checked")].map(x => Number(x.value));
       if (!locales.length) { adminMensaje("Selecciona al menos un local."); return; }
-      const payload = {nombre:document.getElementById("adminNombre").value.trim(), username:document.getElementById("adminUsername").value.trim(), tipo_usuario:document.getElementById("adminTipoUsuario").value, locales};
+      const permisos = [...document.querySelectorAll("#adminOpcionesPermisos input:checked")].map(x => x.value);
+      if (!permisos.length) { adminMensaje("Selecciona al menos un módulo."); return; }
+      const payload = {nombre:document.getElementById("adminNombre").value.trim(), username:document.getElementById("adminUsername").value.trim(), permisos, locales};
       const pass = document.getElementById("adminPassword").value;
       if (pass) payload.password = pass;
       if (!adminEditarId && !pass) { adminMensaje("Escribe una contraseña."); return; }
