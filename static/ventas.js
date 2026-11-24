@@ -262,10 +262,10 @@
       state.sales = data.ventas || [];
       root.replaceChildren();
       $("posFechaDia").textContent = "Fecha: " + new Date(data.fecha + "T12:00:00").toLocaleDateString("es-MX");
+      updateSalesViewButtons();
       if (!state.sales.length) {
         const empty = document.createElement("p"); empty.className = "nota"; empty.textContent = "Todavía no hay ventas registradas hoy."; root.append(empty); return;
       }
-      updateSalesViewButtons();
       if (state.salesView === "tabla") {
         drawSalesTable(root);
       } else {
