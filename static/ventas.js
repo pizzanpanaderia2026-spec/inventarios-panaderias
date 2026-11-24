@@ -288,11 +288,49 @@
           const ticket = document.createElement("button"); ticket.type = "button"; ticket.className = "secundario";
           ticket.textContent = "Descargar ticket PNG";
           ticket.addEventListener("click", () => downloadTicketPNG(sale));
-          actions.append(ticket);
+          const edit = document.createElement("button"); edit.type = "button"; edit.className = "secundario";
+          edit.textContent = "Corregir venta";
+          edit.addEventListener("click", () => showSaleEditor(sale,card));
+          actions.append(ticket,edit);
           card.append(head, meta, list, actions); root.append(card);
         });
       }
     } catch (error) { root.textContent = error.message; }
+  }
+
+  function showSaleEditor(sale, card) {
+    card.replaceChildren();
+    const title=document.createElement("h4");title.textContent="Corregir venta "+sale.numero_venta;card.append(title);
+    const note=document.createElement("p");note.className="nota";note.textContent="Modifica cantidades. El precio registrado de cada producto se conserva; los productos nuevos toman el precio vigente al momento de la corrección.";card.append(note);
+    const inputs=[];
+    (sale.lineas||[]).forEach(line=>{
+      const row=document.createElement("div");row.className="pos-fila-venta";
+      const label=document.createElement("label");label.textContent=line.producto_nombre+" · "+money(line.precio_unitario);
+      const input=document.createElement("input");input.type="number";input.min="0";input.max="100000";input.step="1";input.value=String(line.cantidad);
+      input.setAttribute("aria-label","Cantidad de "+line.producto_nombre);
+      row.append(label,input);card.append(row);
+      inputs.push({line,input});
+    });
+    const actions=document.createElement("div");actions.className="barra";
+    const save=document.createElement("button");save.type="button";save.textContent="Guardar corrección";
+    const cancel=document.createElement("button");cancel.type="button";cancel.className="secundario";cancel.textContent="Cancelar";
+    cancel.addEventListener("click",loadSales);
+    save.addEventListener("click",async()=>{
+      const lineas=[];
+      for(const item of inputs){
+        const n=Number(item.input.value);
+        if(!Number.isInteger(n)||n<0||n>100000){notice("Las cantidades deben ser enteros entre 0 y 100,000.");return;}
+        if(n>0)lineas.push({producto_id:Number(item.line.producto_id),cantidad:n});
+      }
+      if(!lineas.length){notice("La venta debe conservar al menos un producto.");return;}
+      save.disabled=true;
+      try{
+        await api("/api/ventas/"+encodeURIComponent(sale.id),{method:"PATCH",body:JSON.stringify({lineas})});
+        notice("Venta corregida y cambio registrado en auditoría.","success");
+        await Promise.all([loadSales(),loadSummary()]);
+      }catch(error){notice(error.message);save.disabled=false;}
+    });
+    actions.append(save,cancel);card.append(actions);
   }
 
   function updateSalesViewButtons() {
@@ -321,7 +359,7 @@
 
   function downloadTicketPNG(sale) {
     const lines=sale.lineas||[];
-    const height=230+lines.length*42;
+    const height=350+lines.length*42;
     const canvas=document.createElement("canvas"); canvas.width=640; canvas.height=height;
     const ctx=canvas.getContext("2d");
     ctx.fillStyle="#ffffff";ctx.fillRect(0,0,canvas.width,canvas.height);
