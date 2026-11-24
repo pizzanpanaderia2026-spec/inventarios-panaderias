@@ -434,7 +434,9 @@ def _hoja_informe(libro, nombre_hoja, titulo, categoria, inventario, produccion,
         inicio_prod = fila + 2
         fila = _tabla(hoja, fila, "PRODUCCIÓN POR TIPO DE PAN", ["Pan", "Cantidad producida", "Importe"],
             [[x["pan"], x["cantidad"], float(Decimal(x["importe"])) if x.get("importe") is not None else "N/D"] for x in filas_prod],
-            {3: '"$"#,##0.00'})
+            {3: '"$"#,##0.00'},
+            ["TOTAL PRODUCIDO", produccion.get("total",0),
+             float(Decimal(produccion["total_importe"])) if produccion.get("total_importe") is not None else "N/D"])
         fin_prod = fila - 2
     else:
         inicio_prod = fin_prod = 0
