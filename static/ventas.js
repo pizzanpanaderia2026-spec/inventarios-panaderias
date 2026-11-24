@@ -156,7 +156,9 @@
               panaderia_id:state.bakery.id, producto_id:product.id, anclado:!product.pos_anclado
             })});
             product.pos_anclado = !product.pos_anclado;
+            if (product.pos_anclado) product.disponible = true;
             drawProducts();
+            drawNewSale();
             clearNotice();
           } catch(error) { notice(error.message); }
           finally { pin.disabled = false; }
