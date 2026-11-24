@@ -142,7 +142,7 @@
       body:JSON.stringify({panaderia_id:Number(bakery.id),fecha:fecha.value,producto_id:Number(producto.id),cantidad:Number(cantidad)})
     });
     const linea = resultado.linea || {};
-    return {...producto, precio: linea.precio_unitario ?? producto.precio, nombre: linea.producto_nombre || producto.nombre};
+    return {...producto, precio: linea.precio_unitario ?? producto.precio, nombre: linea.producto_nombre || producto.nombre, usuario_nombre: linea.usuario_nombre || producto.usuario_nombre};
   }
 
   async function cargar() {
@@ -168,7 +168,7 @@
               ? linea.precio_unitario : productoBase.precio
           };
           seleccionados.set(String(producto.id), {
-            producto: {...producto, precio: linea.precio_unitario ?? producto.precio},
+            producto: {...producto, precio: linea.precio_unitario ?? producto.precio, usuario_nombre: linea.usuario_nombre || null},
             cantidad: Number(linea.cantidad)
           });
         }
@@ -303,11 +303,9 @@
       filas.textContent = "Primero agrega productos en el catálogo.";
       return;
     }
-
     const titulo = document.createElement("h4");
     titulo.textContent = "Productos registrados";
     filas.appendChild(titulo);
-
     if (!seleccionados.size) {
       const nota = document.createElement("p");
       nota.className = "nota";
@@ -316,74 +314,73 @@
       return;
     }
 
-    seleccionados.forEach(({ producto, cantidad }, id) => {
-      const row = document.createElement("div");
-      row.className = "panel";
-      const top = document.createElement("div");
-      top.className = "barra";
-      const nombre = document.createElement("strong");
-      nombre.textContent = producto.nombre;
-      const precio = document.createElement("span");
-      precio.textContent = "$" + Number(producto.precio).toFixed(2) + " por pieza";
-      top.append(nombre, precio);
-
-      const campo = document.createElement("div");
-      campo.className = "campo";
-      const label = document.createElement("label");
-      label.textContent = "Cantidad";
-      const input = document.createElement("input");
-      input.type = "number";
-      input.min = "0";
-      input.step = "1";
-      input.inputMode = "numeric";
-      input.value = String(cantidad);
-      input.setAttribute("aria-label", "Cantidad de " + producto.nombre);
-      input.disabled = !!(cierre && cierre.estado === "cerrado");
-      input.addEventListener("change", async () => {
-        const n = Number(input.value);
-        if (Number.isInteger(n) && n >= 0) {
-          input.disabled = true;
-          try {
-            const productoGuardado = await guardarLinea(producto, n);
-            seleccionados.set(id, {producto:productoGuardado,cantidad:n});
-            subtotal.textContent = "Subtotal: $" + (Number(productoGuardado.precio) * n).toFixed(2);
-            actualizarResumen();
-            aviso("Cantidad guardada automáticamente.", "exito");
-          } catch (error) {
-            aviso("No se pudo guardar la cantidad: " + error.message);
-            await cargar();
-          } finally { input.disabled = false; }
-        } else {
-          input.value = String(cantidad);
-          aviso("La cantidad debe ser un número entero de cero o más.");
-        }
-      });
-      campo.append(label, input);
-
-      const subtotal = document.createElement("p");
-      subtotal.className = "nota";
-      subtotal.textContent = "Subtotal: $" + (Number(producto.precio) * cantidad).toFixed(2);
-      const quitar = document.createElement("button");
-      quitar.type = "button";
-      quitar.className = "secundario";
-      quitar.textContent = "Quitar";
-      quitar.disabled = !!(cierre && cierre.estado === "cerrado");
-      quitar.addEventListener("click", async () => {
-        quitar.disabled = true;
-        try {
-          await api("/api/registro/linea?panaderia_id=" + encodeURIComponent(bakery.id) +
-            "&fecha=" + encodeURIComponent(fecha.value) + "&producto_id=" + encodeURIComponent(producto.id), {method:"DELETE"});
-          seleccionados.delete(id);
-          dibujar();
-          aviso("Producto retirado del registro.", "exito");
-        } catch (error) {
-          aviso("No se pudo retirar el producto: " + error.message);
-          await cargar();
-        } finally { quitar.disabled = false; }
-      });
-      row.append(top, campo, subtotal, quitar);
-      filas.appendChild(row);
+    const tabla = document.createElement("table");
+    tabla.style.minWidth = "760px";
+    const thead = document.createElement("thead");
+    const encabezado = document.createElement("tr");
+    ["Producto","Registró","Precio unitario","Cantidad","Importe","Acciones"].forEach(texto=>{
+      const th=document.createElement("th");th.textContent=texto;encabezado.appendChild(th);
     });
+    thead.appendChild(encabezado);
+    const tbody = document.createElement("tbody");
+
+    seleccionados.forEach(({producto,cantidad},id)=>{
+      const row=document.createElement("tr");
+      const nombre=document.createElement("td");nombre.textContent=producto.nombre;
+      const responsable=document.createElement("td");responsable.textContent=producto.usuario_nombre || "No disponible";
+      const precio=document.createElement("td");precio.textContent="$"+Number(producto.precio||0).toFixed(2);
+      const cantidadCelda=document.createElement("td");
+      const input=document.createElement("input");
+      input.type="number";input.min="0";input.step="1";input.inputMode="numeric";input.value=String(cantidad);
+      input.style.width="100px";input.setAttribute("aria-label","Cantidad de "+producto.nombre);
+      input.disabled=!!(cierre&&cierre.estado==="cerrado");
+      const importe=document.createElement("td");
+      importe.textContent="$"+(Number(producto.precio||0)*cantidad).toFixed(2);
+      input.addEventListener("change",async()=>{
+        const n=Number(input.value);
+        if(!Number.isInteger(n)||n<0){input.value=String(cantidad);aviso("La cantidad debe ser un número entero de cero o más.");return;}
+        input.disabled=true;
+        try{
+          const guardado=await guardarLinea(producto,n);
+          seleccionados.set(id,{producto:guardado,cantidad:n});
+          responsable.textContent=guardado.usuario_nombre||"No disponible";
+          importe.textContent="$"+(Number(guardado.precio||0)*n).toFixed(2);
+          actualizarResumen();
+          aviso("Cantidad guardada automáticamente.","exito");
+        }catch(error){aviso("No se pudo guardar la cantidad: "+error.message);await cargar();}
+        finally{input.disabled=!!(cierre&&cierre.estado==="cerrado");}
+      });
+      cantidadCelda.appendChild(input);
+      const acciones=document.createElement("td");
+      const quitar=document.createElement("button");
+      quitar.type="button";quitar.className="secundario";quitar.textContent="Quitar";
+      quitar.disabled=!!(cierre&&cierre.estado==="cerrado");
+      quitar.addEventListener("click",async()=>{
+        quitar.disabled=true;
+        try{
+          await api("/api/registro/linea?panaderia_id="+encodeURIComponent(bakery.id)+
+            "&fecha="+encodeURIComponent(fecha.value)+"&producto_id="+encodeURIComponent(producto.id),{method:"DELETE"});
+          seleccionados.delete(id);dibujar();aviso("Producto retirado del registro.","exito");
+        }catch(error){aviso("No se pudo retirar el producto: "+error.message);await cargar();}
+        finally{quitar.disabled=!!(cierre&&cierre.estado==="cerrado");}
+      });
+      acciones.appendChild(quitar);
+      row.append(nombre,responsable,precio,cantidadCelda,importe,acciones);
+      tbody.appendChild(row);
+    });
+
+    const tfoot=document.createElement("tfoot");
+    const totalRow=document.createElement("tr");
+    const totalLabel=document.createElement("th");totalLabel.textContent="TOTAL";totalRow.appendChild(totalLabel);
+    const vacia=document.createElement("th");vacia.textContent="—";totalRow.appendChild(vacia);
+    const precioVacio=document.createElement("th");precioVacio.textContent="—";totalRow.appendChild(precioVacio);
+    const totalCantidad=document.createElement("th");totalCantidad.textContent=String([...seleccionados.values()].reduce((s,x)=>s+Number(x.cantidad||0),0));totalRow.appendChild(totalCantidad);
+    const totalImporte=document.createElement("th");totalImporte.textContent="$"+[...seleccionados.values()].reduce((s,x)=>s+Number(x.cantidad||0)*Number(x.producto.precio||0),0).toFixed(2);totalRow.appendChild(totalImporte);
+    const accionesVacias=document.createElement("th");accionesVacias.textContent="";totalRow.appendChild(accionesVacias);
+    tfoot.appendChild(totalRow);
+    tabla.append(thead,tbody,tfoot);
+    const wrapper=document.createElement("div");wrapper.style.cssText="max-width:100%;overflow-x:auto";
+    wrapper.appendChild(tabla);filas.appendChild(wrapper);
   }
 
   fecha.addEventListener("change", () => {
