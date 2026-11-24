@@ -258,7 +258,7 @@
     totalRow.appendChild(totalQty);
     const emptyPrice = document.createElement("th"); emptyPrice.textContent = "—"; totalRow.appendChild(emptyPrice);
     const totalAmount = document.createElement("th");
-    totalAmount.textContent = Number(totalImporteDia || 0).toLocaleString("es-MX",{style:"currency",currency:"MXN"});
+    totalAmount.textContent = totalImporteDia == null ? "No disponible" : Number(totalImporteDia || 0).toLocaleString("es-MX",{style:"currency",currency:"MXN"});
     totalRow.appendChild(totalAmount);
     for (let i=0;i<4;i++){const th=document.createElement("th");th.textContent="";totalRow.appendChild(th);}
     const tfoot = document.createElement("tfoot"); tfoot.appendChild(totalRow);
