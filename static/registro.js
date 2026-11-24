@@ -5,6 +5,7 @@
   if (!panel) return;
 
   let token = null, bakery = null, catalogo = [], categorias = [], cierre = null;
+  let diasEditables = 365, horasEditables = 0, adminPrincipal = false;
   let seleccionados = new Map();
   const fecha = document.getElementById("fechaRegistro");
   const filas = document.getElementById("filasRegistro");
@@ -75,12 +76,11 @@
 
   function actualizarLimitesFecha() {
     const hoy = new Date();
-    const anteayer = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate() - 2);
+    const limite = adminPrincipal ? new Date(1900,0,1) :
+      new Date(hoy.getFullYear(),hoy.getMonth(),hoy.getDate()-diasEditables);
     fecha.max = fechaLocal(hoy);
-    fecha.min = fechaLocal(anteayer);
-    if (!fecha.value || fecha.value < fecha.min || fecha.value > fecha.max) {
-      fecha.value = fecha.max;
-    }
+    fecha.min = fechaLocal(limite);
+    if (!fecha.value || fecha.value < fecha.min || fecha.value > fecha.max) fecha.value = fecha.max;
   }
 
   actualizarLimitesFecha();
@@ -149,7 +149,13 @@
     actualizarLimitesFecha();
     if (!token || !bakery || !fecha.value) return;
     try {
-      const d = await api("/api/registro?panaderia_id=" + bakery.id + "&fecha_registro=" + fecha.value);
+      const fechaSolicitada = fecha.value;
+      const d = await api("/api/registro?panaderia_id=" + bakery.id + "&fecha_registro=" + fechaSolicitada);
+      diasEditables = Number(d.dias_editables ?? diasEditables);
+      horasEditables = Number(d.horas_editables ?? 0);
+      adminPrincipal = d.admin_principal === true;
+      actualizarLimitesFecha();
+      if (fecha.value !== fechaSolicitada) return await cargar();
       cierre = d.cierre;
       seleccionados = new Map();
       (d.lineas || []).forEach(linea => {
@@ -383,7 +389,7 @@
   fecha.addEventListener("change", () => {
     actualizarLimitesFecha();
     if (fecha.value < fecha.min || fecha.value > fecha.max) {
-      aviso("Selecciona hoy o uno de los dos días calendario anteriores.");
+      aviso("La fecha seleccionada está fuera del plazo configurado para este registro.");
       return;
     }
     seleccionados.clear();
