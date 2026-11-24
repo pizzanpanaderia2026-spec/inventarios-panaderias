@@ -2058,6 +2058,44 @@ def ventas_registrar(datos: VentaPosNueva, authorization: str | None = Header(de
         raise HTTPException(status_code=503, detail="No se pudo registrar la venta. Verifica la disponibilidad e inténtalo de nuevo.")
 
 
+class VentaPosCorreccion(BaseModel):
+    lineas: list[VentaPosLineaNueva] = Field(min_length=1, max_length=200)
+
+
+@app.patch("/api/ventas/{venta_id}")
+def ventas_corregir(venta_id: int, datos: VentaPosCorreccion, authorization: str | None = Header(default=None)):
+    usuario = obtener_usuario_autenticado(authorization)
+    perfil = obtener_perfil(str(usuario.id))
+    try:
+        filas = (supabase.table("ventas_pos").select("id,panaderia_id,fecha,total")
+                 .eq("id",venta_id).limit(1).execute().data or [])
+        if not filas:
+            raise HTTPException(status_code=404, detail="No se encontró la venta.")
+        venta = filas[0]
+        panaderia_id = int(venta["panaderia_id"])
+        comprobar_permiso_local(str(usuario.id), perfil, panaderia_id, "ventas")
+        config = obtener_configuracion_edicion()
+        fecha_venta = date.fromisoformat(str(venta["fecha"])[:10])
+        if not plazo_edicion_vigente(fecha_venta, config["dias_ventas"], config["horas_ventas"]) and not es_admin_principal(perfil):
+            raise HTTPException(status_code=403, detail="Terminó el plazo configurado para corregir esta venta.")
+        ids = [x.producto_id for x in datos.lineas]
+        if len(ids) != len(set(ids)):
+            raise HTTPException(status_code=422, detail="No repitas productos en una misma venta.")
+        resultado = supabase.rpc("actualizar_venta_pos", {
+            "p_venta_id": venta_id,
+            "p_usuario_id": str(usuario.id),
+            "p_lineas": [{"producto_id":x.producto_id,"cantidad":x.cantidad} for x in datos.lineas]
+        }).execute().data
+        return {"actualizada":True,"venta":resultado}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        mensaje=str(exc).lower()
+        if "producto" in mensaje or "cantidad" in mensaje or "repet" in mensaje:
+            raise HTTPException(status_code=422,detail="La corrección contiene productos o cantidades no válidos.")
+        raise HTTPException(status_code=503, detail="No se pudo corregir la venta.")
+
+
 def obtener_ventas_pos_dia(panaderia_id: int, fecha: date):
     ventas = (supabase.table("ventas_pos")
         .select("id,numero_venta,fecha,usuario_nombre,total,creado_en")
