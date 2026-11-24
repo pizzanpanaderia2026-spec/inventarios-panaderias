@@ -35,6 +35,18 @@ jobs:
           node --check static/registro.js
           node --check static/tablas.js
           node --check static/produccion.js
+          node --check static/historial-interfaz.js
+          node --check static/ventas.js
+      - name: Comprobar JavaScript integrado en la página principal
+        run: |
+          python - <<'PY'
+          import re
+          from pathlib import Path
+          html = Path("static/index.html").read_text(encoding="utf-8")
+          scripts = re.findall(r"<script(?:\s[^>]*)?>(.*?)</script>", html, flags=re.S)
+          Path("/tmp/index-inline.js").write_text("\n".join(scripts), encoding="utf-8")
+          PY
+          node --check /tmp/index-inline.js
       - name: Verificar archivos de interfaz
         run: |
           test -s static/index.html
@@ -42,6 +54,8 @@ jobs:
           test -s static/registro.js
           test -s static/tablas.js
           test -s static/produccion.js
+          test -s static/historial-interfaz.js
+          test -s static/ventas.js
       - name: Verificar migraciones SQL incluidas
         run: |
           for migration in supabase/migrations/20261026000{1,2,3,4,5,6,7}_*.sql; do
@@ -49,3 +63,8 @@ jobs:
           done
           grep -Fq 'revoke execute on function public.rls_auto_enable() from public, anon, authenticated;' supabase/migrations/202610260003_restringir_funcion_rls_auto_enable.sql
           grep -Fq 'revoke all privileges on table public.cierres_diarios from anon, authenticated;' supabase/migrations/202610260007_restringir_acceso_directo_cierres.sql
+          test -s supabase/migrations/202611240001_pos_permisos_colores.sql
+          grep -Fq 'ALTER TABLE public.perfiles' supabase/migrations/202611240001_pos_permisos_colores.sql
+          grep -Fq 'ENABLE ROW LEVEL SECURITY' supabase/migrations/202611240001_pos_permisos_colores.sql
+          grep -Fq 'registrar_venta_pos' supabase/migrations/202611240001_pos_permisos_colores.sql
+          ! grep -Fq 'SECURITY DEFINER' supabase/migrations/202611240001_pos_permisos_colores.sql

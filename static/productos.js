@@ -105,6 +105,7 @@
     return products.filter(p=>String(p.categoria_id)===String(category.id));
   }
   function draw() {
+    const previousQuery = root.querySelector(".catalogo-busqueda")?.value || "";
     root.replaceChildren();
     const heading=document.createElement("div");heading.className="catalogo-encabezado";
     const title=document.createElement("div");
@@ -127,9 +128,9 @@
       heading.append(title);
     }
     root.append(heading);
-    const search=document.createElement("input");search.type="search";search.placeholder="Buscar categoría o producto...";search.className="catalogo-busqueda";search.addEventListener("input",()=>drawFiltered(search.value));root.append(search);
+    const search=document.createElement("input");search.type="search";search.placeholder="Buscar categoría o producto...";search.className="catalogo-busqueda";search.value=previousQuery;search.setAttribute("aria-label","Buscar categoría o producto");search.addEventListener("input",()=>drawFiltered(search.value));root.append(search);
     const list=document.createElement("div");list.id="listaCategorias";list.className="catalogo-categorias";root.append(list);
-    drawFiltered("");
+    drawFiltered(previousQuery);
   }
 
   function drawFiltered(query) {
@@ -164,7 +165,11 @@
         const protectedTag=document.createElement("small");protectedTag.className="catalogo-protegida";protectedTag.textContent="Protegida";head.append(protectedTag);
       }
       card.append(head);
-      if(openCategory===c.id){
+      const coincideCategoria = Boolean(q && c.nombre.toLocaleLowerCase("es").includes(q));
+      const coincideProducto = Boolean(q && categoryProducts(c).some(p=>p.nombre.toLocaleLowerCase("es").includes(q)));
+      const categoriaAbierta = openCategory===c.id || coincideCategoria || coincideProducto;
+      arrow.textContent=categoriaAbierta?"⌃":"›";
+      if(categoriaAbierta){
         const body=document.createElement("div");body.className="catalogo-productos";
         let rows=categoryProducts(c);
         if(q) rows=rows.filter(p=>p.nombre.toLocaleLowerCase("es").includes(q)||c.nombre.toLocaleLowerCase("es").includes(q));

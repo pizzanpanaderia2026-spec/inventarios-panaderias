@@ -126,7 +126,7 @@ def obtener_perfil(usuario_id: str):
     try:
         respuesta = (
             supabase.table("perfiles")
-            .select("id,nombre,rol,es_admin_principal")
+            .select("id,nombre,rol,es_admin_principal,permisos")
             .eq("id", usuario_id)
             .limit(1)
             .execute()
@@ -138,7 +138,12 @@ def obtener_perfil(usuario_id: str):
                 detail="Tu cuenta no tiene un perfil autorizado.",
             )
 
-        return respuesta.data[0]
+        perfil = dict(respuesta.data[0])
+        permisos = perfil.get("permisos")
+        if not isinstance(permisos, list) or not permisos:
+            permisos = ["produccion"] if perfil.get("rol") == "produccion" else ["inventarios"]
+        perfil["permisos"] = [x for x in permisos if x in ("inventarios", "produccion", "ventas")]
+        return perfil
 
     except HTTPException:
         raise
@@ -161,6 +166,7 @@ def mi_perfil(
         "id": perfil["id"],
         "nombre": perfil["nombre"],
         "rol": perfil["rol"],
+        "permisos": perfil.get("permisos", []),
         "es_admin_principal": perfil["es_admin_principal"],
     }
 
@@ -244,10 +250,12 @@ class ProductoCambio(BaseModel):
 
 
 def comprobar_acceso_panaderia(usuario_id: str, perfil: dict, panaderia_id: int, permitir_produccion: bool = False):
-    if perfil["rol"] == "produccion" and not permitir_produccion:
-        raise HTTPException(status_code=403, detail="Tu cuenta no tiene permiso para esta operación.")
-    if perfil["rol"] == "admin" and perfil["es_admin_principal"]:
+    if es_admin_principal(perfil):
         return
+    permisos = perfil.get("permisos") or (["produccion"] if perfil.get("rol") == "produccion" else ["inventarios"])
+    modulos_requeridos = {"inventarios", "produccion"} if permitir_produccion else {"inventarios"}
+    if not any(modulo in permisos for modulo in modulos_requeridos):
+        raise HTTPException(status_code=403, detail="Tu cuenta no tiene permiso para esta operación.")
     try:
         acceso = (
             supabase.table("accesos_panaderias")
@@ -1093,8 +1101,9 @@ def descargar_lista_precios(
     """Descarga bajo demanda el historial de precios que sí quedó registrado."""
     usuario = obtener_usuario_autenticado(authorization)
     perfil = obtener_perfil(str(usuario.id))
-    if perfil.get("rol") == "produccion":
-        raise HTTPException(status_code=403, detail="Tu cuenta solo tiene acceso al módulo de Producción.")
+    permisos = perfil.get("permisos") or (["produccion"] if perfil.get("rol") == "produccion" else ["inventarios"])
+    if "inventarios" not in permisos and not es_admin_principal(perfil):
+        raise HTTPException(status_code=403, detail="Tu cuenta no tiene acceso al catálogo de inventarios.")
     try:
         if es_admin_principal(perfil):
             panaderias = (
@@ -1328,6 +1337,7 @@ class CuentaEncargadoNueva(BaseModel):
     username: str = Field(min_length=3, max_length=60)
     password: str = Field(min_length=8, max_length=128)
     tipo_usuario: str = Field(default="encargado", pattern="^(encargado|produccion)$")
+    permisos: list[str] | None = Field(default=None, min_length=1, max_length=3)
     locales: list[int] = Field(min_length=1, max_length=100)
 
 
@@ -1336,7 +1346,25 @@ class CuentaEncargadoCambio(BaseModel):
     username: str = Field(min_length=3, max_length=60)
     password: str | None = Field(default=None, min_length=8, max_length=128)
     tipo_usuario: str = Field(default="encargado", pattern="^(encargado|produccion)$")
+    permisos: list[str] | None = Field(default=None, min_length=1, max_length=3)
     locales: list[int] = Field(min_length=1, max_length=100)
+
+
+MODULOS_CUENTA = {"inventarios", "produccion", "ventas"}
+
+
+def permisos_para_cuenta(datos) -> list[str]:
+    permisos = datos.permisos
+    if permisos is None:
+        permisos = ["produccion"] if datos.tipo_usuario == "produccion" else ["inventarios"]
+    permisos = list(dict.fromkeys(permisos))
+    if not permisos or any(modulo not in MODULOS_CUENTA for modulo in permisos):
+        raise HTTPException(status_code=422, detail="Selecciona al menos un módulo válido.")
+    return permisos
+
+
+def rol_compatibilidad(permisos: list[str]) -> str:
+    return "produccion" if permisos == ["produccion"] else "encargado"
 
 
 class NombreAdminCambio(BaseModel):
@@ -1347,7 +1375,7 @@ class NombreAdminCambio(BaseModel):
 def admin_listar_usuarios(authorization: str | None = Header(default=None)):
     admin, perfil_admin = exigir_admin_principal(authorization)
     try:
-        perfiles = supabase.table("perfiles").select("id,nombre,rol,es_admin_principal").execute().data
+        perfiles = supabase.table("perfiles").select("id,nombre,rol,es_admin_principal,permisos").execute().data
         accesos = supabase.table("accesos_panaderias").select("usuario_id,panaderia_id").execute().data
         locales = supabase.table("panaderias").select("id,nombre,activa").order("nombre").execute().data
         por_local = {int(x["id"]): x for x in locales}
@@ -1409,6 +1437,7 @@ def admin_listar_usuarios(authorization: str | None = Header(default=None)):
             salida.append({
                 "id": uid, "nombre": p["nombre"], "rol": p["rol"],
                 "es_admin_principal": es_admin,
+                "permisos": (p.get("permisos") or (["inventarios", "produccion", "ventas"] if es_admin else (["produccion"] if p.get("rol") == "produccion" else ["inventarios"]))),
                 "usuario": correo if es_admin else str(meta.get("pizzan_username") or correo.split("@")[0]),
                 "locales": ([{"id": int(x["id"]), "nombre": x["nombre"]} for x in locales] if es_admin else [
                     {"id": lid, "nombre": por_local[lid]["nombre"]} for lid in acceso_por_usuario.get(uid, []) if lid in por_local
@@ -1426,6 +1455,8 @@ def admin_crear_usuario(datos: CuentaEncargadoNueva, authorization: str | None =
     exigir_admin_principal(authorization)
     nombre = " ".join(datos.nombre.split())
     username = datos.username.strip().lower()
+    permisos = permisos_para_cuenta(datos)
+    rol = rol_compatibilidad(permisos)
     if not nombre:
         raise HTTPException(status_code=422, detail="Escribe un nombre.")
     if len(set(datos.locales)) != len(datos.locales):
@@ -1441,7 +1472,7 @@ def admin_crear_usuario(datos: CuentaEncargadoNueva, authorization: str | None =
             raise HTTPException(status_code=503, detail="No se pudo crear la cuenta de acceso.")
         uid = str(auth_user.id)
         try:
-            supabase.table("perfiles").insert({"id": uid, "nombre": nombre, "rol": datos.tipo_usuario, "es_admin_principal": False}).execute()
+            supabase.table("perfiles").insert({"id": uid, "nombre": nombre, "rol": rol, "es_admin_principal": False, "permisos": permisos}).execute()
             supabase.table("accesos_panaderias").insert([{"usuario_id": uid, "panaderia_id": x} for x in datos.locales]).execute()
         except Exception:
             try:
@@ -1461,6 +1492,8 @@ def admin_actualizar_usuario(usuario_id: str, datos: CuentaEncargadoCambio, auth
     exigir_admin_principal(authorization)
     nombre = " ".join(datos.nombre.split())
     username = datos.username.strip().lower()
+    permisos = permisos_para_cuenta(datos)
+    rol = rol_compatibilidad(permisos)
     if not nombre:
         raise HTTPException(status_code=422, detail="Escribe un nombre.")
     try:
@@ -1477,7 +1510,7 @@ def admin_actualizar_usuario(usuario_id: str, datos: CuentaEncargadoCambio, auth
         if datos.password:
             cambio_auth["password"] = datos.password
         supabase.auth.admin.update_user_by_id(usuario_id, cambio_auth)
-        supabase.table("perfiles").update({"nombre": nombre, "rol": datos.tipo_usuario}).eq("id", usuario_id).execute()
+        supabase.table("perfiles").update({"nombre": nombre, "rol": rol, "permisos": permisos}).eq("id", usuario_id).execute()
         supabase.table("accesos_panaderias").delete().eq("usuario_id", usuario_id).execute()
         supabase.table("accesos_panaderias").insert([{"usuario_id": usuario_id, "panaderia_id": x} for x in datos.locales]).execute()
         return {"actualizado": True}
@@ -1563,10 +1596,11 @@ class ProduccionCambio(BaseModel):
 
 
 def _perfil_con_acceso_produccion(usuario_id: str, perfil: dict, panaderia_id: int):
-    if perfil["rol"] not in ("produccion", "admin"):
-        raise HTTPException(status_code=403, detail="Tu cuenta no tiene acceso al módulo de Producción.")
-    if perfil["rol"] == "admin" and perfil.get("es_admin_principal"):
+    if es_admin_principal(perfil):
         return
+    permisos = perfil.get("permisos") or (["produccion"] if perfil.get("rol") == "produccion" else ["inventarios"])
+    if "produccion" not in permisos:
+        raise HTTPException(status_code=403, detail="Tu cuenta no tiene acceso al módulo de Producción.")
     try:
         acceso = (
             supabase.table("accesos_panaderias")
@@ -1797,3 +1831,362 @@ def descargar_produccion_excel(
         raise
     except Exception:
         raise HTTPException(status_code=503, detail="No se pudo generar el Excel de producción.")
+
+
+# Punto de venta: disponibilidad diaria y ventas individuales.
+class DisponibilidadVentaCambio(BaseModel):
+    panaderia_id: int = Field(gt=0)
+    producto_id: int = Field(gt=0)
+    disponible: bool
+
+
+class VentaPosLineaNueva(BaseModel):
+    producto_id: int = Field(gt=0)
+    cantidad: int = Field(gt=0, le=100000)
+
+
+class VentaPosNueva(BaseModel):
+    panaderia_id: int = Field(gt=0)
+    lineas: list[VentaPosLineaNueva] = Field(min_length=1, max_length=200)
+
+
+def comprobar_permiso_local(usuario_id: str, perfil: dict, panaderia_id: int, modulo: str):
+    if es_admin_principal(perfil):
+        return
+    permisos = perfil.get("permisos") or (["produccion"] if perfil.get("rol") == "produccion" else ["inventarios"])
+    if modulo not in permisos:
+        raise HTTPException(status_code=403, detail=f"Tu cuenta no tiene acceso al módulo de {modulo}.")
+    try:
+        acceso = (supabase.table("accesos_panaderias").select("panaderia_id")
+            .eq("usuario_id", usuario_id).eq("panaderia_id", panaderia_id).limit(1).execute())
+        if not acceso.data:
+            raise HTTPException(status_code=403, detail="No tienes acceso a esta panadería.")
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=503, detail="No se pudo verificar el acceso a la panadería.")
+
+
+def fecha_operativa_hoy() -> date:
+    return datetime.now(TZ_PRODUCCION).date()
+
+
+@app.get("/api/ventas/disponibilidad")
+def ventas_consultar_disponibilidad(panaderia_id: int, authorization: str | None = Header(default=None)):
+    usuario = obtener_usuario_autenticado(authorization)
+    perfil = obtener_perfil(str(usuario.id))
+    comprobar_permiso_local(str(usuario.id), perfil, panaderia_id, "ventas")
+    fecha = fecha_operativa_hoy()
+    try:
+        productos = (supabase.table("productos")
+            .select("id,nombre,precio,categoria_id,activo")
+            .eq("panaderia_id", panaderia_id).eq("activo", True).order("nombre").execute().data or [])
+        categorias = (supabase.table("categorias_productos")
+            .select("id,nombre,activa").eq("panaderia_id", panaderia_id)
+            .eq("activa", True).order("nombre").execute().data or [])
+        filas = (supabase.table("disponibilidad_ventas")
+            .select("producto_id,disponible").eq("panaderia_id", panaderia_id)
+            .eq("fecha", fecha.isoformat()).execute().data or [])
+        disponibles = {int(x["producto_id"]): bool(x["disponible"]) for x in filas}
+        for producto in productos:
+            producto["disponible"] = disponibles.get(int(producto["id"]), False)
+        return {"fecha": fecha.isoformat(), "productos": productos, "categorias": categorias}
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=503, detail="No se pudo consultar la disponibilidad de productos.")
+
+
+@app.put("/api/ventas/disponibilidad")
+def ventas_cambiar_disponibilidad(datos: DisponibilidadVentaCambio, authorization: str | None = Header(default=None)):
+    usuario = obtener_usuario_autenticado(authorization)
+    perfil = obtener_perfil(str(usuario.id))
+    comprobar_permiso_local(str(usuario.id), perfil, datos.panaderia_id, "ventas")
+    try:
+        producto = (supabase.table("productos").select("id,panaderia_id,activo")
+            .eq("id", datos.producto_id).eq("panaderia_id", datos.panaderia_id).limit(1).execute().data or [])
+        if not producto or not producto[0].get("activo"):
+            raise HTTPException(status_code=404, detail="El producto no existe o está desactivado.")
+        fecha = fecha_operativa_hoy()
+        supabase.table("disponibilidad_ventas").upsert({
+            "panaderia_id": datos.panaderia_id, "producto_id": datos.producto_id,
+            "fecha": fecha.isoformat(), "disponible": datos.disponible,
+            "actualizado_por": str(usuario.id)
+        }, on_conflict="panaderia_id,fecha,producto_id").execute()
+        return {"guardado": True, "fecha": fecha.isoformat(), "disponible": datos.disponible}
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=503, detail="No se pudo actualizar la disponibilidad.")
+
+
+@app.post("/api/ventas", status_code=201)
+def ventas_registrar(datos: VentaPosNueva, authorization: str | None = Header(default=None)):
+    usuario = obtener_usuario_autenticado(authorization)
+    perfil = obtener_perfil(str(usuario.id))
+    comprobar_permiso_local(str(usuario.id), perfil, datos.panaderia_id, "ventas")
+    ids = [linea.producto_id for linea in datos.lineas]
+    if len(ids) != len(set(ids)):
+        raise HTTPException(status_code=422, detail="No repitas productos en una misma venta.")
+    try:
+        resultado = supabase.rpc("registrar_venta_pos", {
+            "p_panaderia_id": datos.panaderia_id,
+            "p_fecha": fecha_operativa_hoy().isoformat(),
+            "p_usuario_id": str(usuario.id),
+            "p_usuario_nombre": perfil.get("nombre") or "Usuario",
+            "p_lineas": [{"producto_id": x.producto_id, "cantidad": x.cantidad} for x in datos.lineas]
+        }).execute().data
+        if isinstance(resultado, list) and resultado:
+            resultado = resultado[0]
+        return {"registrada": True, "venta": resultado}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        detalle = str(exc).lower()
+        if "disponible" in detalle or "availability" in detalle:
+            raise HTTPException(status_code=409, detail="Uno o más productos ya no están disponibles para venta hoy.")
+        raise HTTPException(status_code=503, detail="No se pudo registrar la venta. Verifica la disponibilidad e inténtalo de nuevo.")
+
+
+def obtener_ventas_pos_dia(panaderia_id: int, fecha: date):
+    ventas = (supabase.table("ventas_pos")
+        .select("id,numero_venta,fecha,usuario_nombre,total,creado_en")
+        .eq("panaderia_id", panaderia_id).eq("fecha", fecha.isoformat())
+        .order("numero_venta").execute().data or [])
+    if not ventas:
+        return []
+    ids = [int(v["id"]) for v in ventas]
+    detalles = (supabase.table("ventas_pos_detalles")
+        .select("venta_id,producto_id,producto_nombre,cantidad,precio_unitario,importe")
+        .in_("venta_id", ids).order("id").execute().data or [])
+    por_venta = {int(v["id"]): [] for v in ventas}
+    for linea in detalles:
+        por_venta.setdefault(int(linea["venta_id"]), []).append(linea)
+    for venta in ventas:
+        venta["lineas"] = por_venta.get(int(venta["id"]), [])
+    return ventas
+
+
+@app.get("/api/ventas/dia")
+def ventas_consultar_dia(panaderia_id: int, authorization: str | None = Header(default=None)):
+    usuario = obtener_usuario_autenticado(authorization)
+    perfil = obtener_perfil(str(usuario.id))
+    comprobar_permiso_local(str(usuario.id), perfil, panaderia_id, "ventas")
+    try:
+        fecha = fecha_operativa_hoy()
+        ventas = obtener_ventas_pos_dia(panaderia_id, fecha)
+        return {"fecha": fecha.isoformat(), "ventas": ventas, "total_ventas": len(ventas)}
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=503, detail="No se pudieron consultar las ventas del día.")
+
+
+@app.get("/api/ventas/resumen")
+def ventas_consultar_resumen(panaderia_id: int, authorization: str | None = Header(default=None)):
+    usuario = obtener_usuario_autenticado(authorization)
+    perfil = obtener_perfil(str(usuario.id))
+    comprobar_permiso_local(str(usuario.id), perfil, panaderia_id, "ventas")
+    try:
+        fecha = fecha_operativa_hoy()
+        ventas = obtener_ventas_pos_dia(panaderia_id, fecha)
+        resumen = {}
+        total = Decimal("0")
+        cantidad_total = 0
+        for venta in ventas:
+            for linea in venta["lineas"]:
+                pid = linea.get("producto_id")
+                clave = int(pid) if pid is not None else str(linea["producto_nombre"])
+                if clave not in resumen:
+                    resumen[clave] = {"producto_id": pid, "producto": linea["producto_nombre"], "cantidad": 0, "importe": Decimal("0")}
+                cantidad = int(linea["cantidad"])
+                importe = Decimal(str(linea["importe"]))
+                resumen[clave]["cantidad"] += cantidad
+                resumen[clave]["importe"] += importe
+                cantidad_total += cantidad
+                total += importe
+        salida = sorted(resumen.values(), key=lambda x: x["producto"].casefold())
+        for fila in salida:
+            fila["importe"] = str(fila["importe"].quantize(Decimal("0.01")))
+        return {"fecha": fecha.isoformat(), "resumen": salida, "cantidad_total": cantidad_total,
+                "importe_total": str(total.quantize(Decimal("0.01"))), "total_ventas": len(ventas)}
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=503, detail="No se pudo generar el resumen de ventas.")
+
+
+# Personalización visual de módulos: los colores no sustituyen los permisos.
+COLORES_MODULOS_PREDETERMINADOS = {
+    "ventas": "#2563EB", "produccion": "#16A34A", "inventarios": "#D97706"
+}
+
+
+@app.get("/api/colores")
+def consultar_colores(authorization: str | None = Header(default=None)):
+    usuario = obtener_usuario_autenticado(authorization)
+    obtener_perfil(str(usuario.id))
+    try:
+        filas = supabase.table("configuracion_colores").select("ventas,produccion,inventarios").eq("id", 1).limit(1).execute().data or []
+        return filas[0] if filas else COLORES_MODULOS_PREDETERMINADOS
+    except Exception:
+        raise HTTPException(status_code=503, detail="No se pudo consultar la personalización de colores.")
+
+
+class ColoresModulosCambio(BaseModel):
+    ventas: str = Field(pattern="^#[0-9A-Fa-f]{6}$")
+    produccion: str = Field(pattern="^#[0-9A-Fa-f]{6}$")
+    inventarios: str = Field(pattern="^#[0-9A-Fa-f]{6}$")
+
+
+@app.put("/api/admin/colores")
+def guardar_colores(datos: ColoresModulosCambio, authorization: str | None = Header(default=None)):
+    usuario, perfil = exigir_admin_principal(authorization)
+    try:
+        fila = {"id": 1, "ventas": datos.ventas.upper(), "produccion": datos.produccion.upper(),
+                "inventarios": datos.inventarios.upper(), "actualizado_por": str(usuario.id)}
+        supabase.table("configuracion_colores").upsert(fila, on_conflict="id").execute()
+        return {"guardado": True, "colores": {k: fila[k] for k in ("ventas", "produccion", "inventarios")}}
+    except Exception:
+        raise HTTPException(status_code=503, detail="No se pudieron guardar los colores.")
+
+
+
+
+def obtener_ventas_pos_periodo(panaderia_id: int, desde: date, hasta: date):
+    ventas = []
+    inicio = 0
+    while True:
+        pagina = (supabase.table("ventas_pos")
+            .select("id,numero_venta,fecha,usuario_nombre,total,creado_en")
+            .eq("panaderia_id", panaderia_id)
+            .gte("fecha", desde.isoformat()).lte("fecha", hasta.isoformat())
+            .order("fecha").order("numero_venta")
+            .range(inicio, inicio + 999).execute().data or [])
+        ventas.extend(pagina)
+        if len(pagina) < 1000:
+            break
+        inicio += 1000
+    if not ventas:
+        return []
+    por_venta = {int(v["id"]): [] for v in ventas}
+    ids = list(por_venta)
+    for i in range(0, len(ids), 300):
+        bloque = ids[i:i + 300]
+        detalles = (supabase.table("ventas_pos_detalles")
+            .select("venta_id,producto_id,producto_nombre,cantidad,precio_unitario,importe")
+            .in_("venta_id", bloque).order("id").execute().data or [])
+        for linea in detalles:
+            por_venta.setdefault(int(linea["venta_id"]), []).append(linea)
+    for venta in ventas:
+        venta["lineas"] = por_venta.get(int(venta["id"]), [])
+    return ventas
+
+
+def construir_resumen_ventas(ventas: list[dict]):
+    resumen = {}
+    cantidad_total = 0
+    importe_total = Decimal("0")
+    for venta in ventas:
+        for linea in venta.get("lineas", []):
+            nombre = str(linea.get("producto_nombre") or "Producto")
+            clave = (linea.get("producto_id"), nombre.casefold())
+            if clave not in resumen:
+                resumen[clave] = {"producto": nombre, "cantidad": 0, "importe": Decimal("0")}
+            cantidad = int(linea.get("cantidad") or 0)
+            importe = Decimal(str(linea.get("importe") or "0"))
+            resumen[clave]["cantidad"] += cantidad
+            resumen[clave]["importe"] += importe
+            cantidad_total += cantidad
+            importe_total += importe
+    filas = sorted(resumen.values(), key=lambda x: x["producto"].casefold())
+    for fila in filas:
+        fila["importe"] = str(fila["importe"].quantize(Decimal("0.01")))
+    return {"resumen": filas, "cantidad_total": cantidad_total,
+            "importe_total": str(importe_total.quantize(Decimal("0.01"))),
+            "total_ventas": len(ventas)}
+
+
+def validar_periodo_ventas(desde: date, hasta: date):
+    if desde > hasta:
+        raise HTTPException(status_code=422, detail="La fecha inicial no puede ser posterior a la fecha final.")
+    if hasta > fecha_operativa_hoy():
+        raise HTTPException(status_code=422, detail="No puedes consultar ventas de fechas futuras.")
+    if (hasta - desde).days > 3649:
+        raise HTTPException(status_code=422, detail="El periodo de ventas no puede superar diez años.")
+
+
+@app.get("/api/ventas/historial")
+def ventas_consultar_historial(panaderia_id: int, desde: date, hasta: date,
+                               authorization: str | None = Header(default=None)):
+    usuario = obtener_usuario_autenticado(authorization)
+    perfil = obtener_perfil(str(usuario.id))
+    comprobar_permiso_local(str(usuario.id), perfil, panaderia_id, "ventas")
+    validar_periodo_ventas(desde, hasta)
+    try:
+        ventas = obtener_ventas_pos_periodo(panaderia_id, desde, hasta)
+        return {"desde": desde.isoformat(), "hasta": hasta.isoformat(),
+                "ventas": ventas, **construir_resumen_ventas(ventas)}
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=503, detail="No se pudo consultar el historial de ventas.")
+
+
+@app.get("/api/ventas/historial/excel")
+def ventas_descargar_historial_excel(panaderia_id: int, desde: date, hasta: date,
+                                     authorization: str | None = Header(default=None)):
+    usuario = obtener_usuario_autenticado(authorization)
+    perfil = obtener_perfil(str(usuario.id))
+    comprobar_permiso_local(str(usuario.id), perfil, panaderia_id, "ventas")
+    validar_periodo_ventas(desde, hasta)
+    try:
+        ventas = obtener_ventas_pos_periodo(panaderia_id, desde, hasta)
+        datos = construir_resumen_ventas(ventas)
+        libro = Workbook()
+        resumen = libro.active
+        resumen.title = "Resumen"
+        resumen.append(["Producto", "Cantidad", "Importe"])
+        for fila in datos["resumen"]:
+            resumen.append([fila["producto"], fila["cantidad"], float(Decimal(fila["importe"]))])
+        resumen.append(["TOTAL GENERAL", datos["cantidad_total"], float(Decimal(datos["importe_total"]))])
+        resumen.freeze_panes = "A2"
+        resumen.auto_filter.ref = resumen.dimensions
+        resumen.column_dimensions["A"].width = 36
+        resumen.column_dimensions["B"].width = 16
+        resumen.column_dimensions["C"].width = 18
+        for row in resumen.iter_rows(min_row=2, min_col=3, max_col=3):
+            row[0].number_format = '"$"#,##0.00'
+
+        detalle = libro.create_sheet("Ventas")
+        detalle.append(["Fecha", "Venta", "Hora", "Registró", "Producto", "Cantidad", "Precio unitario", "Importe"])
+        for venta in ventas:
+            hora = ""
+            if venta.get("creado_en"):
+                marca = datetime.fromisoformat(str(venta["creado_en"]).replace("Z", "+00:00"))
+                if marca.tzinfo is None:
+                    marca = marca.replace(tzinfo=timezone.utc)
+                hora = marca.astimezone(TZ_PRODUCCION).strftime("%H:%M")
+            for linea in venta.get("lineas", []):
+                detalle.append([venta["fecha"], "Venta #" + str(venta["numero_venta"]), hora,
+                    venta.get("usuario_nombre") or "Usuario", linea["producto_nombre"],
+                    int(linea["cantidad"]), float(Decimal(str(linea["precio_unitario"]))),
+                    float(Decimal(str(linea["importe"])) )])
+        detalle.freeze_panes = "A2"
+        detalle.auto_filter.ref = detalle.dimensions
+        for col, width in {"A":14,"B":14,"C":12,"D":22,"E":34,"F":13,"G":18,"H":18}.items():
+            detalle.column_dimensions[col].width = width
+        for row in detalle.iter_rows(min_row=2, min_col=7, max_col=8):
+            for cell in row:
+                cell.number_format = '"$"#,##0.00'
+        salida = BytesIO()
+        libro.save(salida)
+        salida.seek(0)
+        nombre = f"ventas_{panaderia_id}_{desde.isoformat()}_{hasta.isoformat()}.xlsx"
+        return StreamingResponse(salida, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": f'attachment; filename="{nombre}"'})
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=503, detail="No se pudo generar el Excel del historial de ventas.")
+

@@ -233,6 +233,21 @@
 
   function renderTables(data) {
     const host = el("div", null, "historial-tablas");
+    if (category === "ventas") {
+      addTable(host, "Ventas por producto", ["Producto", "Cantidad", "Importe"],
+        (data.resumen || []).map(x => [x.producto, formatNumber(x.cantidad), formatMoney(x.importe)]),
+        ["TOTAL", formatNumber(data.cantidad_total), formatMoney(data.importe_total)]);
+      const rows = [];
+      (data.ventas || []).forEach(venta => {
+        const hora = venta.creado_en ? new Date(venta.creado_en).toLocaleTimeString("es-MX", {hour:"2-digit",minute:"2-digit"}) : "";
+        (venta.lineas || []).forEach(linea => rows.push([
+          venta.fecha, "Venta #" + venta.numero_venta, hora, venta.usuario_nombre || "Usuario",
+          linea.producto_nombre, formatNumber(linea.cantidad), formatMoney(linea.precio_unitario), formatMoney(linea.importe)
+        ]));
+      });
+      addTable(host, "Detalle de ventas", ["Fecha", "Venta", "Hora", "Registró", "Producto", "Cantidad", "Precio unitario", "Importe"], rows);
+      return host;
+    }
     const inv = data.inventario, prod = data.produccion;
     if (category === "inventario" || category === "analisis") {
       addTable(host, "Inventario por tipo de pan", ["Pan", "Cantidad", "Importe"],
@@ -306,6 +321,12 @@
   }
   function renderCharts(data) {
     const host = el("div", null, "historial-graficas");
+    if (category === "ventas") {
+      host.appendChild(chartSVG("Importe vendido por producto",
+        [{name:"Importe", values:(data.resumen || []).map(x => Number(x.importe))}],
+        (data.resumen || []).map(x => x.producto)));
+      return host;
+    }
     if (category === "inventario" || category === "analisis") {
       host.appendChild(chartSVG("Inventario por tipo de pan",
         [{ name: "Cantidad", values: data.inventario.por_producto.map(x => x.cantidad) }],
@@ -367,7 +388,8 @@
   }
   function render(data) {
     result.replaceChildren();
-    const empty = category === "inventario" ? !data.inventario.por_producto.length :
+    const empty = category === "ventas" ? !(data.resumen || []).length :
+      category === "inventario" ? !data.inventario.por_producto.length :
       category === "produccion" ? !data.produccion.por_pan.length :
       !data.inventario.por_producto.length && !data.produccion.por_pan.length;
     if (empty) {
@@ -381,10 +403,9 @@
     }
   }
   function queryString(q) {
-    const params = new URLSearchParams({
-      panaderia_id: String(bakery.id), categoria: category, tipo: period,
-      desde: q.start, hasta: q.end
-    });
+    const params = category === "ventas"
+      ? new URLSearchParams({panaderia_id:String(bakery.id),desde:q.start,hasta:q.end})
+      : new URLSearchParams({panaderia_id:String(bakery.id),categoria:category,tipo:period,desde:q.start,hasta:q.end});
     return params.toString();
   }
   async function api(url, asBlob = false) {
@@ -404,11 +425,16 @@
     result.replaceChildren(el("p", "Consultando información histórica…", "nota"));
     summary.textContent = "Consultando " + category + " · " + q.start + " a " + q.end;
     try {
-      const data = await api("/api/historial/informe?" + queryString(q));
+      const data = category === "ventas"
+        ? await api("/api/ventas/historial?" + queryString(q))
+        : await api("/api/historial/informe?" + queryString(q));
       lastQuery = q; lastData = data;
-      summary.textContent = data.dias_consultados + " días consultados · " + (data.resumen_only ? "Resumen optimizado" : "Detalle disponible");
+      summary.textContent = category === "ventas"
+        ? (data.total_ventas || 0) + " ventas · " + formatNumber(data.cantidad_total) + " piezas · " + formatMoney(data.importe_total)
+        : data.dias_consultados + " días consultados · " + (data.resumen_only ? "Resumen optimizado" : "Detalle disponible");
       render(data);
-      const hasRecords = category === "inventario" ? data.inventario.por_producto.length > 0 :
+      const hasRecords = category === "ventas" ? (data.resumen || []).length > 0 :
+        category === "inventario" ? data.inventario.por_producto.length > 0 :
         category === "produccion" ? data.produccion.por_pan.length > 0 :
         data.inventario.por_producto.length > 0 || data.produccion.por_pan.length > 0;
       downloadButton.disabled = !hasRecords;
@@ -425,7 +451,9 @@
     const oldText = downloadButton.textContent;
     downloadButton.textContent = "Generando Excel…";
     try {
-      const blob = await api("/api/historial/informe/excel?" + queryString(lastQuery), true);
+      const blob = category === "ventas"
+        ? await api("/api/ventas/historial/excel?" + queryString(lastQuery), true)
+        : await api("/api/historial/informe/excel?" + queryString(lastQuery), true);
       const href = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = href;
@@ -446,22 +474,21 @@
   window.iniciarHistorial = function (session, local, profile) {
     token = session && session.access_token;
     bakery = local;
-    const role = String(profile && profile.rol || "").toLowerCase();
-    if (role === "produccion") {
-      category = "produccion";
-      panel.querySelectorAll("[data-hist-categoria]").forEach(b => {
-        const allowed = b.getAttribute("data-hist-categoria") === "produccion";
-        b.classList.toggle("oculto", !allowed);
-      });
-    } else if (role !== "admin") {
-      category = "inventario";
-      panel.querySelectorAll("[data-hist-categoria]").forEach(b => {
-        const allowed = b.getAttribute("data-hist-categoria") === "inventario";
-        b.classList.toggle("oculto", !allowed);
-      });
-    } else {
-      panel.querySelectorAll("[data-hist-categoria]").forEach(b => b.classList.remove("oculto"));
-    }
+    const admin = profile?.es_admin_principal === true && String(profile?.rol || "").toLowerCase() === "admin";
+    const permisos = Array.isArray(profile?.permisos) && profile.permisos.length
+      ? profile.permisos
+      : (String(profile?.rol || "").toLowerCase() === "produccion" ? ["produccion"] : ["inventarios"]);
+    const permitida = {
+      inventario: admin || permisos.includes("inventarios"),
+      produccion: admin || permisos.includes("produccion"),
+      ventas: admin || permisos.includes("ventas"),
+      analisis: admin
+    };
+    panel.querySelectorAll("[data-hist-categoria]").forEach(b => {
+      const key = b.getAttribute("data-hist-categoria");
+      b.classList.toggle("oculto", !permitida[key]);
+    });
+    category = permitida.inventario ? "inventario" : permitida.produccion ? "produccion" : "ventas";
     setActive("[data-hist-categoria]", "data-hist-categoria", category);
     showField();
   };
