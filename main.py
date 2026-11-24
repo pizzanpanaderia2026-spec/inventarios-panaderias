@@ -1704,6 +1704,8 @@ def crear_registro_produccion(
             "usuario_nombre": obtener_perfil(str(usuario.id))["nombre"],
         }).execute().data[0]
         return {"creado": True, "registro": fila}
+    except HTTPException:
+        raise
     except Exception:
         raise HTTPException(status_code=503, detail="No se pudo guardar el registro de producción.")
 
