@@ -9,11 +9,12 @@
   const todayISO = iso(today);
   const months = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
   let token = null, bakery = null, category = "inventario", period = "dia", view = "tablas", lastQuery = null, lastData = null;
-  const dateDay = $("histFechaDia"), from = $("histDesde"), to = $("histHasta");
+  const dateDay = $("histFechaDia"), weekDate = $("histFechaSemana"), from = $("histDesde"), to = $("histHasta");
   const result = $("historialResultadoNuevo"), summary = $("histResumenConsulta");
   const consultButton = $("histConsultar"), downloadButton = $("histDescargarExcel");
-  [dateDay, from, to].forEach(el => { el.max = todayISO; });
+  [dateDay, weekDate, from, to].forEach(el => { if (el) el.max = todayISO; });
   dateDay.value = todayISO;
+  if (weekDate) weekDate.value = todayISO;
   to.value = todayISO;
   let selectedMonth = today.getMonth() + 1;
   const monthGrid = $("histMesOpciones");
@@ -72,6 +73,7 @@
     });
     const messages = {
       dia: "Consulta únicamente los registros de la fecha seleccionada.",
+      semana: "Consulta de lunes a domingo de la semana seleccionada; la semana actual llega hasta hoy.",
       mes: "Consulta el mes completo. En el mes actual se consideran los días transcurridos.",
       anio: "Consulta el año seleccionado. Para el año actual se consideran los días transcurridos.",
       periodo: "Selecciona un intervalo personalizado. Hasta 365 días se genera el detalle diario; periodos mayores generan un resumen para cuidar los recursos."
@@ -108,6 +110,7 @@
     $("histEstadoDescarga").textContent = "Vuelve a consultar para descargar los filtros actuales.";
   }
   dateDay.addEventListener("change", invalidateQuery);
+  weekDate?.addEventListener("change", invalidateQuery);
   yearSelect.addEventListener("change", invalidateQuery);
   from.addEventListener("change", () => {
     invalidateQuery();
@@ -128,6 +131,15 @@
     let start, end;
     if (period === "dia") {
       start = end = dateDay.value;
+    } else if (period === "semana") {
+      if (!weekDate?.value) throw new Error("Selecciona una fecha de la semana.");
+      const elegido = new Date(weekDate.value + "T12:00:00");
+      const lunes = new Date(elegido);
+      lunes.setDate(elegido.getDate() - ((elegido.getDay() + 6) % 7));
+      const domingo = new Date(lunes);
+      domingo.setDate(lunes.getDate() + 6);
+      start = iso(lunes);
+      end = iso(domingo) > todayISO ? todayISO : iso(domingo);
     } else if (period === "mes") {
       const y = Number(yearSelect.value), m = selectedMonth;
       start = y + "-" + pad(m) + "-01";
@@ -412,7 +424,12 @@
     const response = await fetch(url, { headers: { Authorization: "Bearer " + token, Accept: asBlob ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" : "application/json" } });
     if (!response.ok) {
       const error = await response.json().catch(() => ({}));
-      throw new Error(error.detail || "No se pudo completar la consulta.");
+      const detail = error.detail;
+      const message = typeof detail === "string" ? detail :
+        Array.isArray(detail) ? detail.map(x => x?.msg || x?.message || JSON.stringify(x)).join(" · ") :
+        detail && typeof detail === "object" ? (detail.message || detail.msg || JSON.stringify(detail)) :
+        "No se pudo completar la consulta.";
+      throw new Error(message);
     }
     return asBlob ? response.blob() : response.json();
   }

@@ -9,7 +9,16 @@
 
   <style>
     * { box-sizing: border-box; }
-    :root { --color-ventas:#2563EB; --color-produccion:#16A34A; --color-inventarios:#D97706; }
+    :root {
+      --color-ventas:#B9D7EA; --color-produccion:#B9DCC6;
+      --color-inventarios:#F2C99B; --color-administracion:#D8CBE8;
+      --theme-color:#DCE5DF;
+    }
+    body { --theme-color:#DCE5DF; }
+    body[data-theme="ventas"] { --theme-color:var(--color-ventas); }
+    body[data-theme="produccion"] { --theme-color:var(--color-produccion); }
+    body[data-theme="inventarios"] { --theme-color:var(--color-inventarios); }
+    body[data-theme="administracion"] { --theme-color:var(--color-administracion); }
 
     body {
       margin: 0;
@@ -277,6 +286,29 @@
       #panelHistorial .historial-grafica { padding:8px; }
       #panelHistorial .historial-grafica svg { min-width:520px; }
       #panelHistorial .historial-grafica { overflow-x:auto; }
+    }
+    /* Temas suaves por módulo; los apartados compartidos mantienen un tono neutro. */
+    body { background:#F6F8F6; color:#34413A; }
+    header { background:var(--theme-color)!important; color:#2F4038!important; transition:background-color .18s ease; }
+    button:not(.secundario):not(.boton-ver-contrasena) { background:var(--theme-color); color:#2F4038; border:1px solid #0000000D; }
+    button:not(.secundario):not(.boton-ver-contrasena):hover { filter:brightness(.97); }
+    .boton-seccion { background:#E9EFEB!important; color:#43534A!important; }
+    .boton-seccion.activo { background:var(--theme-color)!important; color:#2F4038!important; outline:2px solid #82998B; outline-offset:2px; }
+    .boton-seccion:not(.activo) { background:#E9EFEB!important; }
+    #panelVentas > h3,#panelProduccion > h3,#panelRegistro > h3 { border-left-color:var(--theme-color)!important; }
+    #panelTablas > h3,#panelProductos > h3,#panelHistorial h3 { border-left-color:#C8D5CD!important; }
+    input:focus,select:focus,textarea:focus { outline:2px solid #A7BCAF; outline-offset:1px; border-color:#91A99A; }
+    .pos-anclar { padding:8px 12px; min-width:88px; white-space:nowrap; }
+    @media(max-width:600px) {
+      header { padding:18px 12px; }
+      main { width:min(100% - 16px,1200px); margin:14px auto; }
+      .panel { padding:14px; border-radius:12px; }
+      .menu-secciones { gap:8px; margin:16px 0; }
+      .boton-seccion { min-height:50px; padding:10px 8px; }
+      .pos-producto-disponibilidad { flex-wrap:wrap; }
+      .pos-producto-info { flex:1 1 100%; }
+      .pos-switch-label { flex:1 1 auto; }
+      .pos-anclar { flex:0 0 auto; }
     }
   </style>
 <style>
@@ -671,6 +703,7 @@
             <h4>Tipo de consulta</h4>
             <div class="historial-periodos" role="group" aria-label="Tipo de consulta">
               <button type="button" class="historial-periodo activo" data-hist-periodo="dia" aria-pressed="true">Día</button>
+              <button type="button" class="historial-periodo" data-hist-periodo="semana" aria-pressed="false">Semana</button>
               <button type="button" class="historial-periodo" data-hist-periodo="mes" aria-pressed="false">Mes</button>
               <button type="button" class="historial-periodo" data-hist-periodo="anio" aria-pressed="false">Año</button>
               <button type="button" class="historial-periodo" data-hist-periodo="periodo" aria-pressed="false">Periodo</button>
@@ -680,6 +713,10 @@
               <div class="campo" data-hist-campo="dia">
                 <label for="histFechaDia">Selecciona la fecha</label>
                 <input id="histFechaDia" type="date">
+              </div>
+              <div class="campo oculto" data-hist-campo="semana">
+                <label for="histFechaSemana">Selecciona cualquier día de la semana</label>
+                <input id="histFechaSemana" type="date">
               </div>
               <div class="historial-campos-dobles oculto" data-hist-campo="mes">
                 <div class="campo">
@@ -749,7 +786,8 @@
             <p class="nota">Elige un color para identificar cada módulo. El cambio se reflejará en los botones y encabezados de todas las cuentas.</p>
             <div class="campo"><label for="adminColorVentas">Ventas</label><input id="adminColorVentas" type="color" value="#2563EB"></div>
             <div class="campo"><label for="adminColorProduccion">Producción</label><input id="adminColorProduccion" type="color" value="#16A34A"></div>
-            <div class="campo"><label for="adminColorInventarios">Inventarios</label><input id="adminColorInventarios" type="color" value="#D97706"></div>
+            <div class="campo"><label for="adminColorInventarios">Registro de inventarios</label><input id="adminColorInventarios" type="color" value="#F2C99B"></div>
+            <div class="campo"><label for="adminColorAdministracion">Administración</label><input id="adminColorAdministracion" type="color" value="#D8CBE8"></div>
             <button id="adminColoresGuardar" type="button">Guardar colores</button>
           </div>
           <div id="adminVistaEdicion" class="oculto">
@@ -836,7 +874,7 @@
   <script src="/static/produccion.js?v=dias-editables-20261123-1"></script>
   <script src="/static/tablas.js?v=produccion-tablas-20261123-1"></script>
   <script src="/static/historial-inventarios.js?v=3"></script>
-  <script src="/static/historial-interfaz.js?v=historial-real-20261122-2"></script>
+  <script src="/static/historial-interfaz.js?v=historial-semana-ventas-20261124-3"></script>
   <script>
     // CONFIGURACIÓN DE SUPABASE
     const SUPABASE_URL = "https://fjthttvprmjrfmmsnxer.supabase.co";
@@ -848,6 +886,30 @@
       SUPABASE_URL,
       SUPABASE_PUBLIC_KEY
     );
+    const fetchOriginal = window.fetch.bind(window);
+    let renovacionSesionEnCurso = null;
+    window.fetch = async function(input, init = {}) {
+      const response = await fetchOriginal(input, init);
+      const url = typeof input === "string" ? input : (input && input.url) || "";
+      if (response.status !== 401 || !url.startsWith("/api/")) return response;
+      try {
+        if (!renovacionSesionEnCurso) {
+          renovacionSesionEnCurso = clienteSupabase.auth.refreshSession()
+            .then(({data,error}) => {
+              if (error || !data.session) return null;
+              sesionActual = data.session;
+              return data.session;
+            }).finally(() => { renovacionSesionEnCurso = null; });
+        }
+        const nuevaSesion = await renovacionSesionEnCurso;
+        if (!nuevaSesion || typeof input !== "string") return response;
+        const headers = new Headers(init.headers || {});
+        headers.set("Authorization", "Bearer " + nuevaSesion.access_token);
+        return await fetchOriginal(input, {...init, headers});
+      } catch (_) {
+        return response;
+      }
+    };
 
     const pantallaLogin = document.getElementById("pantallaLogin");
     const pantallaPanaderias = document.getElementById("pantallaPanaderias");
@@ -858,6 +920,22 @@
     let panaderiasAutorizadas = [];
     let panaderiaSeleccionada = null;
     let sesionActual = null;
+    clienteSupabase.auth.onAuthStateChange((evento, sesion) => {
+      if (sesion && ["SIGNED_IN","TOKEN_REFRESHED","USER_UPDATED"].includes(evento)) sesionActual = sesion;
+    });
+    function detalleComoTexto(detalle, respaldo = "No se pudo completar la operación.") {
+      if (typeof detalle === "string" && detalle.trim()) return detalle;
+      if (Array.isArray(detalle)) {
+        const partes = detalle.map(item => {
+          if (typeof item === "string") return item;
+          if (item && typeof item === "object") return item.msg || item.message || JSON.stringify(item);
+          return String(item);
+        }).filter(Boolean);
+        if (partes.length) return partes.join(" · ");
+      }
+      if (detalle && typeof detalle === "object") return detalle.message || detalle.msg || JSON.stringify(detalle);
+      return respaldo;
+    }
 
     function mostrarPantalla(pantalla) {
       pantallaLogin.classList.add("oculto");
@@ -889,7 +967,7 @@
 
       if (!respuesta.ok) {
         const error = new Error(
-          datos.detail || "No se pudo consultar la información."
+          detalleComoTexto(datos.detail, "No se pudo consultar la información.")
         );
         error.status = respuesta.status;
         throw error;
@@ -1197,8 +1275,10 @@
     function tieneModulo(modulo) { return esAdministrador() || permisosActuales().includes(modulo); }
     function puedeVerProduccion() { return tieneModulo("produccion"); }
     function aplicarColoresModulos(colores) {
-      const defaults={ventas:"#2563EB",produccion:"#16A34A",inventarios:"#D97706"};
+      const defaults={ventas:"#B9D7EA",produccion:"#B9DCC6",inventarios:"#F2C99B",administracion:"#D8CBE8"};
       Object.entries(defaults).forEach(([key,value])=>document.documentElement.style.setProperty("--color-"+key,colores?.[key]||value));
+      const campos={ventas:"adminColorVentas",produccion:"adminColorProduccion",inventarios:"adminColorInventarios",administracion:"adminColorAdministracion"};
+      Object.entries(campos).forEach(([key,id])=>{const input=document.getElementById(id);if(input)input.value=colores?.[key]||defaults[key];});
     }
     async function cargarColoresModulos() {
       try { aplicarColoresModulos(await consultarBackend("/api/colores",sesionActual.access_token)); }
@@ -1220,6 +1300,8 @@
       if(!seccionPermitida(idSeccion)) return;
       const secciones=["panelRegistro","panelVentas","panelTablas","panelProductos","panelHistorial","panelAdministracion","panelProduccion"];
       secciones.forEach(id=>{const panel=document.getElementById(id);if(!panel)return;const activa=id===idSeccion;panel.classList.toggle("seccion-activa",activa);panel.classList.toggle("oculto",!activa);panel.setAttribute("aria-hidden",activa?"false":"true");});
+      const temas={panelVentas:"ventas",panelProduccion:"produccion",panelRegistro:"inventarios",panelAdministracion:"administracion"};
+      document.body.dataset.theme=temas[idSeccion]||"compartido";
       document.querySelectorAll(".boton-seccion").forEach(b=>{const activo=b.dataset.seccion===idSeccion;b.classList.toggle("activo",activo);b.setAttribute("aria-pressed",activo?"true":"false");});
     }
     document.querySelectorAll(".boton-seccion").forEach(boton=>boton.addEventListener("click",()=>mostrarSeccion(boton.dataset.seccion)));
@@ -1396,7 +1478,7 @@
         }
       });
       const datos = await respuesta.json().catch(() => ({}));
-      if (!respuesta.ok) throw new Error(datos.detail || "No se pudo completar la operación.");
+      if (!respuesta.ok) throw new Error(detalleComoTexto(datos.detail, "No se pudo completar la operación."));
       return datos;
     }
     function adminMensaje(texto, tipo = "error") {
@@ -1628,7 +1710,7 @@
     });
     document.getElementById("adminColoresVolver").addEventListener("click", () => adminVista("inicio"));
     document.getElementById("adminColoresGuardar").addEventListener("click", async () => {
-      const colores = {ventas:document.getElementById("adminColorVentas").value,produccion:document.getElementById("adminColorProduccion").value,inventarios:document.getElementById("adminColorInventarios").value};
+      const colores = {ventas:document.getElementById("adminColorVentas").value,produccion:document.getElementById("adminColorProduccion").value,inventarios:document.getElementById("adminColorInventarios").value,administracion:document.getElementById("adminColorAdministracion").value};
       try {
         await adminFetch("/api/admin/colores", {method:"PUT",body:JSON.stringify(colores)});
         aplicarColoresModulos(colores); adminMensaje("Colores guardados correctamente.", "exito");
@@ -1728,5 +1810,26 @@
 
     iniciarAplicacion();
   </script>
+<style id="tema-pastel-final">
+  body[data-theme] header { background:var(--theme-color)!important; color:#2F4038!important; }
+  body[data-theme] button:not(.secundario):not(.boton-ver-contrasena) {
+    background:var(--theme-color)!important; color:#2F4038!important; border-color:#00000012!important;
+  }
+  body[data-theme] .boton-seccion:not(.activo) { background:#E9EFEB!important; color:#43534A!important; }
+  body[data-theme] .boton-seccion.activo { background:var(--theme-color)!important; color:#2F4038!important; outline:2px solid #82998B; outline-offset:2px; }
+  body[data-theme] .boton-ver-contrasena { color:#43534A!important; }
+  body[data-theme] #panelTablas > h3,
+  body[data-theme] #panelProductos > h3,
+  body[data-theme] #panelHistorial h3 { border-left-color:#C8D5CD!important; }
+  body[data-theme] #panelVentas > h3,
+  body[data-theme] #panelProduccion > h3,
+  body[data-theme] #panelRegistro > h3 { border-left-color:var(--theme-color)!important; }
+  @media(max-width:600px) {
+    body[data-theme] .pos-producto-disponibilidad { flex-wrap:wrap; }
+    body[data-theme] .pos-producto-info { flex:1 1 100%; }
+    body[data-theme] .pos-switch-label { flex:1 1 auto; }
+    body[data-theme] .pos-anclar { flex:0 0 auto; }
+  }
+</style>
 </body>
 </html>

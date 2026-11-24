@@ -188,12 +188,27 @@ def _agregar(inventario, produccion, desde, hasta, resumen_only=False):
 
 def _reporte(panaderia_id, categoria, tipo, desde, hasta, authorization, incluir_detalle=True):
     from main import (obtener_usuario_autenticado, obtener_perfil,
-        comprobar_acceso_panaderia, _perfil_con_acceso_produccion)
+        comprobar_acceso_panaderia, comprobar_permiso_local, _perfil_con_acceso_produccion,
+        obtener_ventas_pos_periodo, construir_resumen_ventas)
     dias = _validar(desde, hasta)
     usuario = obtener_usuario_autenticado(authorization)
     perfil = obtener_perfil(str(usuario.id))
-    if categoria not in ("inventario", "produccion", "analisis"):
+    if categoria not in ("inventario", "produccion", "ventas", "analisis"):
         raise HTTPException(status_code=422, detail="La categoría de Historial no es válida.")
+    if categoria == "ventas":
+        comprobar_permiso_local(str(usuario.id), perfil, panaderia_id, "ventas")
+        if tipo == "dia" and desde != hasta:
+            raise HTTPException(status_code=422, detail="La consulta diaria debe contener una sola fecha.")
+        if tipo == "mes" and (desde.year, desde.month) != (hasta.year, hasta.month):
+            raise HTTPException(status_code=422, detail="La consulta mensual debe corresponder a un solo mes.")
+        if tipo == "anio" and (desde.month != 1 or desde.day != 1 or desde.year != hasta.year or (hasta.month != 12 or hasta.day != 31) and hasta != datetime.now(TZ_LOCAL).date()):
+            raise HTTPException(status_code=422, detail="La consulta anual debe abarcar desde el 1 de enero hasta el cierre del año o la fecha actual.")
+        if tipo == "semana":
+            hoy = datetime.now(TZ_LOCAL).date()
+            if desde.weekday() != 0 or hasta != min(desde + timedelta(days=6), hoy):
+                raise HTTPException(status_code=422, detail="La consulta semanal debe abarcar de lunes a domingo o hasta hoy si es la semana actual.")
+        ventas = obtener_ventas_pos_periodo(panaderia_id, desde, hasta)
+        return {"ventas": ventas, **construir_resumen_ventas(ventas)}, False, dias
     if categoria == "analisis":
         from main import es_admin_principal
         if not es_admin_principal(perfil):
@@ -209,6 +224,10 @@ def _reporte(panaderia_id, categoria, tipo, desde, hasta, authorization, incluir
         raise HTTPException(status_code=422, detail="La consulta mensual debe corresponder a un solo mes.")
     if tipo == "anio" and (desde.month != 1 or desde.day != 1 or desde.year != hasta.year or (hasta.month != 12 or hasta.day != 31) and hasta != datetime.now(TZ_LOCAL).date()):
         raise HTTPException(status_code=422, detail="La consulta anual debe abarcar desde el 1 de enero hasta el cierre del año o la fecha actual.")
+    if tipo == "semana":
+        hoy = datetime.now(TZ_LOCAL).date()
+        if desde.weekday() != 0 or hasta != min(desde + timedelta(days=6), hoy):
+            raise HTTPException(status_code=422, detail="La consulta semanal debe abarcar de lunes a domingo o hasta hoy si es la semana actual.")
     try:
         inventario = _leer_inventario(panaderia_id, desde, hasta) if categoria in ("inventario", "analisis") else []
         produccion = _leer_produccion(panaderia_id, desde, hasta) if categoria in ("produccion", "analisis") else []
@@ -246,6 +265,8 @@ def _titulo_periodo(tipo, desde, hasta):
         return f"{MESES_ES[desde.month-1].capitalize()} {desde.year}"
     if tipo == "anio":
         return str(desde.year)
+    if tipo == "semana":
+        return f"Semana del {desde.strftime('%d/%m/%Y')} al {hasta.strftime('%d/%m/%Y')}"
     return f"Periodo {desde.isoformat()} a {hasta.isoformat()}"
 
 
@@ -377,6 +398,32 @@ def _crear_excel(categoria, tipo, desde, hasta, datos, resumen_only):
     libro = Workbook()
     resumen = libro.active
     resumen.title = "Resumen"
+    if categoria == "ventas":
+        resumen.append(["Producto", "Cantidad", "Importe"])
+        for fila in datos.get("resumen", []):
+            resumen.append([fila["producto"], fila["cantidad"], float(Decimal(str(fila["importe"])))])
+        resumen.append(["TOTAL GENERAL", datos.get("cantidad_total", 0), float(Decimal(str(datos.get("importe_total", "0"))))])
+        detalle = libro.create_sheet("Ventas")
+        detalle.append(["Fecha", "Venta", "Hora", "Registró", "Producto", "Cantidad", "Precio unitario", "Importe"])
+        for venta in datos.get("ventas", []):
+            hora = ""
+            if venta.get("creado_en"):
+                marca = datetime.fromisoformat(str(venta["creado_en"]).replace("Z", "+00:00"))
+                if marca.tzinfo is not None:
+                    marca = marca.astimezone(TZ_LOCAL)
+                hora = marca.strftime("%H:%M")
+            for linea in venta.get("lineas", []):
+                detalle.append([venta.get("fecha"), "Venta #" + str(venta.get("numero_venta")), hora,
+                    venta.get("usuario_nombre") or "Usuario", linea.get("producto_nombre"),
+                    int(linea.get("cantidad") or 0), float(Decimal(str(linea.get("precio_unitario") or "0"))),
+                    float(Decimal(str(linea.get("importe") or "0")))])
+        for hoja in (resumen, detalle):
+            hoja.freeze_panes = "A2"
+            hoja.auto_filter.ref = hoja.dimensions
+        salida = BytesIO()
+        libro.save(salida)
+        salida.seek(0)
+        return salida
     inv, prod = datos["inventario"], datos["produccion"]
     resumen_diario = datos.get("resumen_diario", [])
     resumen_mensual = datos.get("resumen_mensual")
@@ -398,7 +445,7 @@ def _crear_excel(categoria, tipo, desde, hasta, datos, resumen_only):
 
     if resumen_only:
         pass
-    elif tipo in ("mes", "periodo"):
+    elif tipo in ("mes", "periodo", "semana"):
         inv_map = {x["cierre"]["fecha"]: x for x in inv["dias"]}
         prod_map = {x["fecha"]: x for x in prod["dias"]}
         fechas = sorted(set(inv_map) | set(prod_map))
@@ -438,9 +485,9 @@ def _crear_excel(categoria, tipo, desde, hasta, datos, resumen_only):
 @router.get("/api/historial/informe")
 def consultar_informe_historial(panaderia_id: int, categoria: str, tipo: str, desde: date, hasta: date,
     authorization: str | None = Header(default=None)):
-    if categoria not in ("inventario", "produccion", "analisis"):
+    if categoria not in ("inventario", "produccion", "ventas", "analisis"):
         raise HTTPException(status_code=422, detail="Categoría de historial no válida.")
-    if tipo not in ("dia", "mes", "anio", "periodo"):
+    if tipo not in ("dia", "mes", "semana", "anio", "periodo"):
         raise HTTPException(status_code=422, detail="Tipo de consulta no válido.")
     datos, resumen_only, dias = _reporte(panaderia_id, categoria, tipo, desde, hasta, authorization, incluir_detalle=False)
     return {"categoria": categoria, "tipo": tipo, "desde": desde.isoformat(), "hasta": hasta.isoformat(),
@@ -450,10 +497,10 @@ def consultar_informe_historial(panaderia_id: int, categoria: str, tipo: str, de
 @router.get("/api/historial/informe/excel")
 def descargar_informe_historial(panaderia_id: int, categoria: str, tipo: str, desde: date, hasta: date,
     authorization: str | None = Header(default=None)):
-    if categoria not in ("inventario", "produccion", "analisis") or tipo not in ("dia", "mes", "anio", "periodo"):
+    if categoria not in ("inventario", "produccion", "ventas", "analisis") or tipo not in ("dia", "mes", "semana", "anio", "periodo"):
         raise HTTPException(status_code=422, detail="Los filtros del informe no son válidos.")
     datos, resumen_only, dias = _reporte(panaderia_id, categoria, tipo, desde, hasta, authorization)
-    hay_datos = bool(datos["inventario"]["por_producto"] or datos["produccion"]["por_pan"])
+    hay_datos = bool(datos.get("resumen")) if categoria == "ventas" else bool(datos["inventario"]["por_producto"] or datos["produccion"]["por_pan"])
     if not hay_datos:
         raise HTTPException(status_code=404, detail="No hay registros para la categoría y las fechas seleccionadas.")
     salida = _crear_excel(categoria, tipo, desde, hasta, datos, resumen_only)

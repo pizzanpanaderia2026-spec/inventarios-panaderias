@@ -68,3 +68,6 @@ jobs:
           grep -Fq 'ENABLE ROW LEVEL SECURITY' supabase/migrations/202611240001_pos_permisos_colores.sql
           grep -Fq 'registrar_venta_pos' supabase/migrations/202611240001_pos_permisos_colores.sql
           ! grep -Fq 'SECURITY DEFINER' supabase/migrations/202611240001_pos_permisos_colores.sql
+          test -s supabase/migrations/202611240002_pos_anclados_tema_administracion.sql
+          grep -Fq 'ADD COLUMN IF NOT EXISTS administracion' supabase/migrations/202611240002_pos_anclados_tema_administracion.sql
+          grep -Fq 'ADD COLUMN IF NOT EXISTS pos_anclado' supabase/migrations/202611240002_pos_anclados_tema_administracion.sql
