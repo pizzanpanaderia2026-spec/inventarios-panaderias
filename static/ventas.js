@@ -354,7 +354,10 @@
         tbody.append(tr);
       });
     });
-    table.append(thead,tbody); root.append(table);
+    table.append(thead,tbody);
+    table.style.minWidth="760px";
+    const wrapper=document.createElement("div");wrapper.style.cssText="max-width:100%;overflow-x:auto";
+    wrapper.append(table);root.append(wrapper);
   }
 
   function downloadTicketPNG(sale) {
