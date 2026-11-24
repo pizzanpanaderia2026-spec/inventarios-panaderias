@@ -2155,7 +2155,6 @@ def ventas_descargar_historial_excel(panaderia_id: int, desde: date, hasta: date
         resumen.column_dimensions["A"].width = 36
         resumen.column_dimensions["B"].width = 16
         resumen.column_dimensions["C"].width = 18
-        resumen["C1"].number_format = '"$"#,##0.00'
         for row in resumen.iter_rows(min_row=2, min_col=3, max_col=3):
             row[0].number_format = '"$"#,##0.00'
 
