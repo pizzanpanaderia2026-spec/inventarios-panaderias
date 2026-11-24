@@ -378,7 +378,7 @@
     ctx.font="bold 25px Arial";ctx.fillText("TICKET DE VENTA",320,82);
     ctx.textAlign="left";ctx.font="20px Arial";
     const fecha=sale.fecha||state.availabilityDate||"";
-    const hora=sale.creado_en?new Date(sale.creado_en).toLocaleTimeString("es-MX",{hour:"2-digit",minute:"2-digit"}):"";
+    const hora=formatSaleTime(sale.creado_en);
     ctx.fillText("Venta "+sale.numero_venta+"   "+fecha+"   "+hora,36,124);
     ctx.fillText("Atendió: "+(sale.usuario_nombre||"Usuario"),36,157);
     ctx.beginPath();ctx.moveTo(32,178);ctx.lineTo(608,178);ctx.stroke();
