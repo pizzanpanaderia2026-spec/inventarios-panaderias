@@ -301,7 +301,7 @@
   function showSaleEditor(sale, card) {
     card.replaceChildren();
     const title=document.createElement("h4");title.textContent="Corregir venta "+sale.numero_venta;card.append(title);
-    const note=document.createElement("p");note.className="nota";note.textContent="Modifica cantidades. El precio registrado de cada producto se conserva; los productos nuevos toman el precio vigente al momento de la corrección.";card.append(note);
+    const note=document.createElement("p");note.className="nota";note.textContent="Modifica las cantidades de esta venta. Se conserva el precio unitario registrado originalmente.";card.append(note);
     const inputs=[];
     (sale.lineas||[]).forEach(line=>{
       const row=document.createElement("div");row.className="pos-fila-venta";
