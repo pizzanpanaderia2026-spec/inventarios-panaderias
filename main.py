@@ -1096,6 +1096,7 @@ def descargar_historial_excel(
 
 @app.get("/api/productos/precios/excel")
 def descargar_lista_precios(
+    panaderia_id: int,
     authorization: str | None = Header(default=None),
 ):
     """Descarga bajo demanda el historial de precios que sí quedó registrado."""
@@ -1105,30 +1106,16 @@ def descargar_lista_precios(
     if "inventarios" not in permisos and not es_admin_principal(perfil):
         raise HTTPException(status_code=403, detail="Tu cuenta no tiene acceso al catálogo de inventarios.")
     try:
-        if es_admin_principal(perfil):
-            panaderias = (
-                supabase.table("panaderias")
-                .select("id,nombre")
-                .order("nombre")
-                .execute()
-            ).data
-        else:
-            accesos = (
-                supabase.table("accesos_panaderias")
-                .select("panaderia_id")
-                .eq("usuario_id", str(usuario.id))
-                .execute()
-            ).data
-            ids = [int(x["panaderia_id"]) for x in accesos]
-            if not ids:
-                raise HTTPException(status_code=403, detail="Tu cuenta no tiene panaderías asignadas.")
-            panaderias = (
-                supabase.table("panaderias")
-                .select("id,nombre")
-                .in_("id", ids)
-                .order("nombre")
-                .execute()
-            ).data
+        comprobar_acceso_panaderia(str(usuario.id), perfil, panaderia_id)
+        panaderias = (
+            supabase.table("panaderias")
+            .select("id,nombre")
+            .eq("id", panaderia_id)
+            .limit(1)
+            .execute()
+        ).data
+        if not panaderias:
+            raise HTTPException(status_code=404, detail="No se encontró el local seleccionado.")
 
         libro = Workbook()
         hoja = libro.active
