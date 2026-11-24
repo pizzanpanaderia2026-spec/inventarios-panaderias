@@ -460,7 +460,7 @@ def eliminar_o_desactivar_producto(
         raise HTTPException(status_code=503, detail="No se pudo eliminar o desactivar el producto.")
 
 
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timezone, timedelta
 from pydantic import model_validator
 
 
@@ -556,10 +556,9 @@ def guardar_registro(
     hoy_local = datetime.now(TZ_PRODUCCION).date()
     if registro.fecha > hoy_local:
         raise HTTPException(status_code=422, detail="No puedes registrar una fecha futura.")
-    dias_inventario = obtener_configuracion_edicion()["dias_inventario"]
-    dias_transcurridos = (hoy_local - registro.fecha).days
-    if dias_transcurridos > dias_inventario and not es_admin_principal(perfil):
-        raise HTTPException(status_code=403, detail=f"El plazo para editar inventario es de {dias_inventario} días.")
+    config_edicion = obtener_configuracion_edicion()
+    if not plazo_edicion_vigente(registro.fecha, config_edicion["dias_inventario"], config_edicion["horas_inventario"]) and not es_admin_principal(perfil):
+        raise HTTPException(status_code=403, detail="Terminó el plazo configurado para editar inventario.")
     ids = [linea.producto_id for linea in registro.lineas]
     if len(ids) != len(set(ids)):
         raise HTTPException(status_code=422, detail="No repitas el mismo producto en el registro.")
@@ -1288,18 +1287,31 @@ def exigir_admin_principal(authorization: str | None):
 
 class ConfiguracionEdicionCambio(BaseModel):
     dias_inventario: int = Field(ge=0, le=365)
+    horas_inventario: int = Field(default=0, ge=0, le=23)
     dias_produccion: int = Field(ge=0, le=365)
+    horas_produccion: int = Field(default=0, ge=0, le=23)
+    dias_ventas: int = Field(default=0, ge=0, le=365)
+    horas_ventas: int = Field(default=0, ge=0, le=23)
 
 
 def obtener_configuracion_edicion():
     try:
-        filas = supabase.table("configuracion_edicion").select("dias_inventario,dias_produccion").eq("id", 1).limit(1).execute().data or []
+        columnas = "dias_inventario,horas_inventario,dias_produccion,horas_produccion,dias_ventas,horas_ventas"
+        filas = supabase.table("configuracion_edicion").select(columnas).eq("id", 1).limit(1).execute().data or []
         if filas:
-            return {"dias_inventario": int(filas[0]["dias_inventario"]), "dias_produccion": int(filas[0]["dias_produccion"])}
-        supabase.table("configuracion_edicion").insert({"id": 1, "dias_inventario": 2, "dias_produccion": 1}).execute()
-        return {"dias_inventario": 2, "dias_produccion": 1}
+            return {k: int(filas[0].get(k) or 0) for k in ("dias_inventario","horas_inventario","dias_produccion","horas_produccion","dias_ventas","horas_ventas")}
+        valores = {"id":1,"dias_inventario":2,"horas_inventario":0,"dias_produccion":1,"horas_produccion":0,"dias_ventas":0,"horas_ventas":0}
+        supabase.table("configuracion_edicion").insert(valores).execute()
+        return {k:v for k,v in valores.items() if k != "id"}
     except Exception:
-        raise HTTPException(status_code=503, detail="No se pudo consultar la configuración de días editables.")
+        raise HTTPException(status_code=503, detail="No se pudo consultar la configuración de tolerancias de edición.")
+
+
+def plazo_edicion_vigente(fecha_registro: date, dias: int, horas: int = 0) -> bool:
+    ahora = datetime.now(TZ_PRODUCCION)
+    limite = datetime.combine(fecha_registro + timedelta(days=dias + 1), datetime.min.time()).replace(tzinfo=TZ_PRODUCCION)
+    limite += timedelta(hours=horas)
+    return fecha_registro <= ahora.date() and ahora < limite
 
 
 @app.get("/api/admin/configuracion-edicion")
@@ -1313,8 +1325,9 @@ def admin_guardar_configuracion_edicion(datos: ConfiguracionEdicionCambio, autho
     usuario, _ = exigir_admin_principal(authorization)
     try:
         supabase.table("configuracion_edicion").upsert({
-            "id": 1, "dias_inventario": datos.dias_inventario,
-            "dias_produccion": datos.dias_produccion,
+            "id": 1, "dias_inventario": datos.dias_inventario, "horas_inventario": datos.horas_inventario,
+            "dias_produccion": datos.dias_produccion, "horas_produccion": datos.horas_produccion,
+            "dias_ventas": datos.dias_ventas, "horas_ventas": datos.horas_ventas,
             "actualizado_por": str(usuario.id), "actualizado_en": datetime.now(timezone.utc).isoformat(),
         }, on_conflict="id").execute()
         return {"guardado": True, **obtener_configuracion_edicion()}
@@ -1585,6 +1598,7 @@ class ProduccionNueva(BaseModel):
     panaderia_id: int = Field(gt=0)
     fecha_produccion: date
     pan_nombre: str = Field(min_length=1, max_length=120)
+    producto_id: int | None = Field(default=None, gt=0)
     cantidad: int = Field(ge=0)
     observaciones: str | None = Field(default=None, max_length=1000)
 
@@ -1620,9 +1634,10 @@ def _perfil_con_acceso_produccion(usuario_id: str, perfil: dict, panaderia_id: i
 
 def _produccion_es_editable(fecha_produccion: str | date, dias_editables: int | None = None) -> bool:
     fecha = fecha_produccion if isinstance(fecha_produccion, date) else date.fromisoformat(str(fecha_produccion)[:10])
-    dias = obtener_configuracion_edicion()["dias_produccion"] if dias_editables is None else dias_editables
-    transcurridos = (datetime.now(TZ_PRODUCCION).date() - fecha).days
-    return 0 <= transcurridos <= dias
+    config = obtener_configuracion_edicion()
+    dias = config["dias_produccion"] if dias_editables is None else dias_editables
+    horas = config["horas_produccion"] if dias_editables is None else 0
+    return plazo_edicion_vigente(fecha, dias, horas)
 
 
 def _normalizar_pan_produccion(nombre: str) -> str:
@@ -1643,7 +1658,7 @@ def consultar_produccion(
     try:
         filas = (
             supabase.table("produccion_registros")
-            .select("id,panaderia_id,fecha_produccion,pan_nombre,cantidad,observaciones,usuario_id,usuario_nombre,registrado_en,actualizado_en")
+            .select("id,panaderia_id,fecha_produccion,pan_nombre,cantidad,precio_unitario,importe,observaciones,usuario_id,usuario_nombre,registrado_en,actualizado_en")
             .eq("panaderia_id", panaderia_id)
             .eq("fecha_produccion", fecha_produccion.isoformat())
             .order("registrado_en")
@@ -1655,11 +1670,18 @@ def consultar_produccion(
             if ids else []
         )
         nombres = {str(p["id"]): p["nombre"] for p in perfiles}
-        dias_editables = obtener_configuracion_edicion()["dias_produccion"]
+        config_edicion = obtener_configuracion_edicion()
+        total_cantidad = 0
+        total_importe = Decimal("0")
         for fila in filas:
             fila["usuario_nombre"] = fila.get("usuario_nombre") or nombres.get(str(fila.get("usuario_id")), "Usuario")
-            fila["editable"] = _produccion_es_editable(fila["fecha_produccion"], dias_editables)
-        return {"registros": filas, "total": len(filas), "dias_editables": dias_editables}
+            fila["editable"] = _produccion_es_editable(fila["fecha_produccion"])
+            total_cantidad += int(fila.get("cantidad") or 0)
+            if fila.get("importe") is not None:
+                total_importe += Decimal(str(fila["importe"]))
+        return {"registros": filas, "total": len(filas), "dias_editables": config_edicion["dias_produccion"],
+                "horas_editables": config_edicion["horas_produccion"], "total_cantidad": total_cantidad,
+                "total_importe": str(total_importe.quantize(Decimal("0.01")))}
     except HTTPException:
         raise
     except Exception:
@@ -1675,21 +1697,33 @@ def crear_registro_produccion(
     perfil = obtener_perfil(str(usuario.id))
     _perfil_con_acceso_produccion(str(usuario.id), perfil, datos.panaderia_id)
     ahora_local = datetime.now(TZ_PRODUCCION).date()
-    dias_produccion = obtener_configuracion_edicion()["dias_produccion"]
-    dias_transcurridos = (ahora_local - datos.fecha_produccion).days
-    if dias_transcurridos < 0:
+    config_edicion = obtener_configuracion_edicion()
+    if datos.fecha_produccion > ahora_local:
         raise HTTPException(status_code=422, detail="No puedes registrar producción en una fecha futura.")
-    if dias_transcurridos > dias_produccion:
-        raise HTTPException(status_code=403, detail=f"El plazo para registrar o editar producción es de {dias_produccion} días.")
+    if not plazo_edicion_vigente(datos.fecha_produccion, config_edicion["dias_produccion"], config_edicion["horas_produccion"]):
+        raise HTTPException(status_code=403, detail="Terminó el plazo configurado para registrar o editar producción.")
     pan = _normalizar_pan_produccion(datos.pan_nombre)
     if not pan:
         raise HTTPException(status_code=422, detail="Escribe el nombre del pan.")
     try:
+        producto = None
+        if datos.producto_id:
+            productos_encontrados = (supabase.table("productos").select("id,nombre,precio,activo")
+                .eq("id", datos.producto_id).eq("panaderia_id", datos.panaderia_id).limit(1).execute().data or [])
+            producto = productos_encontrados[0] if productos_encontrados else None
+        else:
+            productos_encontrados = (supabase.table("productos").select("id,nombre,precio,activo")
+                .eq("panaderia_id", datos.panaderia_id).ilike("nombre", pan).limit(10).execute().data or [])
+            producto = next((x for x in productos_encontrados if _normalizar_pan_produccion(x["nombre"]).casefold() == pan.casefold()), None)
+        precio_unitario = Decimal(str(producto["precio"])) if producto and producto.get("activo") else None
+        importe = (precio_unitario * datos.cantidad).quantize(Decimal("0.01")) if precio_unitario is not None else None
         fila = supabase.table("produccion_registros").insert({
             "panaderia_id": datos.panaderia_id,
             "fecha_produccion": datos.fecha_produccion.isoformat(),
             "pan_nombre": pan,
             "cantidad": datos.cantidad,
+            "precio_unitario": str(precio_unitario) if precio_unitario is not None else None,
+            "importe": str(importe) if importe is not None else None,
             "observaciones": (datos.observaciones or "").strip() or None,
             "usuario_id": str(usuario.id),
             "usuario_nombre": obtener_perfil(str(usuario.id))["nombre"],
@@ -1710,7 +1744,7 @@ def actualizar_registro_produccion(
     try:
         encontrado = (
             supabase.table("produccion_registros")
-            .select("id,panaderia_id,fecha_produccion")
+            .select("id,panaderia_id,fecha_produccion,precio_unitario")
             .eq("id", registro_id).limit(1).execute().data
         )
         if not encontrado:
@@ -1727,6 +1761,7 @@ def actualizar_registro_produccion(
             .update({
                 "pan_nombre": pan,
                 "cantidad": datos.cantidad,
+                "importe": (str((Decimal(str(actual["precio_unitario"])) * datos.cantidad).quantize(Decimal("0.01"))) if actual.get("precio_unitario") is not None else None),
                 "observaciones": (datos.observaciones or "").strip() or None,
                 "actualizado_en": datetime.now(timezone.utc).isoformat(),
             })
@@ -2129,6 +2164,7 @@ def obtener_ventas_pos_periodo(panaderia_id: int, desde: date, hasta: date):
 
 def construir_resumen_ventas(ventas: list[dict]):
     resumen = {}
+    por_precio = {}
     cantidad_total = 0
     importe_total = Decimal("0")
     for venta in ventas:
@@ -2138,17 +2174,25 @@ def construir_resumen_ventas(ventas: list[dict]):
             if clave not in resumen:
                 resumen[clave] = {"producto": nombre, "cantidad": 0, "importe": Decimal("0")}
             cantidad = int(linea.get("cantidad") or 0)
+            precio = Decimal(str(linea.get("precio_unitario") or "0")).quantize(Decimal("0.01"))
             importe = Decimal(str(linea.get("importe") or "0"))
             resumen[clave]["cantidad"] += cantidad
             resumen[clave]["importe"] += importe
+            if precio not in por_precio:
+                por_precio[precio] = {"precio":precio,"cantidad":0,"importe":Decimal("0")}
+            por_precio[precio]["cantidad"] += cantidad
+            por_precio[precio]["importe"] += importe
             cantidad_total += cantidad
             importe_total += importe
     filas = sorted(resumen.values(), key=lambda x: x["producto"].casefold())
     for fila in filas:
         fila["importe"] = str(fila["importe"].quantize(Decimal("0.01")))
-    return {"resumen": filas, "cantidad_total": cantidad_total,
-            "importe_total": str(importe_total.quantize(Decimal("0.01"))),
-            "total_ventas": len(ventas)}
+    filas_precio = [{"precio":str(x["precio"]), "cantidad":x["cantidad"],
+                     "importe":str(x["importe"].quantize(Decimal("0.01")))}
+                    for x in sorted(por_precio.values(), key=lambda x:x["precio"])]
+    return {"resumen":filas,"por_precio":filas_precio,"cantidad_total":cantidad_total,
+            "importe_total":str(importe_total.quantize(Decimal("0.01"))),
+            "total_ventas":len(ventas),"operaciones":len(ventas)}
 
 
 def validar_periodo_ventas(desde: date, hasta: date):
