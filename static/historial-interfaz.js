@@ -429,7 +429,9 @@
         ? await api("/api/ventas/historial?" + queryString(q))
         : await api("/api/historial/informe?" + queryString(q));
       lastQuery = q; lastData = data;
-      summary.textContent = data.dias_consultados + " días consultados · " + (data.resumen_only ? "Resumen optimizado" : "Detalle disponible");
+      summary.textContent = category === "ventas"
+        ? (data.total_ventas || 0) + " ventas · " + formatNumber(data.cantidad_total) + " piezas · " + formatMoney(data.importe_total)
+        : data.dias_consultados + " días consultados · " + (data.resumen_only ? "Resumen optimizado" : "Detalle disponible");
       render(data);
       const hasRecords = category === "ventas" ? (data.resumen || []).length > 0 :
         category === "inventario" ? data.inventario.por_producto.length > 0 :
