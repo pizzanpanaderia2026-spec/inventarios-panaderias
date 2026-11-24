@@ -452,7 +452,7 @@ def _hoja_informe(libro, nombre_hoja, titulo, categoria, inventario, produccion,
               x["inventario_final"] if x["inventario_final"] is not None else "N/D",
               x["diferencia_produccion_ventas"] if x["diferencia_produccion_ventas"] is not None else "N/D"] for x in filas_analisis],
             {4: '"$"#,##0.00'})
-        hoja.cell(fila, 1, "La diferencia producción - ventas es referencial y no representa merma; no considera existencias iniciales, devoluciones ni ajustes.")
+        hoja.cell(fila, 1, "El inventario final corresponde al último cierre disponible del periodo. La diferencia producción - ventas es referencial y no representa merma; no considera existencias iniciales, devoluciones ni ajustes.")
         hoja.cell(fila, 1).font = Font(italic=True, color="666666")
         fin_analisis = fila - 2
     else:
