@@ -2051,3 +2051,143 @@ def guardar_colores(datos: ColoresModulosCambio, authorization: str | None = Hea
         raise HTTPException(status_code=503, detail="No se pudieron guardar los colores.")
 
 
+
+
+def obtener_ventas_pos_periodo(panaderia_id: int, desde: date, hasta: date):
+    ventas = []
+    inicio = 0
+    while True:
+        pagina = (supabase.table("ventas_pos")
+            .select("id,numero_venta,fecha,usuario_nombre,total,creado_en")
+            .eq("panaderia_id", panaderia_id)
+            .gte("fecha", desde.isoformat()).lte("fecha", hasta.isoformat())
+            .order("fecha").order("numero_venta")
+            .range(inicio, inicio + 999).execute().data or [])
+        ventas.extend(pagina)
+        if len(pagina) < 1000:
+            break
+        inicio += 1000
+    if not ventas:
+        return []
+    por_venta = {int(v["id"]): [] for v in ventas}
+    ids = list(por_venta)
+    for i in range(0, len(ids), 300):
+        bloque = ids[i:i + 300]
+        detalles = (supabase.table("ventas_pos_detalles")
+            .select("venta_id,producto_id,producto_nombre,cantidad,precio_unitario,importe")
+            .in_("venta_id", bloque).order("id").execute().data or [])
+        for linea in detalles:
+            por_venta.setdefault(int(linea["venta_id"]), []).append(linea)
+    for venta in ventas:
+        venta["lineas"] = por_venta.get(int(venta["id"]), [])
+    return ventas
+
+
+def construir_resumen_ventas(ventas: list[dict]):
+    resumen = {}
+    cantidad_total = 0
+    importe_total = Decimal("0")
+    for venta in ventas:
+        for linea in venta.get("lineas", []):
+            nombre = str(linea.get("producto_nombre") or "Producto")
+            clave = (linea.get("producto_id"), nombre.casefold())
+            if clave not in resumen:
+                resumen[clave] = {"producto": nombre, "cantidad": 0, "importe": Decimal("0")}
+            cantidad = int(linea.get("cantidad") or 0)
+            importe = Decimal(str(linea.get("importe") or "0"))
+            resumen[clave]["cantidad"] += cantidad
+            resumen[clave]["importe"] += importe
+            cantidad_total += cantidad
+            importe_total += importe
+    filas = sorted(resumen.values(), key=lambda x: x["producto"].casefold())
+    for fila in filas:
+        fila["importe"] = str(fila["importe"].quantize(Decimal("0.01")))
+    return {"resumen": filas, "cantidad_total": cantidad_total,
+            "importe_total": str(importe_total.quantize(Decimal("0.01"))),
+            "total_ventas": len(ventas)}
+
+
+def validar_periodo_ventas(desde: date, hasta: date):
+    if desde > hasta:
+        raise HTTPException(status_code=422, detail="La fecha inicial no puede ser posterior a la fecha final.")
+    if hasta > fecha_operativa_hoy():
+        raise HTTPException(status_code=422, detail="No puedes consultar ventas de fechas futuras.")
+    if (hasta - desde).days > 3649:
+        raise HTTPException(status_code=422, detail="El periodo de ventas no puede superar diez años.")
+
+
+@app.get("/api/ventas/historial")
+def ventas_consultar_historial(panaderia_id: int, desde: date, hasta: date,
+                               authorization: str | None = Header(default=None)):
+    usuario = obtener_usuario_autenticado(authorization)
+    perfil = obtener_perfil(str(usuario.id))
+    comprobar_permiso_local(str(usuario.id), perfil, panaderia_id, "ventas")
+    validar_periodo_ventas(desde, hasta)
+    try:
+        ventas = obtener_ventas_pos_periodo(panaderia_id, desde, hasta)
+        return {"desde": desde.isoformat(), "hasta": hasta.isoformat(),
+                "ventas": ventas, **construir_resumen_ventas(ventas)}
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=503, detail="No se pudo consultar el historial de ventas.")
+
+
+@app.get("/api/ventas/historial/excel")
+def ventas_descargar_historial_excel(panaderia_id: int, desde: date, hasta: date,
+                                     authorization: str | None = Header(default=None)):
+    usuario = obtener_usuario_autenticado(authorization)
+    perfil = obtener_perfil(str(usuario.id))
+    comprobar_permiso_local(str(usuario.id), perfil, panaderia_id, "ventas")
+    validar_periodo_ventas(desde, hasta)
+    try:
+        ventas = obtener_ventas_pos_periodo(panaderia_id, desde, hasta)
+        datos = construir_resumen_ventas(ventas)
+        libro = Workbook()
+        resumen = libro.active
+        resumen.title = "Resumen"
+        resumen.append(["Producto", "Cantidad", "Importe"])
+        for fila in datos["resumen"]:
+            resumen.append([fila["producto"], fila["cantidad"], float(Decimal(fila["importe"]))])
+        resumen.append(["TOTAL GENERAL", datos["cantidad_total"], float(Decimal(datos["importe_total"]))])
+        resumen.freeze_panes = "A2"
+        resumen.auto_filter.ref = resumen.dimensions
+        resumen.column_dimensions["A"].width = 36
+        resumen.column_dimensions["B"].width = 16
+        resumen.column_dimensions["C"].width = 18
+        resumen["C1"].number_format = '"$"#,##0.00'
+        for row in resumen.iter_rows(min_row=2, min_col=3, max_col=3):
+            row[0].number_format = '"$"#,##0.00'
+
+        detalle = libro.create_sheet("Ventas")
+        detalle.append(["Fecha", "Venta", "Hora", "Registró", "Producto", "Cantidad", "Precio unitario", "Importe"])
+        for venta in ventas:
+            hora = ""
+            if venta.get("creado_en"):
+                marca = datetime.fromisoformat(str(venta["creado_en"]).replace("Z", "+00:00"))
+                if marca.tzinfo is None:
+                    marca = marca.replace(tzinfo=timezone.utc)
+                hora = marca.astimezone(TZ_PRODUCCION).strftime("%H:%M")
+            for linea in venta.get("lineas", []):
+                detalle.append([venta["fecha"], "Venta #" + str(venta["numero_venta"]), hora,
+                    venta.get("usuario_nombre") or "Usuario", linea["producto_nombre"],
+                    int(linea["cantidad"]), float(Decimal(str(linea["precio_unitario"]))),
+                    float(Decimal(str(linea["importe"])) )])
+        detalle.freeze_panes = "A2"
+        detalle.auto_filter.ref = detalle.dimensions
+        for col, width in {"A":14,"B":14,"C":12,"D":22,"E":34,"F":13,"G":18,"H":18}.items():
+            detalle.column_dimensions[col].width = width
+        for row in detalle.iter_rows(min_row=2, min_col=7, max_col=8):
+            for cell in row:
+                cell.number_format = '"$"#,##0.00'
+        salida = BytesIO()
+        libro.save(salida)
+        salida.seek(0)
+        nombre = f"ventas_{panaderia_id}_{desde.isoformat()}_{hasta.isoformat()}.xlsx"
+        return StreamingResponse(salida, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": f'attachment; filename="{nombre}"'})
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=503, detail="No se pudo generar el Excel del historial de ventas.")
+
