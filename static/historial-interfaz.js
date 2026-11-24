@@ -246,8 +246,14 @@
   function renderTables(data) {
     const host = el("div", null, "historial-tablas");
     if (category === "ventas") {
-      addTable(host, "Ventas por producto", ["Producto", "Cantidad", "Importe"],
+      const operaciones = el("p", (data.total_ventas || data.operaciones || 0) + " operaciones · " +
+        formatNumber(data.cantidad_total) + " piezas · " + formatMoney(data.importe_total), "nota");
+      host.appendChild(operaciones);
+      addTable(host, "Ventas por tipo de pan", ["Producto", "Cantidad", "Importe"],
         (data.resumen || []).map(x => [x.producto, formatNumber(x.cantidad), formatMoney(x.importe)]),
+        ["TOTAL", formatNumber(data.cantidad_total), formatMoney(data.importe_total)]);
+      addTable(host, "Ventas por precio", ["Precio unitario", "Cantidad", "Importe"],
+        (data.por_precio || []).map(x => [formatMoney(x.precio), formatNumber(x.cantidad), formatMoney(x.importe)]),
         ["TOTAL", formatNumber(data.cantidad_total), formatMoney(data.importe_total)]);
       const rows = [];
       (data.ventas || []).forEach(venta => {
