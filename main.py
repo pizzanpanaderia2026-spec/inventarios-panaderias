@@ -1889,8 +1889,11 @@ def descargar_produccion_excel(
         total_row = hoja.max_row + 1
         hoja.cell(total_row, 1, "TOTAL")
         hoja.cell(total_row, 2, datos.get("total_cantidad", 0))
-        hoja.cell(total_row, 4, float(Decimal(str(datos.get("total_importe") or 0))))
-        hoja.cell(total_row, 4).number_format = '"$"#,##0.00'
+        if datos.get("total_importe") is None:
+            hoja.cell(total_row, 4, "N/D")
+        else:
+            hoja.cell(total_row, 4, float(Decimal(str(datos["total_importe"]))))
+            hoja.cell(total_row, 4).number_format = '"$"#,##0.00'
         hoja.freeze_panes = "A5"
         hoja.auto_filter.ref = f"A4:G{max(4, total_row - 1)}"
         for col, width in {"A": 34, "B": 14, "C": 18, "D": 18, "E": 42, "F": 24, "G": 28}.items():
