@@ -27,6 +27,13 @@
     return Number(value || 0).toLocaleString("es-MX", { style: "currency", currency: "MXN" });
   }
 
+  function formatSaleTime(value) {
+    if (!value) return "";
+    return new Intl.DateTimeFormat("es-MX", {
+      timeZone:"America/Mexico_City",hour:"2-digit",minute:"2-digit",hourCycle:"h23"
+    }).format(new Date(value));
+  }
+
   function notice(message, type = "error") {
     const node = $("posMensaje");
     if (!node) return;
@@ -276,7 +283,7 @@
           const total = document.createElement("strong"); total.textContent = money(sale.total);
           head.append(title, total);
           const meta = document.createElement("p"); meta.className = "nota";
-          const time = sale.creado_en ? new Date(sale.creado_en).toLocaleTimeString("es-MX", {hour:"2-digit",minute:"2-digit"}) : "";
+          const time = sale.creado_en ? formatSaleTime(sale.creado_en) : "";
           meta.textContent = (sale.usuario_nombre || "Usuario") + (time ? " · " + time : "");
           const list = document.createElement("ul");
           (sale.lineas || []).forEach(line => {
@@ -345,7 +352,7 @@
     thead.innerHTML="<tr><th>Venta</th><th>Hora</th><th>Cuenta</th><th>Producto</th><th>Cantidad</th><th>Precio</th><th>Importe</th><th>Total venta</th></tr>";
     const tbody=document.createElement("tbody");
     state.sales.forEach(sale=>{
-      const time=sale.creado_en?new Date(sale.creado_en).toLocaleTimeString("es-MX",{hour:"2-digit",minute:"2-digit"}):"";
+      const time=sale.creado_en?formatSaleTime(sale.creado_en):"";
       (sale.lineas||[]).forEach((line,index)=>{
         const tr=document.createElement("tr");
         const values=["Venta "+sale.numero_venta,time,sale.usuario_nombre||"Usuario",line.producto_nombre,
