@@ -71,10 +71,10 @@ ALTER TABLE public.disponibilidad_ventas ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.ventas_pos ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.ventas_pos_detalles ENABLE ROW LEVEL SECURITY;
 
-REVOKE ALL ON public.configuracion_colores FROM anon, authenticated;
-REVOKE ALL ON public.disponibilidad_ventas FROM anon, authenticated;
-REVOKE ALL ON public.ventas_pos FROM anon, authenticated;
-REVOKE ALL ON public.ventas_pos_detalles FROM anon, authenticated;
+REVOKE ALL ON public.configuracion_colores FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON public.disponibilidad_ventas FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON public.ventas_pos FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON public.ventas_pos_detalles FROM PUBLIC, anon, authenticated;
 GRANT ALL ON public.configuracion_colores TO service_role;
 GRANT ALL ON public.disponibilidad_ventas TO service_role;
 GRANT ALL ON public.ventas_pos TO service_role;
