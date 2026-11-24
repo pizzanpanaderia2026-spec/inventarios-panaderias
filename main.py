@@ -789,7 +789,8 @@ def reabrir_registro(
         dentro_del_plazo = plazo_edicion_vigente(solicitud.fecha, config_edicion["dias_inventario"], config_edicion["horas_inventario"])
         admin = es_admin_principal(perfil)
         if not dentro_del_plazo and not admin:
-            raise HTTPException(status_code=403, detail=f"El plazo para editar inventario es de {dias_inventario} días. Solo la dueña puede reabrir registros anteriores.")
+            plazo = f"{config_edicion['dias_inventario']} días y {config_edicion['horas_inventario']} horas"
+            raise HTTPException(status_code=403, detail=f"Terminó el plazo de edición configurado ({plazo}). Solo la administradora puede reabrir registros anteriores.")
         motivo = (solicitud.motivo or "").strip()
         if not dentro_del_plazo and admin and len(motivo) < 5:
             raise HTTPException(status_code=422, detail="Para una corrección fuera del plazo configurado, escribe un motivo de al menos 5 caracteres.")
@@ -798,7 +799,7 @@ def reabrir_registro(
             "p_usuario_id": str(usuario.id),
             "p_motivo": motivo or "",
             "p_dentro_de_48h": dentro_del_plazo,
-            "p_fecha": ahora.isoformat(),
+            "p_fecha": datetime.now(TZ_PRODUCCION).isoformat(),
         }).execute()
         return {"reabierto": True, "cierre": resultado.data}
     except HTTPException:
