@@ -780,9 +780,8 @@ def reabrir_registro(
             return {"reabierto": True, "mensaje": "El día ya está abierto."}
         if solicitud.fecha > datetime.now(TZ_PRODUCCION).date():
             raise HTTPException(status_code=422, detail="No puedes reabrir una fecha futura.")
-        ahora_local = datetime.now(TZ_PRODUCCION).date()
-        dias_inventario = obtener_configuracion_edicion()["dias_inventario"]
-        dentro_del_plazo = 0 <= (ahora_local - solicitud.fecha).days <= dias_inventario
+        config_edicion = obtener_configuracion_edicion()
+        dentro_del_plazo = plazo_edicion_vigente(solicitud.fecha, config_edicion["dias_inventario"], config_edicion["horas_inventario"])
         admin = es_admin_principal(perfil)
         if not dentro_del_plazo and not admin:
             raise HTTPException(status_code=403, detail=f"El plazo para editar inventario es de {dias_inventario} días. Solo la dueña puede reabrir registros anteriores.")
