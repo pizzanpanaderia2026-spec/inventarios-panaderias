@@ -631,13 +631,8 @@ def guardar_registro(
     try:
         cierre = obtener_o_crear_cierre(registro.panaderia_id, registro.fecha, str(usuario.id))
         if cierre["estado"] == "cerrado":
-            dias_inventario = obtener_configuracion_edicion()["dias_inventario"]
-            dias_transcurridos = (datetime.now(TZ_PRODUCCION).date() - registro.fecha).days
-            es_admin_principal = perfil["rol"] == "admin" and perfil["es_admin_principal"]
-            if (dias_transcurridos > dias_inventario or dias_transcurridos < 0) and not es_admin_principal:
-                raise HTTPException(status_code=403, detail=f"El plazo para editar inventario es de {dias_inventario} días. Solo la dueña puede reabrirlo fuera de ese plazo.")
-            # Todo cierre debe reabrirse por el endpoint específico antes de editar.
-            # Así se exige motivo y auditoría en correcciones administrativas tardías.
+            # La tolerancia ya se validó arriba. Todo cierre debe reabrirse por el
+            # endpoint específico para conservar la auditoría y el motivo administrativo.
             raise HTTPException(
                 status_code=409,
                 detail="El día está cerrado. Usa la opción de reabrir antes de modificarlo.",
