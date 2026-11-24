@@ -584,7 +584,7 @@ def consultar_registro(
 ):
     usuario = obtener_usuario_autenticado(authorization)
     perfil = obtener_perfil(str(usuario.id))
-    comprobar_acceso_panaderia(str(usuario.id), perfil, panaderia_id)
+    comprobar_permiso_local(str(usuario.id), perfil, panaderia_id, "inventarios")
     try:
         cierre = (
             supabase.table("cierres_diarios").select("*")
