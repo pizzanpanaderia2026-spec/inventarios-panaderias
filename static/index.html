@@ -1810,5 +1810,26 @@
 
     iniciarAplicacion();
   </script>
+<style id="tema-pastel-final">
+  body[data-theme] header { background:var(--theme-color)!important; color:#2F4038!important; }
+  body[data-theme] button:not(.secundario):not(.boton-ver-contrasena) {
+    background:var(--theme-color)!important; color:#2F4038!important; border-color:#00000012!important;
+  }
+  body[data-theme] .boton-seccion:not(.activo) { background:#E9EFEB!important; color:#43534A!important; }
+  body[data-theme] .boton-seccion.activo { background:var(--theme-color)!important; color:#2F4038!important; outline:2px solid #82998B; outline-offset:2px; }
+  body[data-theme] .boton-ver-contrasena { color:#43534A!important; }
+  body[data-theme] #panelTablas > h3,
+  body[data-theme] #panelProductos > h3,
+  body[data-theme] #panelHistorial h3 { border-left-color:#C8D5CD!important; }
+  body[data-theme] #panelVentas > h3,
+  body[data-theme] #panelProduccion > h3,
+  body[data-theme] #panelRegistro > h3 { border-left-color:var(--theme-color)!important; }
+  @media(max-width:600px) {
+    body[data-theme] .pos-producto-disponibilidad { flex-wrap:wrap; }
+    body[data-theme] .pos-producto-info { flex:1 1 100%; }
+    body[data-theme] .pos-switch-label { flex:1 1 auto; }
+    body[data-theme] .pos-anclar { flex:0 0 auto; }
+  }
+</style>
 </body>
 </html>
