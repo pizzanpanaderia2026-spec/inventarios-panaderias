@@ -1895,7 +1895,11 @@ def ventas_consultar_disponibilidad(panaderia_id: int, authorization: str | None
             .eq("fecha", fecha.isoformat()).execute().data or [])
         disponibles = {int(x["producto_id"]): bool(x["disponible"]) for x in filas}
         for producto in productos:
-            producto["disponible"] = disponibles.get(int(producto["id"]), False)
+            # Los productos anclados se habilitan por defecto cada día.
+            # Una desactivación explícita del día actual siempre tiene prioridad.
+            producto["disponible"] = disponibles.get(
+                int(producto["id"]), bool(producto.get("pos_anclado"))
+            )
         return {"fecha": fecha.isoformat(), "productos": productos, "categorias": categorias}
     except HTTPException:
         raise
@@ -1941,6 +1945,15 @@ def ventas_cambiar_anclaje(datos: AnclajeVentaCambio, authorization: str | None 
             .execute().data or [])
         if not actualizado:
             raise HTTPException(status_code=404, detail="No se pudo actualizar el anclaje del producto.")
+        if datos.anclado:
+            fecha = fecha_operativa_hoy()
+            supabase.table("disponibilidad_ventas").upsert({
+                "panaderia_id": datos.panaderia_id,
+                "producto_id": datos.producto_id,
+                "fecha": fecha.isoformat(),
+                "disponible": True,
+                "actualizado_por": str(usuario.id)
+            }, on_conflict="panaderia_id,fecha,producto_id").execute()
         return {"guardado": True, "anclado": datos.anclado, "producto_id": datos.producto_id}
     except HTTPException:
         raise
