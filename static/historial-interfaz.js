@@ -276,15 +276,16 @@
         ["TOTAL", formatNumber(inv.total_piezas), formatMoney(inv.total_importe)]);
     }
     if (category === "produccion" || category === "analisis") {
-      addTable(host, "Producción por tipo de pan", ["Pan", "Cantidad producida"],
-        prod.por_pan.map(x => [x.pan, formatNumber(x.cantidad)]),
-        ["TOTAL PRODUCIDO", formatNumber(prod.total)]);
+      addTable(host, "Producción por tipo de pan", ["Pan", "Cantidad producida", "Importe"],
+        prod.por_pan.map(x => [x.pan, formatNumber(x.cantidad), x.importe == null ? "N/D" : formatMoney(x.importe)]),
+        ["TOTAL PRODUCIDO", formatNumber(prod.total), prod.total_importe == null ? "N/D" : formatMoney(prod.total_importe)]);
     }
     if (category === "analisis") {
-      addTable(host, "Producción y sobrantes", ["Pan", "Producido", "Sobrante", "% sobrante"],
-        data.analisis.por_pan.map(x => [x.pan, formatNumber(x.producido), formatNumber(x.sobrante),
-          x.porcentaje_sobrante == null ? "N/D" : Number(x.porcentaje_sobrante).toFixed(2) + "%"]));
-      host.appendChild(el("p", "El porcentaje compara los sobrantes registrados con la producción del mismo pan y periodo. No representa ventas.", "nota"));
+      addTable(host, "Producción, ventas e inventario final", ["Pan", "Producido", "Vendido", "Importe de ventas", "Inventario final", "Producción − ventas (referencia)"],
+        data.analisis.por_pan.map(x => [x.pan, formatNumber(x.producido), formatNumber(x.vendido),
+          formatMoney(x.importe_ventas), x.inventario_final == null ? "N/D" : formatNumber(x.inventario_final),
+          x.diferencia_produccion_ventas == null ? "N/D" : formatNumber(x.diferencia_produccion_ventas)]));
+      host.appendChild(el("p", "El inventario final corresponde al último cierre disponible del periodo. La diferencia producción − ventas es solo una referencia aritmética: no representa merma ni considera existencias iniciales, devoluciones o ajustes.", "nota"));
     }
     if (period === "anio") {
       const monthly = new Map();
@@ -308,8 +309,8 @@
         addTable(host, "Resumen mensual del año", ["Mes", "Producción"],
           items.map(([mes,x]) => [mes, formatNumber(x.produccion_cantidad)]));
       } else {
-        addTable(host, "Resumen mensual del año", ["Mes", "Inventario", "Importe", "Producción"],
-          items.map(([mes,x]) => [mes, formatNumber(x.inventario_cantidad), formatMoney(x.inventario_importe), formatNumber(x.produccion_cantidad)]));
+        addTable(host, "Resumen mensual del año", ["Mes", "Inventario final diario acumulado", "Importe inventario", "Producción", "Ventas", "Importe ventas"],
+          items.map(([mes,x]) => [mes, formatNumber(x.inventario_cantidad), formatMoney(x.inventario_importe), formatNumber(x.produccion_cantidad), formatNumber(x.ventas_cantidad), formatMoney(x.ventas_importe)]));
       }
     } else if (period !== "dia" && !data.resumen_only) {
       const items = data.resumen_diario.filter(x => x.tiene_inventario || x.tiene_produccion);
@@ -320,8 +321,8 @@
         addTable(host, "Resumen diario", ["Fecha", "Producción"],
           items.map(x => [x.fecha, formatNumber(x.produccion_cantidad)]));
       } else {
-        addTable(host, "Resumen diario", ["Fecha", "Inventario", "Importe", "Producción"],
-          items.map(x => [x.fecha, formatNumber(x.inventario_cantidad), formatMoney(x.inventario_importe), formatNumber(x.produccion_cantidad)]));
+        addTable(host, "Resumen diario", ["Fecha", "Inventario", "Importe", "Producción", "Ventas", "Importe ventas"],
+          items.map(x => [x.fecha, formatNumber(x.inventario_cantidad), formatMoney(x.inventario_importe), formatNumber(x.produccion_cantidad), formatNumber(x.ventas_cantidad), formatMoney(x.ventas_importe)]));
       }
     } else if (data.resumen_only) {
       if (category === "inventario") {
@@ -331,8 +332,8 @@
         addTable(host, "Resumen mensual del periodo", ["Mes", "Producción"],
           data.resumen_mensual.map(x => [x.mes, formatNumber(x.produccion_cantidad)]));
       } else {
-        addTable(host, "Resumen mensual del periodo", ["Mes", "Inventario", "Importe", "Producción"],
-          data.resumen_mensual.map(x => [x.mes, formatNumber(x.inventario_cantidad), formatMoney(x.inventario_importe), formatNumber(x.produccion_cantidad)]));
+        addTable(host, "Resumen mensual del periodo", ["Mes", "Inventario", "Importe", "Producción", "Ventas", "Importe ventas"],
+          data.resumen_mensual.map(x => [x.mes, formatNumber(x.inventario_cantidad), formatMoney(x.inventario_importe), formatNumber(x.produccion_cantidad), formatNumber(x.ventas_cantidad), formatMoney(x.ventas_importe)]));
       }
     }
     return host;
@@ -359,9 +360,10 @@
         data.produccion.por_pan.map(x => x.pan)));
     }
     if (category === "analisis") {
-      host.appendChild(chartSVG("Producción frente a sobrantes", [
+      host.appendChild(chartSVG("Producción, ventas e inventario final", [
         { name: "Producido", values: data.analisis.por_pan.map(x => x.producido) },
-        { name: "Sobrante", values: data.analisis.por_pan.map(x => x.sobrante) }
+        { name: "Vendido", values: data.analisis.por_pan.map(x => x.vendido) },
+        { name: "Inventario final", values: data.analisis.por_pan.map(x => x.inventario_final == null ? 0 : x.inventario_final) }
       ], data.analisis.por_pan.map(x => x.pan)));
     }
     if (category === "analisis" && (period === "anio" || data.resumen_only)) {
@@ -409,7 +411,7 @@
     const empty = category === "ventas" ? !(data.resumen || []).length :
       category === "inventario" ? !data.inventario.por_producto.length :
       category === "produccion" ? !data.produccion.por_pan.length :
-      !data.inventario.por_producto.length && !data.produccion.por_pan.length;
+      !data.inventario.por_producto.length && !data.produccion.por_pan.length && !(data.ventas?.por_producto || []).length;
     if (empty) {
       result.appendChild(el("div", "No hay registros para la categoría y las fechas seleccionadas.", "historial-vacio"));
     } else {
