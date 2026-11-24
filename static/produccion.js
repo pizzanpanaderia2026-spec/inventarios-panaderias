@@ -18,6 +18,8 @@
   let catalogo = [];
   let categorias = [];
   let capturaHabilitada = false;
+  let totalCantidadDia = 0;
+  let totalImporteDia = 0;
   const campoCantidad = cantidad.closest(".campo");
   campoCantidad.classList.add("oculto");
   const sugerencias = document.createElement("div");
@@ -168,6 +170,15 @@
 
   function construirTabla(registros) {
     tabla.replaceChildren();
+    const resumenDia = document.createElement("div");
+    resumenDia.className = "panel";
+    resumenDia.style.cssText = "display:flex;gap:24px;flex-wrap:wrap;margin-bottom:12px";
+    const piezas = document.createElement("strong");
+    piezas.textContent = "Total producido: " + Number(totalCantidadDia || 0).toLocaleString("es-MX") + " piezas";
+    const importe = document.createElement("strong");
+    importe.textContent = "Valor producido: " + (totalImporteDia == null ? "No disponible" : Number(totalImporteDia || 0).toLocaleString("es-MX",{style:"currency",currency:"MXN"}));
+    resumenDia.append(piezas,importe);
+    tabla.appendChild(resumenDia);
     if (!registros.length) {
       const vacio = document.createElement("p");
       vacio.className = "nota";
@@ -182,7 +193,7 @@
     table.className = "tabla produccion-tabla";
     const thead = document.createElement("thead");
     const encabezado = document.createElement("tr");
-    ["Pan", "Cantidad", "Observaciones", "Registró", "Fecha y hora", "Acciones"].forEach(t => {
+    ["Pan", "Cantidad", "Precio unitario", "Importe", "Observaciones", "Registró", "Fecha y hora", "Acciones"].forEach(t => {
       const th = document.createElement("th");
       th.textContent = t;
       encabezado.appendChild(th);
@@ -194,6 +205,8 @@
       const fila = document.createElement("tr");
       crearCelda(fila, registro.pan_nombre);
       crearCelda(fila, Number(registro.cantidad).toLocaleString("es-MX"));
+      crearCelda(fila, registro.precio_unitario == null ? "No disponible" : Number(registro.precio_unitario).toLocaleString("es-MX",{style:"currency",currency:"MXN"}));
+      crearCelda(fila, registro.importe == null ? "No disponible" : Number(registro.importe).toLocaleString("es-MX",{style:"currency",currency:"MXN"}));
       crearCelda(fila, registro.observaciones || "—");
       crearCelda(fila, registro.usuario_nombre || "Usuario");
       crearCelda(fila, formatearFechaHora(registro.registrado_en));
@@ -236,7 +249,20 @@
       tbody.appendChild(fila);
     });
 
-    table.append(thead, tbody);
+    const totalRow = document.createElement("tr");
+    const totalLabel = document.createElement("th");
+    totalLabel.textContent = "TOTAL";
+    totalRow.appendChild(totalLabel);
+    const totalQty = document.createElement("th");
+    totalQty.textContent = Number(totalCantidadDia || 0).toLocaleString("es-MX");
+    totalRow.appendChild(totalQty);
+    const emptyPrice = document.createElement("th"); emptyPrice.textContent = "—"; totalRow.appendChild(emptyPrice);
+    const totalAmount = document.createElement("th");
+    totalAmount.textContent = Number(totalImporteDia || 0).toLocaleString("es-MX",{style:"currency",currency:"MXN"});
+    totalRow.appendChild(totalAmount);
+    for (let i=0;i<4;i++){const th=document.createElement("th");th.textContent="";totalRow.appendChild(th);}
+    const tfoot = document.createElement("tfoot"); tfoot.appendChild(totalRow);
+    table.append(thead, tbody, tfoot);
     envoltura.appendChild(table);
     tabla.appendChild(envoltura);
   }
@@ -322,6 +348,8 @@
       );
       diasEditables = Number.isInteger(Number(datos.dias_editables)) ? Number(datos.dias_editables) : 1;
       const registros = datos.registros || [];
+      totalCantidadDia = Number(datos.total_cantidad || 0);
+      totalImporteDia = datos.total_importe == null ? null : Number(datos.total_importe);
       construirTabla(registros);
       const permiteAgregar = puedeAgregarEnFecha(fecha.value);
       capturaHabilitada = permiteAgregar;
@@ -388,6 +416,7 @@
           panaderia_id: Number(bakery.id),
           fecha_produccion: fecha.value,
           pan_nombre: nombre,
+          producto_id: pan.dataset.productoId ? Number(pan.dataset.productoId) : null,
           cantidad: n,
           observaciones: observaciones.value.trim() || null
         })
