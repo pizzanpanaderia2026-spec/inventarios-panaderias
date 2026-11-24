@@ -76,8 +76,9 @@
 
   function actualizarLimitesFecha() {
     const hoy = new Date();
+    const diasDeCalendario = diasEditables + (horasEditables > 0 ? 1 : 0);
     const limite = adminPrincipal ? new Date(1900,0,1) :
-      new Date(hoy.getFullYear(),hoy.getMonth(),hoy.getDate()-diasEditables);
+      new Date(hoy.getFullYear(),hoy.getMonth(),hoy.getDate()-diasDeCalendario);
     fecha.max = fechaLocal(hoy);
     fecha.min = fechaLocal(limite);
     if (!fecha.value || fecha.value < fecha.min || fecha.value > fecha.max) fecha.value = fecha.max;
