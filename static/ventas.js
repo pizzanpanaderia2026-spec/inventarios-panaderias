@@ -1,7 +1,7 @@
 // Punto de venta: disponibilidad diaria, ventas individuales y resumen.
 (function () {
   const $ = (id) => document.getElementById(id);
-  const state = { session: null, bakery: null, products: [], categories: [], availabilityDate: null, cart: new Map(), view: "nueva", sales: [], summary: null };
+  const state = { session: null, bakery: null, products: [], categories: [], availabilityDate: null, cart: new Map(), view: "nueva", salesView:"tickets", sales: [], summary: null };
 
   async function api(path, options = {}) {
     const response = await fetch(path, {
@@ -265,24 +265,109 @@
       if (!state.sales.length) {
         const empty = document.createElement("p"); empty.className = "nota"; empty.textContent = "Todavía no hay ventas registradas hoy."; root.append(empty); return;
       }
-      state.sales.forEach(sale => {
-        const card = document.createElement("article"); card.className = "pos-venta-card";
-        const head = document.createElement("div"); head.className = "pos-venta-card-head";
-        const title = document.createElement("strong"); title.textContent = "Venta #" + sale.numero_venta;
-        const total = document.createElement("strong"); total.textContent = money(sale.total);
-        head.append(title, total);
-        const meta = document.createElement("p"); meta.className = "nota";
-        const time = sale.creado_en ? new Date(sale.creado_en).toLocaleTimeString("es-MX", {hour:"2-digit",minute:"2-digit"}) : "";
-        meta.textContent = (sale.usuario_nombre || "Usuario") + (time ? " · " + time : "");
-        const list = document.createElement("ul");
-        (sale.lineas || []).forEach(line => {
-          const li = document.createElement("li");
-          li.textContent = line.cantidad + " × " + line.producto_nombre + " — " + money(line.importe);
-          list.append(li);
+      updateSalesViewButtons();
+      if (state.salesView === "tabla") {
+        drawSalesTable(root);
+      } else {
+        state.sales.forEach(sale => {
+          const card = document.createElement("article"); card.className = "pos-venta-card";
+          const head = document.createElement("div"); head.className = "pos-venta-card-head";
+          const title = document.createElement("strong"); title.textContent = "Venta #" + sale.numero_venta;
+          const total = document.createElement("strong"); total.textContent = money(sale.total);
+          head.append(title, total);
+          const meta = document.createElement("p"); meta.className = "nota";
+          const time = sale.creado_en ? new Date(sale.creado_en).toLocaleTimeString("es-MX", {hour:"2-digit",minute:"2-digit"}) : "";
+          meta.textContent = (sale.usuario_nombre || "Usuario") + (time ? " · " + time : "");
+          const list = document.createElement("ul");
+          (sale.lineas || []).forEach(line => {
+            const li = document.createElement("li");
+            li.textContent = line.cantidad + " × " + line.producto_nombre + " — " + money(line.importe);
+            list.append(li);
+          });
+          const actions = document.createElement("div"); actions.className = "barra";
+          const ticket = document.createElement("button"); ticket.type = "button"; ticket.className = "secundario";
+          ticket.textContent = "Descargar ticket PNG";
+          ticket.addEventListener("click", () => downloadTicketPNG(sale));
+          actions.append(ticket);
+          card.append(head, meta, list, actions); root.append(card);
         });
-        card.append(head, meta, list); root.append(card);
-      });
+      }
     } catch (error) { root.textContent = error.message; }
+  }
+
+  function updateSalesViewButtons() {
+    const tickets = $("posVerTickets"), table = $("posVerTabla");
+    if (tickets) { tickets.classList.toggle("activo",state.salesView==="tickets"); tickets.classList.toggle("secundario",state.salesView!=="tickets"); tickets.setAttribute("aria-pressed",state.salesView==="tickets"?"true":"false"); }
+    if (table) { table.classList.toggle("activo",state.salesView==="tabla"); table.classList.toggle("secundario",state.salesView!=="tabla"); table.setAttribute("aria-pressed",state.salesView==="tabla"?"true":"false"); }
+  }
+
+  function drawSalesTable(root) {
+    const table=document.createElement("table"); table.className="pos-tabla";
+    const thead=document.createElement("thead");
+    thead.innerHTML="<tr><th>Venta</th><th>Hora</th><th>Cuenta</th><th>Producto</th><th>Cantidad</th><th>Precio</th><th>Importe</th><th>Total venta</th></tr>";
+    const tbody=document.createElement("tbody");
+    state.sales.forEach(sale=>{
+      const time=sale.creado_en?new Date(sale.creado_en).toLocaleTimeString("es-MX",{hour:"2-digit",minute:"2-digit"}):"";
+      (sale.lineas||[]).forEach((line,index)=>{
+        const tr=document.createElement("tr");
+        const values=["Venta "+sale.numero_venta,time,sale.usuario_nombre||"Usuario",line.producto_nombre,
+          String(line.cantidad),money(line.precio_unitario),money(line.importe),index===0?money(sale.total):""];
+        values.forEach(value=>{const td=document.createElement("td");td.textContent=value;tr.append(td);});
+        tbody.append(tr);
+      });
+    });
+    table.append(thead,tbody); root.append(table);
+  }
+
+  function downloadTicketPNG(sale) {
+    const lines=sale.lineas||[];
+    const height=230+lines.length*42;
+    const canvas=document.createElement("canvas"); canvas.width=640; canvas.height=height;
+    const ctx=canvas.getContext("2d");
+    ctx.fillStyle="#ffffff";ctx.fillRect(0,0,canvas.width,canvas.height);
+    ctx.fillStyle="#222222";ctx.textAlign="center";ctx.font="bold 30px Arial";
+    ctx.fillText(state.bakery.nombre||"Panadería",320,42);
+    ctx.font="bold 25px Arial";ctx.fillText("TICKET DE VENTA",320,82);
+    ctx.textAlign="left";ctx.font="20px Arial";
+    const fecha=sale.fecha||state.availabilityDate||"";
+    const hora=sale.creado_en?new Date(sale.creado_en).toLocaleTimeString("es-MX",{hour:"2-digit",minute:"2-digit"}):"";
+    ctx.fillText("Venta "+sale.numero_venta+"   "+fecha+"   "+hora,36,124);
+    ctx.fillText("Atendió: "+(sale.usuario_nombre||"Usuario"),36,157);
+    ctx.beginPath();ctx.moveTo(32,178);ctx.lineTo(608,178);ctx.stroke();
+    let y=214;
+    ctx.font="bold 18px Arial";ctx.fillText("Producto",36,y);ctx.fillText("Cant.",390,y);ctx.fillText("Importe",485,y);
+    ctx.font="18px Arial";
+    lines.forEach(line=>{
+      y+=38;
+      const name=String(line.producto_nombre||"Producto");
+      ctx.fillText(name.length>30?name.slice(0,27)+"…":name,36,y);
+      ctx.fillText(String(line.cantidad),400,y);
+      ctx.textAlign="right";ctx.fillText(money(line.importe),604,y);ctx.textAlign="left";
+    });
+    y+=24;ctx.beginPath();ctx.moveTo(32,y);ctx.lineTo(608,y);ctx.stroke();
+    y+=42;ctx.font="bold 25px Arial";ctx.textAlign="right";ctx.fillText("TOTAL: "+money(sale.total),604,y);
+    y+=42;ctx.font="16px Arial";ctx.textAlign="center";ctx.fillText("Gracias por su compra",320,y);
+    canvas.toBlob(blob=>{
+      if(!blob){notice("No se pudo generar la imagen del ticket.");return;}
+      const url=URL.createObjectURL(blob);const a=document.createElement("a");
+      a.href=url;a.download="ticket_venta_"+sale.numero_venta+".png";document.body.append(a);a.click();a.remove();
+      setTimeout(()=>URL.revokeObjectURL(url),1500);
+    },"image/png");
+  }
+
+  async function downloadDailyExcel() {
+    const button=$("posDescargarExcelDia"); if(!button)return;
+    button.disabled=true;
+    try{
+      const response=await fetch("/api/ventas/dia/excel?panaderia_id="+encodeURIComponent(state.bakery.id),
+        {headers:{Authorization:"Bearer "+state.session.access_token}});
+      if(!response.ok){const data=await response.json().catch(()=>({}));throw new Error(data.detail||"No se pudo generar el Excel.");}
+      const blob=await response.blob();const url=URL.createObjectURL(blob);const a=document.createElement("a");
+      a.href=url;a.download="ventas_"+state.bakery.id+"_"+(state.availabilityDate||"dia")+".xlsx";
+      document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1500);
+      notice("Excel del día descargado.","success");
+    }catch(error){notice(error.message);}
+    finally{button.disabled=false;}
   }
 
   async function loadSummary() {
@@ -321,6 +406,9 @@
     });
     $("posRegistrarVenta").onclick = registerSale;
     $("posActualizarDia").onclick = loadSales;
+    $("posVerTickets").onclick = () => {state.salesView="tickets";loadSales();};
+    $("posVerTabla").onclick = () => {state.salesView="tabla";loadSales();};
+    $("posDescargarExcelDia").onclick = downloadDailyExcel;
     await loadAvailability();
     switchView("nueva");
     return true;
