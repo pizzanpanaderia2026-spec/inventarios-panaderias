@@ -616,9 +616,10 @@ def guardar_registro(
     registro: GuardarRegistro,
     authorization: str | None = Header(default=None),
 ):
+    """Compatibilidad con clientes anteriores: actualiza solo las líneas enviadas; nunca reemplaza la tabla completa."""
     usuario = obtener_usuario_autenticado(authorization)
     perfil = obtener_perfil(str(usuario.id))
-    comprobar_acceso_panaderia(str(usuario.id), perfil, registro.panaderia_id)
+    comprobar_permiso_local(str(usuario.id), perfil, registro.panaderia_id, "inventarios")
     hoy_local = datetime.now(TZ_PRODUCCION).date()
     if registro.fecha > hoy_local:
         raise HTTPException(status_code=422, detail="No puedes registrar una fecha futura.")
@@ -631,75 +632,20 @@ def guardar_registro(
     try:
         cierre = obtener_o_crear_cierre(registro.panaderia_id, registro.fecha, str(usuario.id))
         if cierre["estado"] == "cerrado":
-            # La tolerancia ya se validó arriba. Todo cierre debe reabrirse por el
-            # endpoint específico para conservar la auditoría y el motivo administrativo.
-            raise HTTPException(
-                status_code=409,
-                detail="El día está cerrado. Usa la opción de reabrir antes de modificarlo.",
-            )
-        productos = (
-            supabase.table("productos")
-            .select("id,panaderia_id,nombre,precio,activo")
-            .eq("panaderia_id", registro.panaderia_id).execute()
-        )
-        por_id = {int(p["id"]): p for p in productos.data}
-        # Conserva el precio histórico ya guardado para cada producto.
-        # Solo los productos nuevos en este registro toman el precio actual.
-        anteriores = (
-            supabase.table("inventario_detalles")
-            .select("producto_id,precio_unitario,producto_nombre")
-            .eq("cierre_id", cierre["id"])
-            .execute()
-        )
-        precios_anteriores = {
-            int(item["producto_id"]): item.get("precio_unitario")
-            for item in anteriores.data
-        }
-        nombres_anteriores = {
-            int(item["producto_id"]): item.get("producto_nombre")
-            for item in anteriores.data
-        }
-        nuevas = []
+            raise HTTPException(status_code=409, detail="El día está cerrado. Usa la opción de reabrir antes de modificarlo.")
         for linea in registro.lineas:
-            producto = por_id.get(linea.producto_id)
-            if not producto or not producto["activo"]:
-                raise HTTPException(status_code=422, detail="Uno de los productos no existe o está inactivo.")
-            nuevas.append({                "cierre_id": cierre["id"],
-                "producto_id": linea.producto_id,
-                "cantidad": linea.cantidad,
-                "producto_nombre": (
-                    nombres_anteriores.get(linea.producto_id)
-                    or next(
-                        (p["nombre"] for p in productos.data if int(p["id"]) == linea.producto_id),
-                        "Producto",
-                    )
-                ),
-                "precio_unitario": str(
-                    precios_anteriores.get(linea.producto_id)
-                    if precios_anteriores.get(linea.producto_id) is not None
-                    else producto["precio"]
-                ),
-            })
-        lineas_rpc = [
-            {
-                "producto_id": linea["producto_id"],
-                "cantidad": linea["cantidad"],
-                "precio_unitario": linea["precio_unitario"],
-                "producto_nombre": linea["producto_nombre"],
-            }
-            for linea in nuevas
-        ]
-        # Una sola función SQL reemplaza las líneas dentro de una transacción.
-        supabase.rpc("reemplazar_lineas_cierre", {
-            "p_cierre_id": cierre["id"],
-            "p_lineas": lineas_rpc,
-            "p_usuario_id": str(usuario.id),
-        }).execute()
-        return {"guardado": True, "cierre_id": cierre["id"], "cantidad_lineas": len(nuevas)}
+            supabase.rpc("guardar_linea_inventario", {
+                "p_panaderia_id": registro.panaderia_id,
+                "p_fecha": registro.fecha.isoformat(),
+                "p_producto_id": linea.producto_id,
+                "p_cantidad": linea.cantidad,
+                "p_usuario_id": str(usuario.id),
+            }).execute()
+        return {"guardado": True, "cierre_id": cierre["id"], "cantidad_lineas": len(registro.lineas)}
     except HTTPException:
         raise
     except Exception:
-        raise HTTPException(status_code=503, detail="No se pudo guardar el registro. Verifica que la migración esté aplicada.")
+        raise HTTPException(status_code=503, detail="No se pudo guardar el registro.")
 
 
 @app.post("/api/registro/cerrar")
