@@ -500,7 +500,7 @@ def descargar_informe_historial(panaderia_id: int, categoria: str, tipo: str, de
     if categoria not in ("inventario", "produccion", "ventas", "analisis") or tipo not in ("dia", "mes", "semana", "anio", "periodo"):
         raise HTTPException(status_code=422, detail="Los filtros del informe no son válidos.")
     datos, resumen_only, dias = _reporte(panaderia_id, categoria, tipo, desde, hasta, authorization)
-    hay_datos = bool(datos["inventario"]["por_producto"] or datos["produccion"]["por_pan"])
+    hay_datos = bool(datos.get("resumen")) if categoria == "ventas" else bool(datos["inventario"]["por_producto"] or datos["produccion"]["por_pan"])
     if not hay_datos:
         raise HTTPException(status_code=404, detail="No hay registros para la categoría y las fechas seleccionadas.")
     salida = _crear_excel(categoria, tipo, desde, hasta, datos, resumen_only)
