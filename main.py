@@ -591,15 +591,20 @@ def consultar_registro(
             .eq("panaderia_id", panaderia_id)
             .eq("fecha", fecha_registro.isoformat()).limit(1).execute()
         )
+        config_edicion = obtener_configuracion_edicion()
+        admin_principal = es_admin_principal(perfil)
         if not cierre.data:
-            return {"cierre": None, "lineas": []}
+            return {"cierre": None, "lineas": [], "dias_editables": config_edicion["dias_inventario"],
+                    "horas_editables": config_edicion["horas_inventario"], "admin_principal": admin_principal}
         datos_cierre = cierre.data[0]
         lineas = (
             supabase.table("inventario_detalles")
             .select("id,producto_id,cantidad,precio_unitario,producto_nombre")
             .eq("cierre_id", datos_cierre["id"]).execute()
         )
-        return {"cierre": datos_cierre, "lineas": lineas.data}
+        return {"cierre": datos_cierre, "lineas": lineas.data,
+                "dias_editables": config_edicion["dias_inventario"],
+                "horas_editables": config_edicion["horas_inventario"], "admin_principal": admin_principal}
     except HTTPException:
         raise
     except Exception:
