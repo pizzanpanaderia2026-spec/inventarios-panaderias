@@ -14,7 +14,12 @@
       }
     });
     const data = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(data.detail || "No se pudo completar la operación.");
+    const detail = data.detail;
+    const message = typeof detail === "string" ? detail :
+      Array.isArray(detail) ? detail.map(x => x?.msg || x?.message || JSON.stringify(x)).join(" · ") :
+      detail && typeof detail === "object" ? (detail.message || detail.msg || JSON.stringify(detail)) :
+      "No se pudo completar la operación.";
+    if (!response.ok) throw new Error(message);
     return data;
   }
 
@@ -104,7 +109,7 @@
       heading.textContent = category.nombre;
       section.append(heading);
       rows.forEach(product => {
-        const row = document.createElement("label");
+        const row = document.createElement("div");
         row.className = "pos-producto-disponibilidad";
         const info = document.createElement("span");
         info.className = "pos-producto-info";
@@ -138,7 +143,25 @@
         const text = document.createElement("span");
         text.textContent = product.disponible ? "Disponible" : "No disponible";
         control.append(checkbox, text);
-        row.append(info, control);
+        const pin = document.createElement("button");
+        pin.type = "button";
+        pin.className = "secundario pos-anclar";
+        pin.textContent = product.pos_anclado ? "Desanclar" : "Anclar";
+        pin.setAttribute("aria-pressed", product.pos_anclado ? "true" : "false");
+        pin.setAttribute("aria-label", (product.pos_anclado ? "Desanclar " : "Anclar ") + product.nombre);
+        pin.addEventListener("click", async () => {
+          pin.disabled = true;
+          try {
+            await api("/api/ventas/anclado", {method:"PUT", body:JSON.stringify({
+              panaderia_id:state.bakery.id, producto_id:product.id, anclado:!product.pos_anclado
+            })});
+            product.pos_anclado = !product.pos_anclado;
+            drawProducts();
+            clearNotice();
+          } catch(error) { notice(error.message); }
+          finally { pin.disabled = false; }
+        });
+        row.append(info, control, pin);
         section.append(row);
       });
       root.append(section);
@@ -149,7 +172,8 @@
     const root = $("posListaVenta");
     if (!root) return;
     root.replaceChildren();
-    const available = state.products.filter(p => p.disponible).slice().sort((a,b) => a.nombre.localeCompare(b.nombre, "es"));
+    const available = state.products.filter(p => p.disponible).slice().sort((a,b) =>
+      Number(Boolean(b.pos_anclado)) - Number(Boolean(a.pos_anclado)) || a.nombre.localeCompare(b.nombre, "es"));
     if (!available.length) {
       const empty = document.createElement("div");
       empty.className = "pos-vacio";
