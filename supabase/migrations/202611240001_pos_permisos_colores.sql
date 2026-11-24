@@ -102,6 +102,7 @@ DECLARE
   v_linea record;
   v_producto record;
   v_importe numeric(14,2);
+  v_disponible boolean;
   v_cantidad_lineas integer := 0;
 BEGIN
   IF p_lineas IS NULL OR jsonb_typeof(p_lineas) <> 'array'
@@ -142,19 +143,21 @@ BEGIN
       FROM public.productos
      WHERE id = v_linea.producto_id
        AND panaderia_id = p_panaderia_id
-       AND activo IS TRUE;
+       AND activo IS TRUE
+     FOR SHARE;
 
     IF NOT FOUND THEN
       RAISE EXCEPTION 'Uno de los productos no existe o está desactivado.';
     END IF;
 
-    IF NOT EXISTS (
-      SELECT 1 FROM public.disponibilidad_ventas d
-       WHERE d.panaderia_id = p_panaderia_id
-         AND d.producto_id = v_linea.producto_id
-         AND d.fecha = p_fecha
-         AND d.disponible IS TRUE
-    ) THEN
+    SELECT disponible INTO v_disponible
+      FROM public.disponibilidad_ventas
+     WHERE panaderia_id = p_panaderia_id
+       AND producto_id = v_linea.producto_id
+       AND fecha = p_fecha
+     FOR SHARE;
+
+    IF NOT FOUND OR v_disponible IS NOT TRUE THEN
       RAISE EXCEPTION 'El producto no está disponible para venta hoy.';
     END IF;
 
