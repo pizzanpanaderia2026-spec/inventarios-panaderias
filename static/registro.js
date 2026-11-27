@@ -14,24 +14,27 @@
   const estiloTablaMovil = document.createElement("style");
   estiloTablaMovil.textContent = `
     @media (max-width: 640px) {
-      #filasRegistro .tabla-registro-responsive { width:100%; min-width:0; table-layout:fixed; border-collapse:collapse; }
+      #filasRegistro .tabla-registro-responsive { width:max-content; min-width:429px; table-layout:fixed; border-collapse:collapse; }
       #filasRegistro .tabla-registro-responsive th,
-      #filasRegistro .tabla-registro-responsive td { padding:7px 4px; font-size:12px; white-space:normal; overflow-wrap:anywhere; }
+      #filasRegistro .tabla-registro-responsive td { padding:7px 5px; font-size:12px; white-space:normal; overflow-wrap:anywhere; }
+      /* Primero los datos operativos; la columna opcional queda al extremo derecho. */
       #filasRegistro .tabla-registro-responsive th:nth-child(1),
-      #filasRegistro .tabla-registro-responsive td:nth-child(1) { width:27%; }
+      #filasRegistro .tabla-registro-responsive td:nth-child(1) { width:125px; }
       #filasRegistro .tabla-registro-responsive th:nth-child(2),
-      #filasRegistro .tabla-registro-responsive td:nth-child(2) { width:14%; }
+      #filasRegistro .tabla-registro-responsive td:nth-child(2) { width:68px; }
       #filasRegistro .tabla-registro-responsive th:nth-child(3),
-      #filasRegistro .tabla-registro-responsive td:nth-child(3) { width:15%; }
+      #filasRegistro .tabla-registro-responsive td:nth-child(3) { width:70px; }
       #filasRegistro .tabla-registro-responsive th:nth-child(4),
-      #filasRegistro .tabla-registro-responsive td:nth-child(4) { width:19%; }
+      #filasRegistro .tabla-registro-responsive td:nth-child(4) { width:88px; }
       #filasRegistro .tabla-registro-responsive th:nth-child(5),
-      #filasRegistro .tabla-registro-responsive td:nth-child(5) { width:12%; }
+      #filasRegistro .tabla-registro-responsive td:nth-child(5) { width:78px; }
       #filasRegistro .tabla-registro-responsive th:nth-child(6),
-      #filasRegistro .tabla-registro-responsive td:nth-child(6) { width:13%; }
+      #filasRegistro .tabla-registro-responsive td:nth-child(6) { width:120px; }
       #filasRegistro .tabla-registro-responsive input { width:100% !important; min-width:0; box-sizing:border-box; padding:5px 2px; }
       #filasRegistro .tabla-registro-responsive td button { padding:5px 3px; font-size:11px; }
       #filasRegistro .tabla-registro-responsive.ocultar-registrador .col-registrador { display:none; }
+      #filasRegistro .tabla-registro-responsive:not(.ocultar-registrador) { min-width:549px; }
+      #filasRegistro .tabla-registro-responsive + * { max-width:100%; }
       #filasRegistro .boton-columna-registrador { display:inline-flex; margin:0 0 9px auto; padding:7px 10px; font-size:12px; }
     }
     @media (min-width: 641px) {
@@ -363,10 +366,10 @@
     });
     const thead = document.createElement("thead");
     const encabezado = document.createElement("tr");
-    ["Producto","Registró","Precio","Cantidad","Importe","Acciones"].forEach((texto, indice)=>{
+    ["Producto","Precio","Cantidad","Importe","Acciones","Registró"].forEach((texto, indice)=>{
       const th=document.createElement("th");
       th.textContent=texto;
-      if (indice === 1) th.className = "col-registrador";
+      if (indice === 5) th.className = "col-registrador";
       encabezado.appendChild(th);
     });
     thead.appendChild(encabezado);
@@ -413,21 +416,21 @@
         finally{quitar.disabled=!!(cierre&&cierre.estado==="cerrado");}
       });
       acciones.appendChild(quitar);
-      row.append(nombre,responsable,precio,cantidadCelda,importe,acciones);
+      row.append(nombre,precio,cantidadCelda,importe,acciones,responsable);
       tbody.appendChild(row);
     });
 
     const tfoot=document.createElement("tfoot");
     const totalRow=document.createElement("tr");
     const totalLabel=document.createElement("th");totalLabel.textContent="TOTAL";totalRow.appendChild(totalLabel);
-    const vacia=document.createElement("th");vacia.textContent="—";vacia.className="col-registrador";totalRow.appendChild(vacia);
     const precioVacio=document.createElement("th");precioVacio.textContent="—";totalRow.appendChild(precioVacio);
     const totalCantidad=document.createElement("th");totalCantidad.textContent=String([...seleccionados.values()].reduce((s,x)=>s+Number(x.cantidad||0),0));totalRow.appendChild(totalCantidad);
     const totalImporte=document.createElement("th");totalImporte.textContent="$"+[...seleccionados.values()].reduce((s,x)=>s+Number(x.cantidad||0)*Number(x.producto.precio||0),0).toFixed(2);totalRow.appendChild(totalImporte);
     const accionesVacias=document.createElement("th");accionesVacias.textContent="";totalRow.appendChild(accionesVacias);
+    const registradorVacio=document.createElement("th");registradorVacio.textContent="—";registradorVacio.className="col-registrador";totalRow.appendChild(registradorVacio);
     tfoot.appendChild(totalRow);
     tabla.append(thead,tbody,tfoot);
-    const wrapper=document.createElement("div");wrapper.style.cssText="max-width:100%;overflow-x:hidden";
+    const wrapper=document.createElement("div");wrapper.style.cssText="max-width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch";
     wrapper.appendChild(tabla);filas.append(botonColumnaRegistrador,wrapper);
   }
 
