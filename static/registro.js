@@ -11,6 +11,37 @@
   const filas = document.getElementById("filasRegistro");
   const mensaje = document.getElementById("mensajeRegistro");
 
+  const estiloTablaMovil = document.createElement("style");
+  estiloTablaMovil.textContent = `
+    @media (max-width: 640px) {
+      #filasRegistro .tabla-registro-responsive { width:100%; min-width:0; table-layout:fixed; border-collapse:collapse; }
+      #filasRegistro .tabla-registro-responsive th,
+      #filasRegistro .tabla-registro-responsive td { padding:7px 4px; font-size:12px; white-space:normal; overflow-wrap:anywhere; }
+      #filasRegistro .tabla-registro-responsive th:nth-child(1),
+      #filasRegistro .tabla-registro-responsive td:nth-child(1) { width:27%; }
+      #filasRegistro .tabla-registro-responsive th:nth-child(2),
+      #filasRegistro .tabla-registro-responsive td:nth-child(2) { width:14%; }
+      #filasRegistro .tabla-registro-responsive th:nth-child(3),
+      #filasRegistro .tabla-registro-responsive td:nth-child(3) { width:15%; }
+      #filasRegistro .tabla-registro-responsive th:nth-child(4),
+      #filasRegistro .tabla-registro-responsive td:nth-child(4) { width:19%; }
+      #filasRegistro .tabla-registro-responsive th:nth-child(5),
+      #filasRegistro .tabla-registro-responsive td:nth-child(5) { width:12%; }
+      #filasRegistro .tabla-registro-responsive th:nth-child(6),
+      #filasRegistro .tabla-registro-responsive td:nth-child(6) { width:13%; }
+      #filasRegistro .tabla-registro-responsive input { width:100% !important; min-width:0; box-sizing:border-box; padding:5px 2px; }
+      #filasRegistro .tabla-registro-responsive td button { padding:5px 3px; font-size:11px; }
+      #filasRegistro .tabla-registro-responsive.ocultar-registrador .col-registrador { display:none; }
+      #filasRegistro .boton-columna-registrador { display:inline-flex; margin:0 0 9px auto; padding:7px 10px; font-size:12px; }
+    }
+    @media (min-width: 641px) {
+      #filasRegistro .boton-columna-registrador { display:none; }
+      #filasRegistro .tabla-registro-responsive { min-width:760px; }
+    }
+  `;
+  document.head.appendChild(estiloTablaMovil);
+
+
   // Resumen visual del registro: se actualiza sin alterar los datos del servidor.
   const resumen = document.createElement("div");
   resumen.className = "panel";
@@ -316,11 +347,27 @@
     }
 
     const tabla = document.createElement("table");
-    tabla.style.minWidth = "760px";
+    tabla.className = "tabla-registro-responsive";
+    const esMovil = window.matchMedia("(max-width: 640px)").matches;
+    if (esMovil) tabla.classList.add("ocultar-registrador");
+
+    const botonColumnaRegistrador = document.createElement("button");
+    botonColumnaRegistrador.type = "button";
+    botonColumnaRegistrador.className = "secundario boton-columna-registrador";
+    botonColumnaRegistrador.textContent = "Mostrar quién registró";
+    botonColumnaRegistrador.setAttribute("aria-expanded", "false");
+    botonColumnaRegistrador.addEventListener("click", () => {
+      const oculto = tabla.classList.toggle("ocultar-registrador");
+      botonColumnaRegistrador.textContent = oculto ? "Mostrar quién registró" : "Ocultar quién registró";
+      botonColumnaRegistrador.setAttribute("aria-expanded", String(!oculto));
+    });
     const thead = document.createElement("thead");
     const encabezado = document.createElement("tr");
-    ["Producto","Registró","Precio unitario","Cantidad","Importe","Acciones"].forEach(texto=>{
-      const th=document.createElement("th");th.textContent=texto;encabezado.appendChild(th);
+    ["Producto","Registró","Precio","Cantidad","Importe","Acciones"].forEach((texto, indice)=>{
+      const th=document.createElement("th");
+      th.textContent=texto;
+      if (indice === 1) th.className = "col-registrador";
+      encabezado.appendChild(th);
     });
     thead.appendChild(encabezado);
     const tbody = document.createElement("tbody");
@@ -328,7 +375,7 @@
     seleccionados.forEach(({producto,cantidad},id)=>{
       const row=document.createElement("tr");
       const nombre=document.createElement("td");nombre.textContent=producto.nombre;
-      const responsable=document.createElement("td");responsable.textContent=producto.usuario_nombre || "No disponible";
+      const responsable=document.createElement("td");responsable.className="col-registrador";responsable.textContent=producto.usuario_nombre || "No disponible";
       const precio=document.createElement("td");precio.textContent="$"+Number(producto.precio||0).toFixed(2);
       const cantidadCelda=document.createElement("td");
       const input=document.createElement("input");
@@ -373,15 +420,15 @@
     const tfoot=document.createElement("tfoot");
     const totalRow=document.createElement("tr");
     const totalLabel=document.createElement("th");totalLabel.textContent="TOTAL";totalRow.appendChild(totalLabel);
-    const vacia=document.createElement("th");vacia.textContent="—";totalRow.appendChild(vacia);
+    const vacia=document.createElement("th");vacia.textContent="—";vacia.className="col-registrador";totalRow.appendChild(vacia);
     const precioVacio=document.createElement("th");precioVacio.textContent="—";totalRow.appendChild(precioVacio);
     const totalCantidad=document.createElement("th");totalCantidad.textContent=String([...seleccionados.values()].reduce((s,x)=>s+Number(x.cantidad||0),0));totalRow.appendChild(totalCantidad);
     const totalImporte=document.createElement("th");totalImporte.textContent="$"+[...seleccionados.values()].reduce((s,x)=>s+Number(x.cantidad||0)*Number(x.producto.precio||0),0).toFixed(2);totalRow.appendChild(totalImporte);
     const accionesVacias=document.createElement("th");accionesVacias.textContent="";totalRow.appendChild(accionesVacias);
     tfoot.appendChild(totalRow);
     tabla.append(thead,tbody,tfoot);
-    const wrapper=document.createElement("div");wrapper.style.cssText="max-width:100%;overflow-x:auto";
-    wrapper.appendChild(tabla);filas.appendChild(wrapper);
+    const wrapper=document.createElement("div");wrapper.style.cssText="max-width:100%;overflow-x:hidden";
+    wrapper.appendChild(tabla);filas.append(botonColumnaRegistrador,wrapper);
   }
 
   fecha.addEventListener("change", () => {
